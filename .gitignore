@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Plugin output (sources, clips, manifests)
+output/
+clips/
+**/clips/
+*.mp4
+*.mkv
+*.m4a

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-clipping-plugin"
+version = "1.0.0"
+description = "Plugin for AI content-automation agents: find long, high-quality Minecraft parkour videos on YouTube and cut them into 60-second clips."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["youtube", "clipping", "minecraft", "parkour", "agent", "plugin", "ffmpeg"]
+dependencies = [
+    "yt-dlp>=2024.12.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "imageio-ffmpeg",   # static ffmpeg fallback for tests in minimal containers
+]
+mcp = [
+    "mcp>=1.0",
+]
+
+[project.scripts]
+parkour-clipper = "yt_clipper.__main__:main"
+
+[tool.setuptools]
+packages = ["yt_clipper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

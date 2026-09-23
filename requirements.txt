@@ -1,0 +1,2 @@
+# Runtime dependencies (ffmpeg is a system binary - see README)
+yt-dlp>=2024.12.13
