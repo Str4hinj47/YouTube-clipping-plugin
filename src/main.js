@@ -120,6 +120,11 @@ scene.add(moon);
 const sunsetFill = new THREE.DirectionalLight(0xff8f6b, 0.52);
 sunsetFill.position.set(70, 28, 80);
 scene.add(sunsetFill);
+// A restrained blue rim keeps building silhouettes and the authored environment
+// readable after sunset without flattening the warmer storefront and lamp light.
+const nightRim = new THREE.DirectionalLight(0x4b88a8, 0.34);
+nightRim.position.set(-100, 72, -130);
+scene.add(nightRim);
 
 const world = new THREE.Group();
 world.name = 'Aurora Bay — Blender Environment';
@@ -232,10 +237,10 @@ function createWaterMaterial(surfaceColor, deepColor, opacity = .94) {
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
   grass: new THREE.MeshStandardMaterial({ color: 0x1a3a31, roughness: 1 }),
-  asphalt: new THREE.MeshStandardMaterial({ color: 0x17212a, roughness: 0.92, metalness: 0.08 }),
-  asphaltEdge: new THREE.MeshStandardMaterial({ color: 0x202c34, roughness: 1 }),
-  sidewalk: new THREE.MeshStandardMaterial({ color: 0x5b6567, roughness: .96 }),
-  sidewalkDark: new THREE.MeshStandardMaterial({ color: 0x3b484c, roughness: .96 }),
+  asphalt: new THREE.MeshStandardMaterial({ color: 0x17212a, roughness: 0.84, metalness: 0.12 }),
+  asphaltEdge: new THREE.MeshStandardMaterial({ color: 0x202c34, roughness: .9, metalness: .08 }),
+  sidewalk: new THREE.MeshStandardMaterial({ color: 0x5b6567, roughness: .92 }),
+  sidewalkDark: new THREE.MeshStandardMaterial({ color: 0x3b484c, roughness: .9, metalness: .04 }),
   lane: new THREE.MeshBasicMaterial({ color: 0xb9c49d }),
   laneYellow: new THREE.MeshBasicMaterial({ color: 0xd69654 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x152b3a, metalness: .65, roughness: .18, emissive: 0x081d2b, emissiveIntensity: .7 }),
@@ -270,6 +275,45 @@ const mats = {
   cache: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x198f91, emissiveIntensity: 3.8, transparent: true, opacity: .95 }),
   indicator: new THREE.MeshStandardMaterial({ color: 0xffa13a, emissive: 0xe26012, emissiveIntensity: 1.2, transparent: true, opacity: .18 }),
 };
+
+// A small shared visual language keeps the authored GLB, procedural fallback, and
+// streamed roadside kits in the same cool-night palette without adding a texture
+// dependency or a large number of unique materials.
+const polishMats = {
+  cyanCore: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x187f88, emissiveIntensity: 3.2, metalness: .38, roughness: .24 }),
+  pinkCore: new THREE.MeshStandardMaterial({ color: 0xff5b9c, emissive: 0x8a1f62, emissiveIntensity: 3.1, metalness: .3, roughness: .26 }),
+  amberCore: new THREE.MeshStandardMaterial({ color: 0xffb15e, emissive: 0x99451f, emissiveIntensity: 2.8, metalness: .26, roughness: .3 }),
+  limeCore: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x719f2a, emissiveIntensity: 2.9, metalness: .28, roughness: .28 }),
+  cyanGlow: new THREE.MeshBasicMaterial({ color: 0x5ce3d1, transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false }),
+  pinkGlow: new THREE.MeshBasicMaterial({ color: 0xff5b9c, transparent: true, opacity: .18, blending: THREE.AdditiveBlending, depthWrite: false }),
+  amberGlow: new THREE.MeshBasicMaterial({ color: 0xff9d50, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false }),
+  limeGlow: new THREE.MeshBasicMaterial({ color: 0xd6fa6a, transparent: true, opacity: .16, blending: THREE.AdditiveBlending, depthWrite: false }),
+  reflector: new THREE.MeshStandardMaterial({ color: 0xd8e9e0, emissive: 0x477d78, emissiveIntensity: 1.8, metalness: .45, roughness: .34 }),
+  darkMetal: new THREE.MeshStandardMaterial({ color: 0x17242d, metalness: .7, roughness: .34 }),
+};
+const polishPulseMeshes = [];
+const polishPulseLights = [];
+const streetGlowGeometry = new THREE.CircleGeometry(2.8, 18);
+const polishCoreByAccent = {
+  cyan: polishMats.cyanCore,
+  pink: polishMats.pinkCore,
+  amber: polishMats.amberCore,
+  lime: polishMats.limeCore,
+};
+const polishGlowByAccent = {
+  cyan: polishMats.cyanGlow,
+  pink: polishMats.pinkGlow,
+  amber: polishMats.amberGlow,
+  lime: polishMats.limeGlow,
+};
+const polishHexByAccent = { cyan: 0x5ce3d1, pink: 0xff5b9c, amber: 0xff9d50, lime: 0xd6fa6a };
+
+function polishAccentForRegion(type) {
+  if (type === 'industrial') return 'pink';
+  if (type === 'desert') return 'amber';
+  if (type === 'highlands' || type === 'rural') return 'lime';
+  return 'cyan';
+}
 
 // Collision volumes are kept separate from render geometry so the imported GLB
 // environment and the procedural fallback share the same driving physics.
@@ -322,13 +366,43 @@ function makeLabel(text, color = '#d6fa6a', scale = 1) {
 
 let skyStars = null;
 let skyMoon = null;
+let skyMoonGlow = null;
+let skyMaterial = null;
 const skyMoonOffset = new THREE.Vector3(-75, 68, -145);
 
 function buildSky() {
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(WORLD_LIMIT + 2600, 48, 24),
-    new THREE.MeshBasicMaterial({ color: 0x102b3b, side: THREE.BackSide, fog: false })
-  );
+  // The gradient is deliberately shader-only: it gives the city a teal horizon,
+  // indigo zenith, and a very subtle magenta pollution band for depth at distance.
+  skyMaterial = new THREE.ShaderMaterial({
+    uniforms: {},
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec3 direction = normalize(vWorldPosition - cameraPosition);
+        float horizon = smoothstep(-.18, .48, direction.y);
+        vec3 horizonColor = vec3(.045, .135, .18);
+        vec3 zenithColor = vec3(.008, .018, .055);
+        vec3 color = mix(horizonColor, zenithColor, horizon);
+        float horizonBand = exp(-abs(direction.y - .035) * 18.0);
+        color += vec3(.075, .035, .075) * horizonBand;
+        color += vec3(.015, .055, .065) * pow(max(direction.y, 0.0), 1.6);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(WORLD_LIMIT + 2600, 48, 24), skyMaterial);
+  sky.renderOrder = -10;
   world.add(sky);
   const starsGeometry = new THREE.BufferGeometry();
   const starPositions = [];
@@ -346,14 +420,21 @@ function buildSky() {
   const stars = new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0x9bbbc7, size: .48, transparent: true, opacity: .62, sizeAttenuation: true }));
   skyStars = stars;
   world.add(stars);
-  // A soft distant moon keeps the skyline readable without a texture dependency.
-  const moonDisk = addMesh(world, new THREE.CircleGeometry(13, 32), new THREE.MeshBasicMaterial({ color: 0x90a9b1, transparent: true, opacity: .12, side: THREE.DoubleSide }), [-75, 68, -145]);
+  // A layered moon halo keeps the skyline readable without a texture dependency.
+  const moonGlowMaterial = new THREE.MeshBasicMaterial({ color: 0x5ca4b6, transparent: true, opacity: .035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const moonHalo = addMesh(world, new THREE.CircleGeometry(24, 32), moonGlowMaterial, [-75, 68, -145]);
+  skyMoonGlow = moonHalo;
+  const moonDisk = addMesh(world, new THREE.CircleGeometry(13, 32), new THREE.MeshBasicMaterial({ color: 0x90a9b1, transparent: true, opacity: .14, side: THREE.DoubleSide, depthWrite: false }), [-75, 68, -145]);
   skyMoon = moonDisk;
   moonDisk.lookAt(camera.position);
 }
 
 function updateSky() {
   if (skyStars) skyStars.position.copy(camera.position);
+  if (skyMoonGlow) {
+    skyMoonGlow.position.copy(camera.position).add(skyMoonOffset);
+    skyMoonGlow.lookAt(camera.position);
+  }
   if (skyMoon) {
     skyMoon.position.copy(camera.position).add(skyMoonOffset);
     skyMoon.lookAt(camera.position);
@@ -398,6 +479,16 @@ function updateWater(time) {
   const waterTime = time * .001;
   mats.water.uniforms.uTime.value = waterTime;
   mats.ocean.uniforms.uTime.value = waterTime * .72;
+}
+
+function updateVisualPolish(time) {
+  const seconds = time * .001;
+  polishPulseMeshes.forEach(({ material, baseOpacity, phase }) => {
+    material.opacity = baseOpacity * (.84 + Math.sin(seconds * 2.1 + phase) * .16);
+  });
+  polishPulseLights.forEach(({ light, baseIntensity, phase }) => {
+    light.intensity = baseIntensity * (.88 + Math.sin(seconds * 1.7 + phase) * .12);
+  });
 }
 
 function buildRoads() {
@@ -573,6 +664,120 @@ function createBuildingAccent(x, z, width, depth, height, style = 0, seed = 1) {
   }
   cityEnhancements.add(group);
   return group;
+}
+
+function createPolishPulseBand(parent, radius, y, accent, phase = 0) {
+  const material = new THREE.MeshBasicMaterial({
+    color: polishHexByAccent[accent] || polishHexByAccent.cyan,
+    transparent: true,
+    opacity: .62,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const ring = addMesh(parent, new THREE.TorusGeometry(radius, .07, 7, 32), material, [0, y, 0], { rotation: [Math.PI / 2, 0, 0] });
+  ring.renderOrder = 2;
+  polishPulseMeshes.push({ object: ring, material, baseOpacity: .62, phase });
+  return ring;
+}
+
+function createAuroraSpire(x, z, height, accent = 'cyan', labelText = 'AURORA SPIRE', variant = 0) {
+  const group = new THREE.Group();
+  group.name = `Aurora Bay skyline landmark // ${labelText}`;
+  group.position.set(x, 0, z);
+  const core = polishCoreByAccent[accent] || polishMats.cyanCore;
+  const glow = polishGlowByAccent[accent] || polishMats.cyanGlow;
+  const baseRadius = variant % 2 === 0 ? 2.25 : 1.8;
+  addMesh(group, new THREE.CylinderGeometry(baseRadius + .45, baseRadius + .9, .28, 10), polishMats.darkMetal, [0, .14, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.CylinderGeometry(baseRadius * .58, baseRadius, height * .84, variant === 1 ? 6 : 8), core, [0, height * .42, 0], { castShadow: true });
+  for (const side of [-1, 1]) {
+    addMesh(group, new THREE.BoxGeometry(.16, height * .77, .16), core, [side * baseRadius * .72, height * .4, 0], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.11, height * .64, .11), glow, [0, height * .34, side * baseRadius * .72]);
+  }
+  const ringCount = variant === 2 ? 4 : 3;
+  for (let index = 0; index < ringCount; index += 1) {
+    createPolishPulseBand(group, baseRadius + .2 + (index % 2) * .28, height * (.2 + index * .19), accent, index * .8 + variant);
+  }
+  if (variant === 1) {
+    addMesh(group, new THREE.BoxGeometry(baseRadius * 1.8, .16, .16), core, [0, height * .9, 0], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.16, .16, baseRadius * 1.8), core, [0, height * .9, 0], { castShadow: true });
+  } else {
+    addMesh(group, new THREE.ConeGeometry(.28, 2.4, 8), core, [0, height + 1.2, 0], { castShadow: true });
+  }
+  const beaconLight = new THREE.PointLight(polishHexByAccent[accent] || polishHexByAccent.cyan, 1.35, 32, 2);
+  beaconLight.position.y = Math.min(height * .78, height - 1);
+  group.add(beaconLight);
+  polishPulseLights.push({ light: beaconLight, baseIntensity: 1.35, phase: variant * .9 });
+  const label = makeLabel(labelText, accent === 'pink' ? '#ff5b9c' : accent === 'amber' ? '#ff9d50' : accent === 'lime' ? '#d6fa6a' : '#5ce3d1', .42);
+  label.position.set(0, height + 3.2, 0);
+  group.add(label);
+  cityEnhancements.add(group);
+  return group;
+}
+
+function createHarborGateway(x, z, rotation = 0) {
+  const group = new THREE.Group();
+  group.name = 'Aurora Harbor illuminated gateway';
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
+  addMesh(group, new THREE.BoxGeometry(1.05, 7.8, 1.05), polishMats.darkMetal, [-9, 3.9, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(1.05, 7.8, 1.05), polishMats.darkMetal, [9, 3.9, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(19.5, .42, .42), polishMats.darkMetal, [0, 7.55, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.18, 7.2, .18), polishMats.cyanCore, [-8.35, 3.8, .54]);
+  addMesh(group, new THREE.BoxGeometry(.18, 7.2, .18), polishMats.amberCore, [8.35, 3.8, .54]);
+  addMesh(group, new THREE.BoxGeometry(17.2, .11, .11), polishMats.cyanCore, [0, 7.36, .55]);
+  addMesh(group, new THREE.BoxGeometry(17.2, .08, .08), polishMats.pinkCore, [0, 7.67, .55]);
+  const gatewayLight = new THREE.PointLight(0x5ce3d1, 1.7, 30, 2);
+  gatewayLight.position.set(0, 6.1, 1.2);
+  group.add(gatewayLight);
+  polishPulseLights.push({ light: gatewayLight, baseIntensity: 1.7, phase: 1.7 });
+  const label = makeLabel('AURORA HARBOR', '#5ce3d1', .5);
+  label.position.set(0, 8.9, .1);
+  group.add(label);
+  cityEnhancements.add(group);
+  return group;
+}
+
+function createRoadReflector(x, z, heading, accent = 'cyan', parent = cityEnhancements) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = heading;
+  addMesh(group, new THREE.CylinderGeometry(.045, .075, .72, 6), polishMats.darkMetal, [0, .36, 0]);
+  addMesh(group, new THREE.BoxGeometry(.28, .12, .06), polishMats.reflector, [0, .7, .035]);
+  addMesh(group, new THREE.BoxGeometry(.17, .045, .04), polishGlowByAccent[accent] || polishMats.cyanGlow, [0, .72, .075]);
+  parent.add(group);
+  return group;
+}
+
+function buildRoadReflectors() {
+  urbanRoadRoutes.forEach((route, routeIndex) => {
+    for (let index = 1; index < route.length; index += 1) {
+      const [startX, startZ] = route[index - 1];
+      const [endX, endZ] = route[index];
+      const segment = new THREE.Vector3(endX - startX, 0, endZ - startZ);
+      const length = segment.length();
+      if (length < 1) continue;
+      const heading = Math.atan2(segment.x, segment.z);
+      const tangent = segment.normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      for (let distance = 20; distance < length - 6; distance += 36) {
+        const center = new THREE.Vector3(startX, 0, startZ).lerp(new THREE.Vector3(endX, 0, endZ), distance / length);
+        const side = ((Math.floor(distance / 36) + routeIndex) % 2 ? 1 : -1);
+        center.addScaledVector(normal, side * 6.35);
+        createRoadReflector(center.x, center.z, heading, routeIndex % 3 === 1 ? 'pink' : 'cyan');
+      }
+    }
+  });
+}
+
+function buildVisualPolish() {
+  // One civic anchor, three lower skyline notes, and a waterfront threshold give
+  // Aurora Bay a readable silhouette instead of a field of interchangeable blocks.
+  createAuroraSpire(0, 44, 40, 'cyan', 'AURORA SPIRE', 0);
+  createAuroraSpire(-88, -62, 27, 'pink', 'NORTH LIGHT', 1);
+  createAuroraSpire(88, -53, 32, 'amber', 'EAST LOOP', 2);
+  createAuroraSpire(-4, 91, 24, 'lime', 'HARBOR LINK', 3);
+  createHarborGateway(0, -95, 0);
+  buildRoadReflectors();
 }
 
 function createTree(x, z, scale = 1, seed = 1, parent = city) {
@@ -787,6 +992,14 @@ function createStreetLight(x, z, horizontal = false, seed = 1, parent = city) {
   pole.rotation.z = horizontal ? .03 : 0;
   addMesh(group, new THREE.BoxGeometry(horizontal ? 1.4 : .08, .08, horizontal ? .08 : 1.4), mats.sidewalkDark, [horizontal ? .54 : 0, 4.68, horizontal ? 0 : .54]);
   const lamp = addMesh(group, new THREE.SphereGeometry(.16, 8, 8), mats.lamp, [horizontal ? 1.08 : 0, 4.57, horizontal ? 0 : 1.08]);
+  // Most lamps get a cheap additive pool while only every fourth lamp receives a
+  // real point light. This makes the boulevard read as lit without multiplying
+  // expensive light calculations across the whole grid.
+  if (seed % 2 === 0) {
+    const poolMaterial = seed % 4 === 0 ? polishMats.amberGlow : polishMats.cyanGlow;
+    const pool = addMesh(group, streetGlowGeometry, poolMaterial, [horizontal ? 1.08 : 0, .026, horizontal ? 0 : 1.08], { rotation: [-Math.PI / 2, 0, 0] });
+    pool.renderOrder = 1;
+  }
   if (seed % 4 === 0) {
     const light = new THREE.PointLight(0xff9561, 1.3, 13, 2);
     light.position.copy(lamp.position);
@@ -1529,9 +1742,24 @@ function prepareImportedModel(root) {
     if (!object.isMesh) return;
     object.castShadow = true;
     object.receiveShadow = true;
-    if (object.material) {
-      object.material.needsUpdate = true;
-    }
+    if (!object.material) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach((material) => {
+      if (!material) return;
+      // Bring authored surfaces closer to the procedural palette while retaining
+      // their original colors, maps, and modeled detail.
+      if (material.isMeshStandardMaterial) {
+        material.roughness = clamp(Number.isFinite(material.roughness) ? material.roughness : .72, .24, 1);
+        material.metalness = clamp(Number.isFinite(material.metalness) ? material.metalness : .08, 0, .9);
+        material.envMapIntensity = Math.max(Number.isFinite(material.envMapIntensity) ? material.envMapIntensity : 0, .72);
+        const materialLabel = `${object.name || ''} ${material.name || ''}`;
+        if (/(window|neon|emissive|lamp|light|sign)/i.test(materialLabel) && material.emissive && material.color) {
+          if (material.emissive.r + material.emissive.g + material.emissive.b < .02) material.emissive.copy(material.color).multiplyScalar(.12);
+          material.emissiveIntensity = Math.max(Number.isFinite(material.emissiveIntensity) ? material.emissiveIntensity : 0, .55);
+        }
+      }
+      material.needsUpdate = true;
+    });
   });
   return root;
 }
@@ -2263,15 +2491,54 @@ function addSectorTree(group, x, z, scale, seed) {
 
 function addSectorStructure(group, sector, x, z, width, depth, height, seed) {
   const material = sector.region.type === 'industrial' ? mats.asphaltEdge : sector.region.type === 'desert' ? mats.cabinWood : mats.mountainRockLit;
+  const accent = polishAccentForRegion(sector.region.type);
+  const accentMaterial = polishCoreByAccent[accent];
   addMesh(group, new THREE.BoxGeometry(width, height, depth), material, [x, height / 2, z], { castShadow: true, receiveShadow: true });
   if (sector.region.type !== 'industrial') {
     addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .7, height * .45, 4), mats.cabinRoof, [x, height + height * .2, z], { rotation: [0, Math.PI / 4, 0], castShadow: true });
   } else {
     addMesh(group, new THREE.BoxGeometry(width * .55, .08, depth * .08), mats.lamp, [x, height * .7, z + depth / 2 + .04]);
   }
+  // A restrained facade band is enough to give remote structures a purpose at
+  // night: cyan on water/forest roads, amber in the flats, pink at Eastgate.
+  const bandWidth = Math.max(1.4, Math.min(width * .62, 5.2));
+  const bandY = Math.max(1.1, Math.min(height * .62, height - .35));
+  addMesh(group, new THREE.BoxGeometry(bandWidth, .13, .045), accentMaterial, [x, bandY, z + depth / 2 + .05]);
+  if (seed % 2 === 0) addMesh(group, new THREE.BoxGeometry(.07, Math.max(.4, height * .38), .05), accentMaterial, [x - bandWidth * .38, height * .48, z + depth / 2 + .055]);
   const obstacle = addObstacle(sector.centerX + x, sector.centerZ + z, width / 2 + .5, depth / 2 + .5, `${sector.region.type}-structure`);
   obstacle.sectorKey = sector.key;
   sector.obstacles.push(obstacle);
+}
+
+function addRegionalRoadsideDetails(group, sector, seed) {
+  const minX = sector.centerX - WORLD_SECTOR_SIZE / 2;
+  const maxX = sector.centerX + WORLD_SECTOR_SIZE / 2;
+  const minZ = sector.centerZ - WORLD_SECTOR_SIZE / 2;
+  const maxZ = sector.centerZ + WORLD_SECTOR_SIZE / 2;
+  const accent = polishAccentForRegion(sector.region.type);
+  let placed = 0;
+  regionalRoutes.forEach((route, routeIndex) => {
+    if (placed >= 8) return;
+    for (let index = 1; index < route.points.length && placed < 8; index += 1) {
+      const [startX, startZ] = route.points[index - 1];
+      const [endX, endZ] = route.points[index];
+      const segment = new THREE.Vector3(endX - startX, 0, endZ - startZ);
+      const length = segment.length();
+      if (length < 1) continue;
+      const heading = Math.atan2(segment.x, segment.z);
+      const tangent = segment.normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      for (let distance = 58; distance < length - 8 && placed < 8; distance += 132) {
+        const center = new THREE.Vector3(startX, 0, startZ).lerp(new THREE.Vector3(endX, 0, endZ), distance / length);
+        const side = randomFrom(seed + routeIndex * 13 + index * 7 + distance) > .5 ? 1 : -1;
+        center.addScaledVector(normal, side * 8.25);
+        if (center.x < minX || center.x > maxX || center.z < minZ || center.z > maxZ) continue;
+        if (Math.abs(center.x) < 180 && Math.abs(center.z) < 180) continue;
+        createRoadReflector(center.x - sector.centerX, center.z - sector.centerZ, heading, accent, group);
+        placed += 1;
+      }
+    }
+  });
 }
 
 function createWorldSector(sectorX, sectorZ) {
@@ -2311,6 +2578,7 @@ function createWorldSector(sectorX, sectorZ) {
       addSectorStructure(group, sector, localX, localZ, 8 + randomFrom(seed + index + 80) * 10, 7 + randomFrom(seed + index + 90) * 8, 3 + randomFrom(seed + index + 100) * 7, seed + index);
     }
   }
+  addRegionalRoadsideDetails(group, sector, seed + 400);
   streamedWorld.add(group);
   worldSectorRegistry.set(key, sector);
   return sector;
@@ -2368,6 +2636,7 @@ function buildWorld() {
   populateCity();
   populateStreetLights();
   buildLandmarks();
+  buildVisualPolish();
   buildRoadInfrastructure();
   createTraffic();
   buildMountainWorld();
@@ -6302,6 +6571,7 @@ function animate(time) {
   }
   updateAudio();
   updateWater(time);
+  updateVisualPolish(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
   else updateCamera(dt);
   updateSky();
