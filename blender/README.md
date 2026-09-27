@@ -4,7 +4,7 @@ The game scene is built around a low-poly Blender art direction: hard-surface ca
 
 - `midnight_gt.glb` — the player coupe, wheels, lights, spoiler, and underglow.
 - `fleet/*.glb` — seven fictional, logo-free road-car variants with distinct hard-surface silhouettes and detail packages.
-- `aurora_bay_environment.glb` — a reusable block of roads, buildings, trees, lights, and the Pulse Station landmark.
+- `aurora_bay_environment.glb` — a reusable block of roads, buildings, trees, lights, the Pulse Station landmark, and the Pinewatch mountain-pass/village extension.
 
 Run it with Blender 4.x:
 

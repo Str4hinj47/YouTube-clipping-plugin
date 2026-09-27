@@ -57,6 +57,15 @@ LEAF = material("Faceted leaf", (.07, .3, .22), .0, .94)
 BUILDING = material("Building concrete", (.12, .2, .25), .08, .86)
 WINDOW = material("Emissive windows", (.14, .65, .66), .15, .24, (.04, .38, .4), 4.0)
 WATER = material("Aurora water", (.015, .14, .18), .45, .24, (.0, .05, .07), .8)
+MOUNTAIN_GROUND = material("Mountain ground", (.08, .12, .12), .0, 1.0)
+MOUNTAIN_ROCK = material("Mountain rock", (.15, .2, .21), .0, .94)
+MOUNTAIN_ROCK_LIT = material("Mountain rock lit", (.25, .31, .3), .0, .9)
+MOUNTAIN_ROAD = material("Mountain road asphalt", (.055, .07, .08), .08, .9)
+MOUNTAIN_SHOULDER = material("Mountain road shoulder", (.34, .38, .36), .05, .95)
+GUARDRAIL = material("Mountain guardrail", (.5, .56, .55), .72, .45)
+CABIN_WOOD = material("Pinewatch cabin wood", (.38, .24, .17), .0, .88)
+CABIN_ROOF = material("Pinewatch cabin roof", (.09, .12, .14), .05, .9)
+VILLAGE_LIGHT = material("Pinewatch window light", (1.0, .5, .18), .05, .28, (1.0, .2, .04), 4.0)
 SIGN_RED = material("Road sign red", (.55, .03, .05), .15, .34, (.24, .005, .01), 1.3)
 SIGN_WHITE = material("Road sign white", (.88, .9, .88), .12, .38)
 SIGN_GREEN = material("Traffic signal green", (.03, .48, .22), .08, .28, (.01, .2, .07), 2.5)
@@ -273,6 +282,100 @@ def make_speed_sign(name, location):
     return root
 
 
+def make_path_ribbon(name, points, width, mat, parent):
+    vertices = []
+    faces = []
+    for index, point in enumerate(points):
+        previous = points[max(0, index - 1)]
+        following = points[min(len(points) - 1, index + 1)]
+        tangent = Vector((following[0] - previous[0], 0.0, following[2] - previous[2])).normalized()
+        normal = Vector((tangent.z, 0.0, -tangent.x)) * (width / 2.0)
+        vertices.extend(((point[0] - normal.x, point[1], point[2] - normal.z),
+                         (point[0] + normal.x, point[1], point[2] + normal.z)))
+        if index < len(points) - 1:
+            base = index * 2
+            faces.extend(((base, base + 1, base + 2), (base + 1, base + 3, base + 2)))
+    mesh = bpy.data.meshes.new(name + " mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.materials.append(mat)
+    ribbon = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(ribbon)
+    ribbon.parent = parent
+    return ribbon
+
+
+def make_mountain_rock(name, location, radius, height, mat, parent):
+    bpy.ops.mesh.primitive_cone_add(vertices=7, radius1=radius, radius2=radius * .2, depth=height, location=location)
+    rock = bpy.context.object
+    rock.name = name
+    rock.data.materials.append(mat)
+    rock.parent = parent
+    return rock
+
+
+def make_pinewatch_cabin(name, location, width, depth, height, rotation, parent):
+    cabin = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(cabin)
+    cabin.location = location
+    cabin.rotation_euler[1] = rotation
+    cube("mountain cabin body", (0, height / 2, 0), (width, height, depth), CABIN_WOOD, .08, cabin)
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius=max(width, depth) * .72, depth=height * .56, location=(0, height + height * .23, 0), rotation=(0, 0, math.pi / 4))
+    roof = bpy.context.object
+    roof.name = "mountain cabin pitched roof"
+    roof.data.materials.append(CABIN_ROOF)
+    roof.parent = cabin
+    cube("warm cabin window", (0, height * .54, depth / 2 + .04), (width * .26, height * .2, .06), VILLAGE_LIGHT, .02, cabin)
+    cube("cabin porch", (0, .16, depth / 2 + .55), (width * .55, .22, 1.0), SIDEWALK, .03, cabin)
+    return cabin
+
+
+def make_mountain_extension(root):
+    cube("mountain extension ground", (0, -.22, 50), (520, .2, 520), MOUNTAIN_GROUND, 0, root)
+    points = [(66, .08, 108), (70, .22, 125), (84, .62, 139), (112, 1.5, 151),
+              (138, 3.4, 147), (160, 6.8, 128), (170, 11.8, 102), (158, 15.6, 80), (136, 18.5, 68)]
+    make_path_ribbon("mountain pass shoulder", points, 10.6, MOUNTAIN_SHOULDER, root)
+    make_path_ribbon("mountain pass two lane road", points, 8.8, MOUNTAIN_ROAD, root)
+    for index in range(1, len(points)):
+        start = Vector(points[index - 1])
+        end = Vector(points[index])
+        flat = Vector((end.x - start.x, 0, end.z - start.z))
+        length = flat.length()
+        heading = math.atan2(flat.x, flat.z)
+        tangent = flat.normalized()
+        normal = Vector((tangent.z, 0, -tangent.x))
+        for distance in range(4, max(4, int(length - 2)), 9):
+            amount = distance / length
+            center = start.lerp(end, amount)
+            center.y += .09
+            cube("mountain center dash", center, (.16, .03, 4.1), SIGN_AMBER, .01, root).rotation_euler[1] = heading
+        for side in (-1, 1):
+            edge = start.lerp(end, .5) + normal * (side * 4.05)
+            edge.y += .1
+            cube("mountain road edge line", edge, (.09, .035, length), SIGN_WHITE, .005, root).rotation_euler[1] = heading
+            rail = start.lerp(end, .5) + normal * (side * 5.35)
+            rail.y += .78
+            cube("mountain guardrail beam", rail, (.11, .11, length), GUARDRAIL, .02, root).rotation_euler[1] = heading
+        for distance in range(4, max(4, int(length)), 10):
+            amount = distance / length
+            center = start.lerp(end, amount)
+            center.y += .45
+            for side in (-1, 1):
+                post = center + normal * (side * 5.35)
+                cylinder("mountain guardrail post", post, .055, 1.1, GUARDRAIL, 6, root)
+    for index, (x, z, radius, height) in enumerate(((106, 165, 45, 62), (176, 153, 52, 76), (192, 88, 42, 58),
+                                                      (118, 79, 36, 47), (57, 184, 36, 48), (214, 190, 38, 54),
+                                                      (82, 121, 25, 34), (170, 208, 44, 64))):
+        make_mountain_rock(f"mountain ridge {index:02d}", (x, height / 2 - .12, z), radius, height,
+                           MOUNTAIN_ROCK_LIT if index % 2 else MOUNTAIN_ROCK, root)
+    cabins = ((136, 68, 7.2, 5.2, 4.8, -.25), (151, 65, 6.4, 5.0, 4.3, .5),
+              (145, 53, 7.8, 5.4, 4.7, 1.1), (126, 55, 6.0, 4.6, 4.0, -.7),
+              (159, 77, 5.8, 4.4, 4.1, .1), (119, 73, 5.5, 4.2, 3.8, .8))
+    for index, cabin in enumerate(cabins):
+        make_pinewatch_cabin("Pinewatch cabin %02d" % index, (cabin[0], 0, cabin[1]), cabin[2], cabin[3], cabin[4], cabin[5], root)
+    for index, location in enumerate(((128, 68), (144, 62), (157, 72))):
+        make_streetlight("Pinewatch lamp %02d" % index, (location[0], 0, location[1]))
+
+
 def make_environment():
     root = bpy.data.objects.new("AURORA BAY / Blender environment", None)
     bpy.context.collection.objects.link(root)
@@ -312,6 +415,7 @@ def make_environment():
         ring.data.materials.append(LIME)
         ring.parent = station
     cylinder("station beacon", (0, 3.8, 0), .14, 7, LIME, 8, station)
+    make_mountain_extension(root)
     return root
 
 

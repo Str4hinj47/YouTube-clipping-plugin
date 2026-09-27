@@ -19,7 +19,21 @@ const randomFrom = (seed) => {
 const roadAxes = [-66, -22, 22, 66];
 const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
-const WORLD_LIMIT = 116;
+const CITY_LIMIT = 116;
+const WORLD_LIMIT = 250;
+const mountainRoadPoints = [
+  new THREE.Vector3(66, .08, 108),
+  new THREE.Vector3(70, .22, 125),
+  new THREE.Vector3(84, .62, 139),
+  new THREE.Vector3(112, 1.5, 151),
+  new THREE.Vector3(138, 3.4, 147),
+  new THREE.Vector3(160, 6.8, 128),
+  new THREE.Vector3(170, 11.8, 102),
+  new THREE.Vector3(158, 15.6, 80),
+  new THREE.Vector3(136, 18.5, 68),
+];
+const mountainVillagePosition = new THREE.Vector3(136, 18.55, 68);
+const mountainVillageDropPosition = new THREE.Vector3(151, 18.8, 54);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -70,6 +84,9 @@ world.add(actors);
 const fallbackBase = new THREE.Group();
 fallbackBase.name = 'Procedural Fallback Ground and Water';
 world.add(fallbackBase);
+const mountainExpansion = new THREE.Group();
+mountainExpansion.name = 'Blender-authored mountain pass and village extension';
+world.add(mountainExpansion);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
@@ -94,6 +111,15 @@ const mats = {
   treeLeafDark: new THREE.MeshStandardMaterial({ color: 0x173f3b, roughness: .94, flatShading: true }),
   water: new THREE.MeshStandardMaterial({ color: 0x0b3946, roughness: .28, metalness: .42, emissive: 0x031a24, emissiveIntensity: .55 }),
   waterLine: new THREE.MeshBasicMaterial({ color: 0x35a8ae, transparent: true, opacity: .33 }),
+  mountainGround: new THREE.MeshStandardMaterial({ color: 0x1b2929, roughness: 1 }),
+  mountainRock: new THREE.MeshStandardMaterial({ color: 0x26353a, roughness: .96, flatShading: true }),
+  mountainRockLit: new THREE.MeshStandardMaterial({ color: 0x3c4c4b, roughness: .92, flatShading: true }),
+  mountainRoad: new THREE.MeshStandardMaterial({ color: 0x1a242c, roughness: .9, metalness: .08 }),
+  mountainShoulder: new THREE.MeshStandardMaterial({ color: 0x68736e, roughness: .96 }),
+  guardrail: new THREE.MeshStandardMaterial({ color: 0x859494, roughness: .5, metalness: .65 }),
+  cabinWood: new THREE.MeshStandardMaterial({ color: 0x684d3e, roughness: .88 }),
+  cabinRoof: new THREE.MeshStandardMaterial({ color: 0x252f37, roughness: .9 }),
+  villageLight: new THREE.MeshStandardMaterial({ color: 0xffc477, emissive: 0xc75d24, emissiveIntensity: 3.6 }),
   lamp: new THREE.MeshStandardMaterial({ color: 0xffd7a4, emissive: 0xff723e, emissiveIntensity: 5 }),
   beacon: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x8abf30, emissiveIntensity: 3.5, transparent: true, opacity: .94 }),
   event: new THREE.MeshStandardMaterial({ color: 0xff9d50, emissive: 0xa64618, emissiveIntensity: 3.3, transparent: true, opacity: .94 }),
@@ -748,7 +774,62 @@ function createTraffic() {
   }
 }
 
+function mountainTrafficPosition(vehicle) {
+  const sample = sampleMountainRoad(vehicle.progress);
+  return {
+    sample,
+    position: sample.position.clone().addScaledVector(sample.normal, vehicle.direction * vehicle.laneSide * 2.15),
+    heading: Math.atan2(sample.tangent.x * vehicle.direction, sample.tangent.z * vehicle.direction),
+  };
+}
+
+function respawnMountainTrafficVehicle(vehicle) {
+  vehicle.turnCount += 1;
+  vehicle.progress = .04 + randomFrom(vehicle.routeSeed + vehicle.turnCount * 3.2) * .9;
+  vehicle.direction = randomFrom(vehicle.routeSeed + vehicle.turnCount * 4.1) > .5 ? 1 : -1;
+  vehicle.currentSpeed = vehicle.cruiseSpeed;
+  vehicle.health = 100;
+  vehicle.disabledTimer = 0;
+  vehicle.hazardTimer = 0;
+  vehicle.incidentCooldown = 1.1;
+  const pose = mountainTrafficPosition(vehicle);
+  vehicle.mesh.position.copy(pose.position);
+  vehicle.mesh.rotation.y = pose.heading;
+}
+
+function createMountainTraffic() {
+  const colors = [0xb95459, 0xd89057, 0x577e9f, 0x74669c, 0x8a9b83, 0x4f8e85, 0xb2bd68, 0x886bc1];
+  const styles = ['hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'supercar', 'hatch', 'suv'];
+  styles.forEach((style, index) => {
+    const car = createCar(colors[index % colors.length], index % 2 ? 0xd6fa6a : 0xff9d50, false, style);
+    car.scale.multiplyScalar(.76);
+    actors.add(car);
+    const vehicle = {
+      mesh: car,
+      progress: .08 + (index % 5) * .17,
+      direction: index % 2 === 0 ? 1 : -1,
+      laneSide: 1,
+      cruiseSpeed: 7.5 + randomFrom(index + 430) * 4.5,
+      currentSpeed: 8.5,
+      health: 100,
+      disabledTimer: 0,
+      hazardTimer: 0,
+      incidentCooldown: 0,
+      laneChanging: null,
+      turning: null,
+      stopWait: 0,
+      routeSeed: index * 13.7 + 44,
+      turnCount: 0,
+    };
+    const pose = mountainTrafficPosition(vehicle);
+    car.position.copy(pose.position);
+    car.rotation.y = pose.heading;
+    mountainTraffic.push(vehicle);
+  });
+}
+
 const traffic = [];
+const mountainTraffic = [];
 const gltfLoader = new GLTFLoader();
 
 function prepareImportedModel(root) {
@@ -905,6 +986,192 @@ function buildMenuGarage() {
   menuGarage.userData.lights = [keyLight, fillLight, rimLight];
 }
 
+let mountainRoadCumulative = [];
+let mountainRoadLength = 0;
+
+function initializeMountainRoadMetrics() {
+  mountainRoadCumulative = [0];
+  mountainRoadLength = 0;
+  for (let index = 1; index < mountainRoadPoints.length; index += 1) {
+    const previous = mountainRoadPoints[index - 1];
+    const current = mountainRoadPoints[index];
+    mountainRoadLength += Math.hypot(current.x - previous.x, current.z - previous.z);
+    mountainRoadCumulative.push(mountainRoadLength);
+  }
+}
+
+function sampleMountainRoad(progress) {
+  const distance = clamp(progress, 0, 1) * mountainRoadLength;
+  let segment = mountainRoadCumulative.length - 2;
+  for (let index = 1; index < mountainRoadCumulative.length; index += 1) {
+    if (distance <= mountainRoadCumulative[index]) {
+      segment = index - 1;
+      break;
+    }
+  }
+  const start = mountainRoadPoints[segment];
+  const end = mountainRoadPoints[segment + 1] || start;
+  const segmentLength = Math.max(.001, mountainRoadCumulative[segment + 1] - mountainRoadCumulative[segment]);
+  const amount = clamp((distance - mountainRoadCumulative[segment]) / segmentLength, 0, 1);
+  const position = start.clone().lerp(end, amount);
+  const tangent = new THREE.Vector3(end.x - start.x, 0, end.z - start.z).normalize();
+  const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+  return { position, tangent, normal };
+}
+
+function nearestMountainRoadPoint(x, z) {
+  let nearest = { distance: Infinity, height: .02, progress: 0 };
+  for (let index = 1; index < mountainRoadPoints.length; index += 1) {
+    const start = mountainRoadPoints[index - 1];
+    const end = mountainRoadPoints[index];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+    const amount = clamp(((x - start.x) * dx + (z - start.z) * dz) / lengthSq, 0, 1);
+    const pointX = start.x + dx * amount;
+    const pointZ = start.z + dz * amount;
+    const distance = Math.hypot(x - pointX, z - pointZ);
+    if (distance < nearest.distance) {
+      const segmentLength = Math.max(.001, mountainRoadCumulative[index] - mountainRoadCumulative[index - 1]);
+      nearest = {
+        distance,
+        height: lerp(start.y, end.y, amount),
+        progress: (mountainRoadCumulative[index - 1] + segmentLength * amount) / Math.max(.001, mountainRoadLength),
+      };
+    }
+  }
+  return nearest;
+}
+
+function mountainRoadHeightAt(x, z) {
+  return nearestMountainRoadPoint(x, z).height;
+}
+
+function isOnMountainRoad(x, z) {
+  return nearestMountainRoadPoint(x, z).distance < 6.2;
+}
+
+function addMountainPathRibbon(points, width, material, yLift = .02) {
+  const vertices = [];
+  const indices = [];
+  points.forEach((point, index) => {
+    const previous = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const tangent = new THREE.Vector3(next.x - previous.x, 0, next.z - previous.z).normalize();
+    const normal = new THREE.Vector3(tangent.z, 0, -tangent.x).multiplyScalar(width / 2);
+    vertices.push(point.x - normal.x, point.y + yLift, point.z - normal.z, point.x + normal.x, point.y + yLift, point.z + normal.z);
+    if (index < points.length - 1) {
+      const base = index * 2;
+      indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const ribbon = new THREE.Mesh(geometry, material);
+  ribbon.receiveShadow = true;
+  mountainExpansion.add(ribbon);
+  return ribbon;
+}
+
+function addMountainRoadDetails() {
+  addMountainPathRibbon(mountainRoadPoints, 10.6, mats.mountainShoulder, 0);
+  addMountainPathRibbon(mountainRoadPoints, 8.8, mats.mountainRoad, .045);
+  for (let index = 1; index < mountainRoadPoints.length; index += 1) {
+    const start = mountainRoadPoints[index - 1];
+    const end = mountainRoadPoints[index];
+    const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+    const length = segment.length();
+    const heading = Math.atan2(segment.x, segment.z);
+    const tangent = segment.normalize();
+    const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+    for (let distance = 4; distance < length - 2; distance += 9) {
+      const amount = distance / length;
+      const center = start.clone().lerp(end, amount);
+      center.y += .09;
+      addMesh(mountainExpansion, new THREE.BoxGeometry(.16, .03, 4.1), mats.laneYellow, center, { rotation: [0, heading, 0] });
+    }
+    addMesh(mountainExpansion, new THREE.BoxGeometry(.09, .035, length), mats.lane, [start.x + normal.x * 4.05, lerp(start.y, end.y, .5) + .1, start.z + normal.z * 4.05], { rotation: [0, heading, 0] });
+    addMesh(mountainExpansion, new THREE.BoxGeometry(.09, .035, length), mats.lane, [start.x - normal.x * 4.05, lerp(start.y, end.y, .5) + .1, start.z - normal.z * 4.05], { rotation: [0, heading, 0] });
+    for (let distance = 4; distance < length; distance += 10) {
+      const amount = distance / length;
+      const center = start.clone().lerp(end, amount);
+      center.y += .45;
+      [-1, 1].forEach((side) => {
+        const post = center.clone().addScaledVector(normal, side * 5.35);
+        addMesh(mountainExpansion, new THREE.CylinderGeometry(.055, .07, 1.1, 6), mats.guardrail, [post.x, post.y, post.z]);
+      });
+    }
+    [-1, 1].forEach((side) => {
+      const railCenter = start.clone().lerp(end, .5).addScaledVector(normal, side * 5.35);
+      railCenter.y += .78;
+      addMesh(mountainExpansion, new THREE.BoxGeometry(.11, .11, length), mats.guardrail, railCenter, { rotation: [0, heading, 0] });
+    });
+  }
+}
+
+function createMountainRock(x, z, radius, height, material = mats.mountainRock, seed = 1) {
+  const rock = addMesh(mountainExpansion, new THREE.ConeGeometry(radius, height, 7, 2), material, [x, height / 2 - .12, z], { castShadow: true, receiveShadow: true });
+  rock.rotation.y = randomFrom(seed) * Math.PI;
+  rock.scale.x = .72 + randomFrom(seed + 1) * .6;
+  rock.scale.z = .72 + randomFrom(seed + 2) * .6;
+  if (radius < 14) addObstacle(x, z, radius * .72, radius * .72, 'mountain-rock');
+  return rock;
+}
+
+function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1) {
+  const groundHeight = mountainRoadHeightAt(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, groundHeight, z);
+  group.rotation.y = rotation;
+  group.name = `Mountain village cabin ${seed}`;
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), mats.cabinWood, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .72, height * .56, 4), mats.cabinRoof, [0, height + height * .23, 0], { rotation: [0, Math.PI / 4, 0], castShadow: true });
+  const warmWindow = addMesh(group, new THREE.BoxGeometry(width * .26, height * .2, .045), mats.villageLight, [0, height * .52, depth / 2 + .025]);
+  if (randomFrom(seed) > .35) addMesh(group, new THREE.BoxGeometry(.7, .08, .08), mats.villageLight, [0, height * .27, depth / 2 + .04]);
+  addObstacle(x, z, width / 2 + .7, depth / 2 + .7, 'mountain-village-building');
+  mountainExpansion.add(group);
+  return { group, warmWindow };
+}
+
+function buildMountainWorld() {
+  initializeMountainRoadMetrics();
+  addMesh(mountainExpansion, new THREE.PlaneGeometry(520, 520), mats.mountainGround, [0, -.24, 50], { receiveShadow: true });
+  const ridges = [
+    [106, 165, 45, 62], [176, 153, 52, 76], [192, 88, 42, 58], [118, 79, 36, 47],
+    [57, 184, 36, 48], [214, 190, 38, 54], [82, 121, 25, 34], [170, 208, 44, 64],
+  ];
+  ridges.forEach(([x, z, radius, height], index) => createMountainRock(x, z, radius, height, index % 2 ? mats.mountainRockLit : mats.mountainRock, index + 40));
+  for (let index = 0; index < 22; index += 1) {
+    const angle = randomFrom(index + 800) * Math.PI * 2;
+    const radius = 28 + randomFrom(index + 820) * 104;
+    const x = 132 + Math.cos(angle) * radius;
+    const z = 145 + Math.sin(angle) * radius * .72;
+    if (isOnMountainRoad(x, z) || x < 45) continue;
+    createMountainRock(x, z, 3 + randomFrom(index + 840) * 7, 5 + randomFrom(index + 860) * 13, mats.mountainRock, index + 100);
+  }
+  addMountainRoadDetails();
+  const village = new THREE.Group();
+  village.name = 'Pinewatch mountain village';
+  mountainExpansion.add(village);
+  [
+    [136, 68, 7.2, 5.2, 4.8, -.25], [151, 65, 6.4, 5.0, 4.3, .5], [145, 53, 7.8, 5.4, 4.7, 1.1],
+    [126, 55, 6.0, 4.6, 4.0, -.7], [159, 77, 5.8, 4.4, 4.1, .1], [119, 73, 5.5, 4.2, 3.8, .8],
+  ].forEach((cabin, index) => createMountainCabin(...cabin, index + 200));
+  addMesh(village, new THREE.CylinderGeometry(1.25, 1.4, .25, 16), mats.sidewalkDark, [143, mountainRoadHeightAt(143, 65) + .15, 65]);
+  addMesh(village, new THREE.CylinderGeometry(.12, .12, 4.8, 8), mats.guardrail, [143, mountainRoadHeightAt(143, 65) + 2.5, 65]);
+  addMesh(village, new THREE.ConeGeometry(1.8, 1.1, 8), mats.cabinRoof, [143, mountainRoadHeightAt(143, 65) + 5.2, 65]);
+  const villageLabel = makeLabel('PINEWATCH VILLAGE', '#d6fa6a', .64);
+  villageLabel.position.set(mountainVillagePosition.x, mountainVillagePosition.y + 7.8, mountainVillagePosition.z);
+  mountainExpansion.add(villageLabel);
+  const summitLabel = makeLabel('MOUNTAIN PASS', '#ff9d50', .56);
+  summitLabel.position.set(162, 20, 119);
+  mountainExpansion.add(summitLabel);
+  addMountainDeliveryMarkers();
+  createMountainTraffic();
+}
+
 function buildWorld() {
   buildSky();
   buildGroundAndWater();
@@ -914,6 +1181,7 @@ function buildWorld() {
   buildLandmarks();
   buildRoadInfrastructure();
   createTraffic();
+  buildMountainWorld();
 }
 
 const player = {
@@ -1264,8 +1532,53 @@ world.add(deliveryTargetMarker);
 let deliveryState = 'idle';
 let deliveryTime = 0;
 let deliveryNear = false;
+const mountainDeliveryStart = mountainVillagePosition.clone();
+const mountainDeliveryTarget = mountainVillageDropPosition.clone();
+let mountainDeliveryState = 'idle';
+let mountainDeliveryTime = 0;
+let mountainDeliveryNear = false;
+let mountainDeliveryStartMarker = null;
+let mountainDeliveryTargetMarker = null;
+let mountainDeliveryStartRing = null;
+let mountainDeliveryTargetRing = null;
+
+function addMountainDeliveryMarkers() {
+  mountainDeliveryStartMarker = new THREE.Group();
+  mountainDeliveryStartMarker.position.copy(mountainDeliveryStart);
+  mountainDeliveryStartRing = addMesh(mountainDeliveryStartMarker, new THREE.TorusGeometry(2.3, .09, 8, 32), mats.cache, [0, .2, 0], { rotation: [Math.PI / 2, 0, 0] });
+  addMesh(mountainDeliveryStartMarker, new THREE.CylinderGeometry(.04, .04, 4.8, 6), mats.cache, [0, 2.4, 0]);
+  const startLabel = makeLabel('PINEWATCH DEPOT', '#5ce3d1', .48);
+  startLabel.position.y = 5.1;
+  mountainDeliveryStartMarker.add(startLabel);
+  mountainExpansion.add(mountainDeliveryStartMarker);
+  mountainDeliveryTargetMarker = new THREE.Group();
+  mountainDeliveryTargetMarker.position.copy(mountainDeliveryTarget);
+  mountainDeliveryTargetRing = addMesh(mountainDeliveryTargetMarker, new THREE.TorusGeometry(2.4, .09, 8, 32), mats.event, [0, .2, 0], { rotation: [Math.PI / 2, 0, 0] });
+  addMesh(mountainDeliveryTargetMarker, new THREE.CylinderGeometry(.04, .04, 4.8, 6), mats.event, [0, 2.4, 0]);
+  const targetLabel = makeLabel('CABIN DROP', '#ff9d50', .48);
+  targetLabel.position.y = 5.1;
+  mountainDeliveryTargetMarker.add(targetLabel);
+  mountainExpansion.add(mountainDeliveryTargetMarker);
+}
+
+function mountainDeliveryAction() {
+  if (mountainDeliveryState === 'idle' && mountainDeliveryNear) {
+    mountainDeliveryState = 'active';
+    mountainDeliveryTime = 0;
+    playTone(320, .2, .08, 'sine', 90);
+    showToast('MOUNTAIN RUN ACCEPTED', 'Pinewatch Depot to the cabin above the pass', '+260 REP');
+  } else if (mountainDeliveryState === 'finished' && mountainDeliveryNear) {
+    mountainDeliveryState = 'active';
+    mountainDeliveryTime = 0;
+    showToast('NEW MOUNTAIN PACKAGE', 'Take the next load through Pinewatch', 'DELIVERY RUN');
+  }
+}
 
 function deliveryAction() {
+  if (mountainDeliveryNear || mountainDeliveryState === 'active') {
+    mountainDeliveryAction();
+    return;
+  }
   if (deliveryState === 'idle' && deliveryNear) {
     deliveryState = 'active';
     deliveryTime = 0;
@@ -1330,6 +1643,58 @@ function updateDelivery(time, dt) {
     copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Return to the depot for another job.`;
     timeReadout.textContent = 'COMPLETE';
     action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT ANOTHER</span>' : '<span>ROUTE CLEARED</span>';
+  }
+}
+
+function updateMountainDelivery(time, dt) {
+  if (!mountainDeliveryStartMarker || !mountainDeliveryTargetMarker) return;
+  mountainDeliveryNear = player.position.distanceTo(mountainDeliveryStart) < 12;
+  if (mountainDeliveryState === 'active') {
+    mountainDeliveryTime += dt;
+    if (player.position.distanceTo(mountainDeliveryTarget) < 7.4) {
+      mountainDeliveryState = 'finished';
+      player.rep += 260;
+      player.cash += 180;
+      saveProgress();
+      playBeacon();
+      showToast('PINEWATCH DELIVERED', `${mountainDeliveryTime.toFixed(1)} seconds through the pass`, '+260 REP');
+    }
+  }
+  const pulse = (Math.sin(time * .004) + 1) / 2;
+  mountainDeliveryStartRing.rotation.z += dt * 1.15;
+  mountainDeliveryStartRing.scale.setScalar(1 + pulse * .14);
+  mountainDeliveryTargetRing.rotation.z -= dt * 1.35;
+  mountainDeliveryTargetRing.scale.setScalar(1 + pulse * .16);
+  mountainDeliveryStartMarker.visible = mountainDeliveryState !== 'active';
+  mountainDeliveryTargetMarker.visible = mountainDeliveryState === 'active';
+  const relevant = mountainDeliveryNear || mountainDeliveryState === 'active';
+  if (!relevant) return;
+  const panel = document.querySelector('#delivery-panel');
+  panel.classList.add('visible');
+  panel.classList.toggle('active', mountainDeliveryState === 'active');
+  const status = document.querySelector('#delivery-status');
+  const title = document.querySelector('#delivery-title');
+  const copy = document.querySelector('#delivery-copy');
+  const timeReadout = document.querySelector('#delivery-time');
+  const action = document.querySelector('#delivery-action');
+  if (mountainDeliveryState === 'idle') {
+    status.textContent = mountainDeliveryNear ? 'READY' : 'MOUNTAIN ROUTE';
+    title.textContent = 'PINEWATCH SUPPLY RUN';
+    copy.textContent = mountainDeliveryNear ? 'Hit V to carry supplies up to the remote cabin.' : 'Climb the pass and find the cyan Pinewatch depot.';
+    timeReadout.textContent = mountainDeliveryNear ? 'PRESS V' : 'MOUNTAIN DELIVERY';
+    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT MOUNTAIN RUN</span>' : '<span>DEPOT // CABIN DROP</span>';
+  } else if (mountainDeliveryState === 'active') {
+    status.textContent = 'PASS RUN LIVE';
+    title.textContent = 'PINEWATCH SUPPLY RUN';
+    copy.textContent = 'Keep to your lane. The cabin drop is beyond the switchbacks.';
+    timeReadout.textContent = `${mountainDeliveryTime.toFixed(1)} SEC`;
+    action.innerHTML = '<span class="event-live-dot"></span><span>SUPPLIES ON BOARD</span>';
+  } else {
+    status.textContent = 'DELIVERED';
+    title.textContent = 'PINEWATCH COMPLETE';
+    copy.textContent = `Last run: ${mountainDeliveryTime.toFixed(1)} seconds. Return to the depot for another load.`;
+    timeReadout.textContent = 'COMPLETE';
+    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT ANOTHER</span>' : '<span>ROUTE CLEARED</span>';
   }
 }
 
@@ -1703,6 +2068,8 @@ function setStarterMenuOpen(open) {
     wantedLevel = 0;
     raceState = 'idle';
     deliveryState = 'idle';
+    mountainDeliveryState = 'idle';
+    mountainDeliveryTime = 0;
     player.mesh.position.copy(player.position);
     player.mesh.rotation.y = player.heading;
     gamePaused = false;
@@ -2187,7 +2554,13 @@ function showToast(title, copy, reward) {
 }
 
 function isOnRoad(x, z) {
-  return roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2);
+  const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
+  return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnMountainRoad(x, z);
+}
+
+function getSpeedLimit(x, z) {
+  if (isOnMountainRoad(x, z)) return 35;
+  return z < -72 ? 35 : 45;
 }
 
 function recordTrafficViolation(label, fine) {
@@ -2212,7 +2585,7 @@ function crossingRoadAxis(previous, current, axis, vertical) {
 
 function updateTrafficRules(previousPosition, dt, onRoad) {
   const speedKmh = Math.abs(player.speed) * 3.1;
-  const speedLimit = player.position.z < -72 ? 35 : 45;
+  const speedLimit = getSpeedLimit(player.position.x, player.position.z);
   if (onRoad && speedKmh > speedLimit + 10) {
     player.speedingTime += dt;
     if (player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45);
@@ -2317,7 +2690,7 @@ function resolveStaticCollisions(impactSpeed = 0) {
 
 function resolveTrafficCollisions(impactSpeed = 0) {
   const radius = 3.0;
-  for (const vehicle of traffic) {
+  for (const vehicle of [...traffic, ...mountainTraffic]) {
     const dx = player.position.x - vehicle.mesh.position.x;
     const dz = player.position.z - vehicle.mesh.position.z;
     const distanceSq = dx * dx + dz * dz;
@@ -2343,6 +2716,9 @@ function resolveTrafficCollisions(impactSpeed = 0) {
 }
 
 function districtAt(x, z) {
+  if (Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z) < 25) return 'PINEWATCH VILLAGE';
+  if (isOnMountainRoad(x, z)) return 'MOUNTAIN PASS';
+  if (z > 108 || x > 116 || x < -116) return 'OUTER RIDGE';
   if (z < -72) return 'WATERFRONT LOOP';
   if (x > 44 && z < 15) return 'NEON DISTRICT';
   if (x < -44 && z < 15) return 'OCTANE ROW';
@@ -2409,6 +2785,7 @@ function updatePlayer(dt) {
   const movement = forward.clone().multiplyScalar(player.speed * dt);
   const previousPosition = player.position.clone();
   player.position.add(movement);
+  player.position.y = isOnMountainRoad(player.position.x, player.position.z) ? mountainRoadHeightAt(player.position.x, player.position.z) + .06 : .02;
   player.distance += Math.abs(player.speed * dt);
   updateTrafficRules(previousPosition, dt, onRoad);
   const impactSpeed = Math.abs(player.speed);
@@ -2783,6 +3160,60 @@ function updateTraffic(dt) {
   }
 }
 
+function updateMountainTraffic(dt) {
+  for (const vehicle of mountainTraffic) {
+    vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
+    vehicle.hazardTimer = Math.max(0, vehicle.hazardTimer - dt);
+    if (vehicle.disabledTimer > 0) {
+      vehicle.disabledTimer = Math.max(0, vehicle.disabledTimer - dt);
+      vehicle.currentSpeed = 0;
+      setBrakeLights(vehicle.mesh, true);
+      updateTrafficVehicleIndicators(vehicle);
+      if (vehicle.disabledTimer <= 0) respawnMountainTrafficVehicle(vehicle);
+      continue;
+    }
+    vehicle.currentSpeed = damp(vehicle.currentSpeed, vehicle.cruiseSpeed, 2.2, dt);
+    vehicle.progress += vehicle.direction * vehicle.currentSpeed * dt / Math.max(1, mountainRoadLength);
+    if (vehicle.progress > .995) vehicle.progress = .025;
+    if (vehicle.progress < .025) vehicle.progress = .995;
+    const pose = mountainTrafficPosition(vehicle);
+    vehicle.mesh.position.copy(pose.position);
+    vehicle.mesh.position.y += .02;
+    vehicle.mesh.rotation.y = pose.heading;
+    updateTrafficVehicleIndicators(vehicle);
+    setBrakeLights(vehicle.mesh, vehicle.currentSpeed < .8);
+    const wheelSpin = vehicle.currentSpeed * dt * .95;
+    vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
+    vehicle.mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
+  }
+}
+
+function resolveMountainTrafficCollisions() {
+  for (let first = 0; first < mountainTraffic.length; first += 1) {
+    const a = mountainTraffic[first];
+    if (a.disabledTimer > 0 || a.incidentCooldown > 0) continue;
+    for (let second = first + 1; second < mountainTraffic.length; second += 1) {
+      const b = mountainTraffic[second];
+      if (b.disabledTimer > 0 || b.incidentCooldown > 0) continue;
+      const dx = a.mesh.position.x - b.mesh.position.x;
+      const dz = a.mesh.position.z - b.mesh.position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq >= 2.65 * 2.65) continue;
+      const distance = Math.sqrt(distanceSq) || 1;
+      const relativeSpeed = Math.abs(a.currentSpeed - b.currentSpeed) + (a.direction !== b.direction ? Math.min(a.currentSpeed, b.currentSpeed) : 0);
+      if (relativeSpeed < 1.2) continue;
+      const aPosition = a.mesh.position.clone();
+      const bPosition = b.mesh.position.clone();
+      a.mesh.position.x += dx / distance * .48;
+      a.mesh.position.z += dz / distance * .48;
+      b.mesh.position.x -= dx / distance * .48;
+      b.mesh.position.z -= dz / distance * .48;
+      registerTrafficIncident(a, relativeSpeed, false, bPosition);
+      registerTrafficIncident(b, relativeSpeed, false, aPosition);
+    }
+  }
+}
+
 function resolveTrafficVehicleCollisions() {
   for (let first = 0; first < traffic.length; first += 1) {
     const a = traffic[first];
@@ -2879,24 +3310,40 @@ function drawMiniMap() {
   mapCtx.strokeStyle = '#42545b';
   mapCtx.lineWidth = 6;
   for (const axis of roadAxes) {
-    const v = worldToMap(axis, 0, size);
-    mapCtx.beginPath(); mapCtx.moveTo(v.x, 0); mapCtx.lineTo(v.x, size); mapCtx.stroke();
-    const h = worldToMap(0, axis, size);
-    mapCtx.beginPath(); mapCtx.moveTo(0, h.y); mapCtx.lineTo(size, h.y); mapCtx.stroke();
+    const vTop = worldToMap(axis, CITY_LIMIT, size);
+    const vBottom = worldToMap(axis, -CITY_LIMIT, size);
+    mapCtx.beginPath(); mapCtx.moveTo(vTop.x, vTop.y); mapCtx.lineTo(vBottom.x, vBottom.y); mapCtx.stroke();
+    const hLeft = worldToMap(-CITY_LIMIT, axis, size);
+    const hRight = worldToMap(CITY_LIMIT, axis, size);
+    mapCtx.beginPath(); mapCtx.moveTo(hLeft.x, hLeft.y); mapCtx.lineTo(hRight.x, hRight.y); mapCtx.stroke();
   }
   mapCtx.strokeStyle = '#6b7a7e';
   mapCtx.lineWidth = 1;
   for (const axis of roadAxes) {
-    const v = worldToMap(axis, 0, size);
-    mapCtx.beginPath(); mapCtx.moveTo(v.x, 0); mapCtx.lineTo(v.x, size); mapCtx.stroke();
-    const h = worldToMap(0, axis, size);
-    mapCtx.beginPath(); mapCtx.moveTo(0, h.y); mapCtx.lineTo(size, h.y); mapCtx.stroke();
+    const vTop = worldToMap(axis, CITY_LIMIT, size);
+    const vBottom = worldToMap(axis, -CITY_LIMIT, size);
+    mapCtx.beginPath(); mapCtx.moveTo(vTop.x, vTop.y); mapCtx.lineTo(vBottom.x, vBottom.y); mapCtx.stroke();
+    const hLeft = worldToMap(-CITY_LIMIT, axis, size);
+    const hRight = worldToMap(CITY_LIMIT, axis, size);
+    mapCtx.beginPath(); mapCtx.moveTo(hLeft.x, hLeft.y); mapCtx.lineTo(hRight.x, hRight.y); mapCtx.stroke();
   }
   // parks and water-side massing
   mapCtx.fillStyle = 'rgba(61, 134, 94, .44)';
   const park = worldToMap(0, 44, size); mapCtx.fillRect(park.x - 14, park.y - 12, 28, 24);
   mapCtx.fillStyle = 'rgba(115, 163, 157, .34)';
   mapCtx.fillRect(0, coastY - 2, size, 3);
+  mapCtx.strokeStyle = '#4e554d';
+  mapCtx.lineWidth = 4;
+  mapCtx.beginPath();
+  mountainRoadPoints.forEach((point, index) => {
+    const mapped = worldToMap(point.x, point.z, size);
+    if (index === 0) mapCtx.moveTo(mapped.x, mapped.y);
+    else mapCtx.lineTo(mapped.x, mapped.y);
+  });
+  mapCtx.stroke();
+  const villagePoint = worldToMap(mountainVillagePosition.x, mountainVillagePosition.z, size);
+  mapCtx.fillStyle = '#d6fa6a';
+  mapCtx.fillRect(villagePoint.x - 2.5, villagePoint.y - 2.5, 5, 5);
   beaconPositions.forEach((position, index) => {
     const point = worldToMap(position.x, position.z, size);
     const active = index === routeStep;
@@ -2966,27 +3413,33 @@ function drawWorldMap() {
   ctx.strokeStyle = '#1e333e';
   ctx.lineWidth = 12;
   roadAxes.forEach((axis) => {
-    const vertical = worldToMap(axis, 0, mapSize);
-    const horizontal = worldToMap(0, axis, mapSize);
-    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+    const verticalTop = worldToMap(axis, CITY_LIMIT, mapSize);
+    const verticalBottom = worldToMap(axis, -CITY_LIMIT, mapSize);
+    const horizontalLeft = worldToMap(-CITY_LIMIT, axis, mapSize);
+    const horizontalRight = worldToMap(CITY_LIMIT, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(verticalTop.x, verticalTop.y); ctx.lineTo(verticalBottom.x, verticalBottom.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(horizontalLeft.x, horizontalLeft.y); ctx.lineTo(horizontalRight.x, horizontalRight.y); ctx.stroke();
   });
   ctx.strokeStyle = '#526b72';
   ctx.lineWidth = 7;
   roadAxes.forEach((axis) => {
-    const vertical = worldToMap(axis, 0, mapSize);
-    const horizontal = worldToMap(0, axis, mapSize);
-    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+    const verticalTop = worldToMap(axis, CITY_LIMIT, mapSize);
+    const verticalBottom = worldToMap(axis, -CITY_LIMIT, mapSize);
+    const horizontalLeft = worldToMap(-CITY_LIMIT, axis, mapSize);
+    const horizontalRight = worldToMap(CITY_LIMIT, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(verticalTop.x, verticalTop.y); ctx.lineTo(verticalBottom.x, verticalBottom.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(horizontalLeft.x, horizontalLeft.y); ctx.lineTo(horizontalRight.x, horizontalRight.y); ctx.stroke();
   });
   ctx.strokeStyle = 'rgba(213, 233, 213, .38)';
   ctx.lineWidth = 1;
   ctx.setLineDash([7, 9]);
   roadAxes.forEach((axis) => {
-    const vertical = worldToMap(axis, 0, mapSize);
-    const horizontal = worldToMap(0, axis, mapSize);
-    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+    const verticalTop = worldToMap(axis, CITY_LIMIT, mapSize);
+    const verticalBottom = worldToMap(axis, -CITY_LIMIT, mapSize);
+    const horizontalLeft = worldToMap(-CITY_LIMIT, axis, mapSize);
+    const horizontalRight = worldToMap(CITY_LIMIT, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(verticalTop.x, verticalTop.y); ctx.lineTo(verticalBottom.x, verticalBottom.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(horizontalLeft.x, horizontalLeft.y); ctx.lineTo(horizontalRight.x, horizontalRight.y); ctx.stroke();
   });
   ctx.setLineDash([]);
 
@@ -3006,9 +3459,13 @@ function drawWorldMap() {
     ctx.stroke();
     ctx.restore();
   };
+  drawRoute(mountainRoadPoints, 'rgba(72, 80, 72, .9)', 11, []);
+  drawRoute(mountainRoadPoints, 'rgba(125, 132, 117, .86)', 7, []);
+  drawRoute(mountainRoadPoints, 'rgba(215, 192, 104, .9)', 1.5, [8, 7]);
   if (routeStep < beaconPositions.length) drawRoute([player.position, ...beaconPositions.slice(routeStep)], 'rgba(255, 157, 80, .72)', 3, [10, 7]);
   if (raceState !== 'idle') drawRoute(raceRoute.slice(Math.max(0, raceIndex - 1)), 'rgba(255, 157, 80, .48)', 2, [5, 5]);
   if (deliveryState === 'active') drawRoute([player.position, deliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
+  if (mountainDeliveryState === 'active') drawRoute([player.position, mountainDeliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
 
   const drawText = (text, x, y, color = '#91a7a2', align = 'left') => {
     ctx.font = '500 10px DM Mono, monospace';
@@ -3020,7 +3477,15 @@ function drawWorldMap() {
   drawText('NORTHSTAR AVE', worldToMap(66, 66, mapSize).x + 9, worldToMap(66, 66, mapSize).y - 12, '#b6c5b3');
   drawText('OCTANE ROW', worldToMap(-66, 22, mapSize).x + 9, worldToMap(-66, 22, mapSize).y - 12, '#b6c5b3');
   drawText('MIDTOWN EAST', worldToMap(66, -22, mapSize).x + 9, worldToMap(66, -22, mapSize).y - 12, '#b6c5b3');
+  drawText('MOUNTAIN PASS', worldToMap(158, 116, mapSize).x + 9, worldToMap(158, 116, mapSize).y - 12, '#c6b789');
+  drawText('PINEWATCH VILLAGE', worldToMap(mountainVillagePosition.x, mountainVillagePosition.z, mapSize).x + 12, worldToMap(mountainVillagePosition.x, mountainVillagePosition.z, mapSize).y + 14, '#d6fa6a');
   drawText('WATERFRONT', mapSize - 10, coastY + 22, '#5ca6aa', 'right');
+  const villagePoint = worldToMap(mountainVillagePosition.x, mountainVillagePosition.z, mapSize);
+  ctx.fillStyle = '#d6fa6a';
+  ctx.shadowColor = '#d6fa6a';
+  ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.moveTo(villagePoint.x, villagePoint.y - 7); ctx.lineTo(villagePoint.x + 7, villagePoint.y); ctx.lineTo(villagePoint.x, villagePoint.y + 7); ctx.lineTo(villagePoint.x - 7, villagePoint.y); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
 
   beaconPositions.forEach((position, index) => {
     const point = worldToMap(position.x, position.z, mapSize);
@@ -3064,8 +3529,14 @@ function drawWorldMap() {
     ctx.fillRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
     drawText('DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
   }
+  if (mountainDeliveryState === 'active') {
+    const dropPoint = worldToMap(mountainDeliveryTarget.x, mountainDeliveryTarget.z, mapSize);
+    ctx.fillStyle = '#ff9d50';
+    ctx.fillRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
+    drawText('CABIN DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
+  }
 
-  traffic.forEach((vehicle) => {
+  [...traffic, ...mountainTraffic].forEach((vehicle) => {
     if (vehicle.health >= 100 && vehicle.disabledTimer <= 0) return;
     const point = worldToMap(vehicle.mesh.position.x, vehicle.mesh.position.z, mapSize);
     ctx.fillStyle = vehicle.disabledTimer > 0 ? '#ff5b9c' : '#ff9d50';
@@ -3096,7 +3567,10 @@ function drawWorldMap() {
   const routeTitle = document.querySelector('#world-map-route');
   const routeCopy = document.querySelector('#world-map-route-copy');
   const status = document.querySelector('#world-map-status');
-  if (deliveryState === 'active') {
+  if (mountainDeliveryState === 'active') {
+    routeTitle.textContent = 'PINEWATCH CABIN DROP';
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN`;
+  } else if (deliveryState === 'active') {
     routeTitle.textContent = 'COURIER DROP';
     routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP POINT`;
   } else if (raceState !== 'idle') {
@@ -3123,7 +3597,7 @@ function updateHud(dt) {
   document.querySelector('#nitro-percent').textContent = `${Math.round(nitroPercent)}%`;
   document.querySelector('#nitro-fill').style.width = `${nitroPercent}%`;
   document.querySelector('#district-name').textContent = districtAt(player.position.x, player.position.z);
-  document.querySelector('#speed-limit').textContent = player.position.z < -72 ? '35' : '45';
+  document.querySelector('#speed-limit').textContent = String(getSpeedLimit(player.position.x, player.position.z));
   const minutes = Math.floor(sessionSeconds / 60).toString().padStart(2, '0');
   const seconds = Math.floor(sessionSeconds % 60).toString().padStart(2, '0');
   document.querySelector('#session-clock').textContent = `${minutes}:${seconds}`;
@@ -3163,9 +3637,12 @@ function animate(time) {
     updatePlayer(dt);
     updateTrafficSignals(time);
     updateTraffic(dt);
+    updateMountainTraffic(dt);
     resolveTrafficVehicleCollisions();
+    resolveMountainTrafficCollisions();
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
+    updateMountainDelivery(time, dt);
     updatePolice(time, dt);
     updateRace(time, dt);
     updateBeacons(time, dt);
