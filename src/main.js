@@ -997,8 +997,13 @@ async function loadBlenderAssets() {
   if (environmentResult.status === 'fulfilled') {
     const importedEnvironment = prepareImportedModel(environmentResult.value.scene);
     importedEnvironment.name = 'Aurora Bay Environment — Blender GLB';
+    let importedMountainExtension = false;
+    importedEnvironment.traverse((object) => {
+      if (/mountain|pinewatch|guardrail/i.test(object.name || '')) importedMountainExtension = true;
+    });
     city.visible = false;
     fallbackBase.visible = false;
+    if (importedMountainExtension) mountainExpansion.visible = false;
     world.add(importedEnvironment);
   } else {
     console.warn('Blender environment unavailable; using procedural fallback.', environmentResult.reason);
