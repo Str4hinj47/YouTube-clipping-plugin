@@ -1,6 +1,6 @@
 # Neonline // Aurora Bay
 
-A stylized open-world night driving game built as a browser prototype. Cruise through a modular neon city, climb the two-lane mountain pass with opposing traffic, use the full Aurora Bay city map to plan routes, discover route beacons, collect data caches, run city and Pinewatch village deliveries, outrun Night Patrol, drift across the grid, and explore the waterfront.
+A stylized open-world night driving game built as a browser prototype. Cruise legally through a modular neon city, climb the two-lane mountain pass with opposing traffic, use the full Aurora Bay map to plan routes, discover route beacons, collect data caches, run city and Pinewatch village deliveries, and explore the waterfront at your own pace.
 
 ## Run
 
@@ -13,12 +13,9 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 ## Controls
 
 - **WASD / arrow keys** — drive and steer
-- **Shift** — nitro
-- **Space** — handbrake / drift
-- **C** — chase / high camera
-- **E** — start or rematch Midnight Sprint when near the orange gate
+- **Space** — handbrake
+- **C** — follow / high camera
 - **V** — accept a courier delivery at the blue depot
-- **X** — trigger a Night Patrol pursuit
 - **G** — open the in-game garage, repair damage, buy performance upgrades, or respray the car
 - **P / Escape** — pause, open settings, or return to the full title menu
 - **Title menu** — Play, Market (buy and select cars), Garage (respray and upgrades), and Settings
@@ -33,7 +30,7 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - The mountain pass is a two-lane road with right-hand opposing traffic, a center line, guardrails, switchbacks, and oncoming vehicles that make overtaking a deliberate risk.
 - Pinewatch Village adds a remote supply-delivery loop beyond the pass, with a depot, cabin drop, village buildings, and extra route rewards.
 - The HUD and both Garage interfaces show condition and the full-repair price. Repairs cost `$5` per missing condition point, are saved locally, and restore a disabled player car.
-- Driving through a red light or stop sign, or holding more than 10 km/h over the displayed limit, issues a citation and fine. Repeated violations raise HEAT and can call in Night Patrol.
+- Red lights and stop signs can issue ordinary citations. Speed enforcement only happens at a randomly selected roadside radar location; a police unit appears there, follows briefly, and asks the player to pull over without starting a chase or raising a wanted level.
 
 ## World layout
 

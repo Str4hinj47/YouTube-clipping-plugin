@@ -43,14 +43,6 @@
         <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span class="reward">+120 REP</span></div>
       </section>
 
-      <section class="event-panel glass-panel hud-layer" id="event-panel">
-        <div class="event-topline"><span class="eyebrow"><span class="eyebrow-dot event-dot"></span> LIVE EVENT</span><span class="event-status" id="event-status">NEARBY</span></div>
-        <div class="event-title" id="event-title">MIDNIGHT SPRINT</div>
-        <p id="event-copy">Hit the start gate for a clean five-checkpoint time trial.</p>
-        <div class="event-stats"><span>BEST <b id="event-best">01:42.80</b></span><span id="event-time">READY</span></div>
-        <div class="event-action" id="event-action"><span class="keycap">E</span><span>START EVENT</span></div>
-      </section>
-
       <section class="delivery-panel glass-panel hud-layer" id="delivery-panel">
         <div class="delivery-topline"><span class="eyebrow"><span class="eyebrow-dot delivery-dot"></span> COURIER RUN</span><span class="delivery-status" id="delivery-status">NEARBY</span></div>
         <div class="delivery-title" id="delivery-title">NIGHT SHIFT DELIVERY</div>
@@ -62,7 +54,6 @@
       <section class="world-readout hud-layer">
         <div class="district-readout"><span class="district-pin">⌖</span><div><small>DISTRICT</small><strong id="district-name">NORTHSTAR AVE</strong></div></div>
         <div class="weather-readout"><span>21°</span><span class="weather-icon">◒</span><small>CLEAR / 22:48</small></div>
-        <div class="heat-readout" id="heat-readout"><small>HEAT</small><strong id="heat-level">00</strong></div>
         <div class="cache-readout"><small>CACHES</small><strong id="cache-count">00 / 12</strong></div>
         <div class="speed-limit-readout"><small>LIMIT</small><strong id="speed-limit">45</strong></div>
       </section>
@@ -70,13 +61,13 @@
       <section class="map-panel glass-panel hud-layer">
         <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
         <canvas id="mini-map" width="220" height="220"></canvas>
-        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot event-map-dot"></i> EVENT</span></div>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span></div>
       </section>
 
       <section class="world-map-overlay" id="world-map-overlay" aria-hidden="true">
         <div class="world-map-shell">
           <header class="world-map-header">
-            <div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY // CITY GRID</span><h2>OPEN <b>MAP</b></h2></div>
+            <div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY // ISLAND ROAD NETWORK</span><h2>OPEN <b>MAP</b></h2></div>
             <div class="world-map-header-meta"><span id="world-map-status">LIVE NAVIGATION</span><button id="world-map-close" type="button" aria-label="Close map">×</button></div>
           </header>
           <div class="world-map-body">
@@ -84,7 +75,7 @@
             <aside class="world-map-sidebar">
               <div class="world-map-readout"><small>YOU ARE HERE</small><strong id="world-map-location">NORTHSTAR AVE</strong><span id="world-map-coordinates">X 000 // Z 000</span></div>
               <div class="world-map-route-card"><span class="eyebrow"><span class="eyebrow-dot event-dot"></span> ACTIVE ROUTE</span><strong id="world-map-route">NEXT BEACON</strong><p id="world-map-route-copy">Follow the orange marker through the city.</p></div>
-              <div class="world-map-legend"><span class="world-map-section-title">CITY LEGEND</span><div><i class="legend-dot player-dot"></i><span>YOU / HEADING</span></div><div><i class="legend-dot beacon-dot"></i><span>BEACON NETWORK</span></div><div><i class="legend-dot event-map-dot"></i><span>EVENT GATE</span></div><div><i class="legend-dot delivery-map-dot"></i><span>COURIER POINT</span></div><div><i class="legend-dot incident-map-dot"></i><span>INCIDENT / PATROL</span></div></div>
+              <div class="world-map-legend"><span class="world-map-section-title">ROAD LEGEND</span><div><i class="legend-dot player-dot"></i><span>YOU / HEADING</span></div><div><i class="legend-dot beacon-dot"></i><span>BEACON NETWORK</span></div><div><i class="legend-dot delivery-map-dot"></i><span>COURIER POINT</span></div><div><i class="legend-dot incident-map-dot"></i><span>RADAR STOP</span></div></div>
               <div class="world-map-places"><span class="world-map-section-title">KNOWN PLACES</span><span>PINEWATCH VILLAGE</span><span>MOUNTAIN PASS</span><span>REDWOOD VALLEY</span><span>LAKE AURORA</span><span>CINDER FLATS</span><span>EASTGATE</span><span>NORTHSTAR OUTPOST</span><span>SOUTHERN CROSSROADS</span><span>NORTHSTAR OVERLOOK</span><span>PULSE STATION</span><span>OCTANE ROW</span><span>SOUTH MARKET</span><span>WATERFRONT LOOP</span></div>
               <button class="world-map-close-button" id="world-map-close-button" type="button">RETURN TO DRIVE <span>ESC / M</span></button>
             </aside>
@@ -99,7 +90,6 @@
         <div class="vehicle-bars">
           <div class="bar-label"><span>ENGINE</span><b>94%</b></div><div class="bar"><span style="width:94%"></span></div>
           <div class="bar-label condition-bar"><span>CONDITION</span><b id="condition-percent">100%</b></div><div class="bar condition-bar"><span id="condition-fill" style="width:100%"></span></div>
-          <div class="bar-label"><span>NITRO</span><b id="nitro-percent">76%</b></div><div class="bar nitro-bar"><span id="nitro-fill" style="width:76%"></span></div>
         </div>
       </section>
 
@@ -110,9 +100,9 @@
 
       <section class="controls-panel glass-panel hud-layer">
         <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
-        <div class="control-row"><span class="keycap wide">SHIFT</span><span class="control-label">NITRO</span><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
-        <div class="control-row"><span class="keycap">E</span><span class="control-label">EVENT</span><span class="keycap">M</span><span class="control-label">MAP</span></div>
-        <div class="control-row"><span class="keycap">V</span><span class="control-label">DELIVERY</span><span class="keycap">X</span><span class="control-label">PATROL</span></div>
+        <div class="control-row"><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
+        <div class="control-row"><span class="keycap">M</span><span class="control-label">MAP</span></div>
+        <div class="control-row"><span class="keycap">V</span><span class="control-label">DELIVERY</span></div>
         <div class="control-row muted"><span class="keycap">G</span><span class="control-label">GARAGE</span><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
       </section>
 
@@ -181,11 +171,11 @@
                 <div class="paint-swatches menu-paints" data-paint-group>
                   <button class="paint-swatch active" data-paint="#303fca" type="button"><i style="--paint:#303fca"></i><span>MIDNIGHT</span></button><button class="paint-swatch" data-paint="#d85062" type="button"><i style="--paint:#d85062"></i><span>SIGNAL</span></button><button class="paint-swatch" data-paint="#d6fa6a" type="button"><i style="--paint:#d6fa6a"></i><span>ACID</span></button><button class="paint-swatch" data-paint="#5ce3d1" type="button"><i style="--paint:#5ce3d1"></i><span>AQUA</span></button><button class="paint-swatch" data-paint="#f0e6cf" type="button"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button><button class="paint-swatch" data-paint="#141a24" type="button"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
                 </div>
-                <div class="menu-section-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS // 3 LEVELS</small></div>
+                <div class="menu-section-heading"><span>PERFORMANCE MODULES</span><small>2 SLOTS // 3 LEVELS</small></div>
                 <div class="upgrade-list menu-upgrade-list">
                   <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
-                  <button class="upgrade-card" data-upgrade="nitro" type="button"><span class="upgrade-icon">✦</span><span class="upgrade-copy"><b>NITRO CELL</b><small>Capacity + recharge rate</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$220</small></span></button>
-                  <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and cleaner drifts</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
+
+                  <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and road stability</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
                 </div>
                 <div class="menu-garage-note"><span class="pulse-dot"></span> Paint changes are free. Performance modules use your Aurora Bay balance.</div>
               </section>
@@ -198,7 +188,7 @@
                   <div class="settings-row"><div><b>TOUCH CONTROLS</b><small>Show mobile driving controls on touch devices</small></div><button class="settings-action static" type="button">AUTO</button></div>
                   <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, owned cars, upgrades, and routes</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
                 </div>
-                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SHIFT</b> NITRO</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>E</b> EVENT</span><span><b>V</b> DELIVERY</span><span><b>X</b> PATROL</span><span><b>G</b> GARAGE</span></div></div>
+                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>V</b> DELIVERY</span><span><b>G</b> GARAGE</span></div></div>
               </section>
             </main>
           </div>
@@ -222,11 +212,11 @@
             <button class="paint-swatch" data-paint="#f0e6cf" type="button" aria-label="Pearl paint"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button>
             <button class="paint-swatch" data-paint="#141a24" type="button" aria-label="Obsidian paint"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
           </div>
-          <div class="upgrade-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS / 3 LEVELS</small></div>
+          <div class="upgrade-heading"><span>PERFORMANCE MODULES</span><small>2 SLOTS / 3 LEVELS</small></div>
           <div class="upgrade-list">
             <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
-            <button class="upgrade-card" data-upgrade="nitro" type="button"><span class="upgrade-icon">✦</span><span class="upgrade-copy"><b>NITRO CELL</b><small>Capacity + faster recharge</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
-            <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and cleaner drifts</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+
+            <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and road stability</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
           </div>
           <div class="garage-footer"><span><span class="keycap">G</span> GARAGE</span><span><span class="keycap">ESC</span> CLOSE</span><span class="garage-save">AUTO-SAVED TO RUN</span></div>
         </div>
@@ -234,7 +224,7 @@
 
       <div class="mobile-controls" id="mobile-controls" aria-label="Touch driving controls">
         <div class="mobile-steer" id="mobile-steer"><span class="steer-ring"></span><span class="steer-knob" id="steer-knob"></span></div>
-        <div class="mobile-action-cluster"><button class="mobile-action nitro" id="mobile-nitro" type="button">N<small>NITRO</small></button><button class="mobile-action gas" id="mobile-gas" type="button">▲<small>GO</small></button><button class="mobile-action brake" id="mobile-brake" type="button">▼<small>BRAKE</small></button><button class="mobile-action handbrake" id="mobile-handbrake" type="button">◼<small>DRIFT</small></button></div>
+        <div class="mobile-action-cluster"><button class="mobile-action gas" id="mobile-gas" type="button">▲<small>GO</small></button><button class="mobile-action brake" id="mobile-brake" type="button">▼<small>BRAKE</small></button><button class="mobile-action handbrake" id="mobile-handbrake" type="button">◼<small>HANDBRAKE</small></button></div>
         <button class="mobile-pause" id="mobile-pause" type="button">Ⅱ</button>
       </div>
 

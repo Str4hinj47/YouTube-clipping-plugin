@@ -379,7 +379,7 @@ function buildRoads() {
     addMesh(city, new THREE.BoxGeometry(230, .12, 1.8), mats.sidewalk, [0, .03, z - 6.1], { receiveShadow: true });
     addMesh(city, new THREE.BoxGeometry(230, .12, 1.8), mats.sidewalk, [0, .03, z + 6.1], { receiveShadow: true });
   }
-  // Clean crosswalks make the grid legible from the chase camera.
+  // Clean crosswalks make the grid legible from the follow camera.
   for (const x of roadAxes) {
     for (const z of roadAxes) {
       for (let n = -3; n <= 3; n += 1) {
@@ -675,14 +675,14 @@ const CAR_PROFILES = {
 };
 
 const VEHICLE_CATALOG = [
-  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72, nitroBoost: 31 },
-  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84, nitroBoost: 27 },
-  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78, nitroBoost: 29 },
-  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6, nitroBoost: 25 },
-  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84, acceleration: 19, topSpeed: 35, brakePower: 32, turnRate: 1.58, turnSpeed: 18, offRoadTraction: .74, nitroBoost: 28 },
-  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82, acceleration: 18, topSpeed: 33, brakePower: 39, turnRate: 1.48, turnSpeed: 19, offRoadTraction: .94, nitroBoost: 26 },
-  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86, nitroBoost: 24 },
-  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56, nitroBoost: 37 },
+  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
+  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
+  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78 },
+  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6 },
+  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84, acceleration: 19, topSpeed: 35, brakePower: 32, turnRate: 1.58, turnSpeed: 18, offRoadTraction: .74 },
+  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82, acceleration: 18, topSpeed: 33, brakePower: 39, turnRate: 1.48, turnSpeed: 19, offRoadTraction: .94 },
+  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86 },
+  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56 },
 ];
 const fleetAssetScenes = {};
 
@@ -1605,6 +1605,7 @@ function buildWorld() {
   buildMountainWorld();
   addRegionalRoadNetwork();
   createRegionalTraffic();
+  createSpeedRadarSites();
 }
 
 const player = {
@@ -1612,7 +1613,6 @@ const player = {
   position: new THREE.Vector3(0, .02, 0),
   speed: 0,
   heading: 0,
-  nitro: 76,
   distance: 0,
   rep: 1280,
   cash: 420,
@@ -1626,7 +1626,7 @@ const player = {
   trafficViolations: 0,
   lastSignalKey: '',
   stopObservations: {},
-  upgrades: { engine: 0, nitro: 0, grip: 0 },
+  upgrades: { engine: 0, grip: 0 },
   collectedCaches: [],
 };
 player.mesh.position.copy(player.position);
@@ -1657,44 +1657,6 @@ beaconPositions.forEach((position, index) => {
   beacons.push(group);
 });
 
-const raceRoute = [
-  new THREE.Vector3(22, .08, 22),
-  new THREE.Vector3(22, .08, 66),
-  new THREE.Vector3(-22, .08, 66),
-  new THREE.Vector3(-22, .08, -22),
-  new THREE.Vector3(66, .08, -22),
-  new THREE.Vector3(66, .08, 66),
-];
-const raceMarkers = [];
-const raceGate = new THREE.Group();
-raceGate.position.copy(raceRoute[0]);
-addMesh(raceGate, new THREE.BoxGeometry(.42, 4.7, .42), mats.event, [-4.2, 2.35, 0], { castShadow: true });
-addMesh(raceGate, new THREE.BoxGeometry(.42, 4.7, .42), mats.event, [4.2, 2.35, 0], { castShadow: true });
-addMesh(raceGate, new THREE.BoxGeometry(8.8, .34, .42), mats.event, [0, 4.6, 0], { castShadow: true });
-const gateRing = addMesh(raceGate, new THREE.TorusGeometry(3.25, .09, 8, 36), mats.event, [0, 2.15, 0], { rotation: [Math.PI / 2, 0, 0] });
-const gateLabel = makeLabel('MIDNIGHT SPRINT', '#ff9d50', .62);
-gateLabel.position.set(0, 5.55, 0);
-raceGate.add(gateLabel);
-world.add(raceGate);
-for (let index = 1; index < raceRoute.length; index += 1) {
-  const marker = new THREE.Group();
-  marker.position.copy(raceRoute[index]);
-  const ring = addMesh(marker, new THREE.TorusGeometry(2.45, .08, 8, 32), mats.event, [0, .2, 0], { rotation: [Math.PI / 2, 0, 0] });
-  const beam = addMesh(marker, new THREE.CylinderGeometry(.028, .028, 4.6, 6), mats.event, [0, 2.3, 0]);
-  const label = makeLabel(index === raceRoute.length - 1 ? 'FINISH' : `CHECKPOINT 0${index}`, '#ff9d50', .42);
-  label.position.y = 4.8;
-  marker.add(label);
-  marker.userData = { ring, beam, label };
-  world.add(marker);
-  raceMarkers.push(marker);
-}
-let raceState = 'idle';
-let raceIndex = 1;
-let raceTime = 0;
-let raceCountdown = 0;
-let raceCountdownLast = 0;
-let raceBest = 102.8;
-let raceNear = false;
 let garageOpen = false;
 let gamePaused = false;
 let worldMapOpen = false;
@@ -1704,7 +1666,6 @@ let garageCarouselIndex = 0;
 let qualityMode = 'HIGH';
 const upgradeConfig = {
   engine: { costs: [240, 420, 700] },
-  nitro: { costs: [220, 380, 620] },
   grip: { costs: [180, 320, 540] },
 };
 
@@ -1718,7 +1679,6 @@ function saveProgress() {
       paint: player.paint,
       condition: player.condition,
       upgrades: player.upgrades,
-      raceBest,
       cacheIds: player.collectedCaches,
     }));
   } catch (error) {
@@ -1732,7 +1692,6 @@ function loadProgress() {
     if (!saved) return;
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
-    if (Number.isFinite(saved.raceBest)) raceBest = saved.raceBest;
     if (Array.isArray(saved.ownedCars)) {
       player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
       if (!player.ownedCars.includes('sport')) player.ownedCars.unshift('sport');
@@ -1744,130 +1703,11 @@ function loadProgress() {
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
     });
-    player.nitro = Math.min(player.nitro, 100 + player.upgrades.nitro * 12);
   } catch (error) {
     console.warn('Progress load unavailable.', error);
   }
 }
 loadProgress();
-
-function formatRaceTime(seconds) {
-  const safeSeconds = Math.max(0, seconds);
-  const minutes = Math.floor(safeSeconds / 60).toString().padStart(2, '0');
-  const remainder = (safeSeconds % 60).toFixed(2).padStart(5, '0');
-  return `${minutes}:${remainder}`;
-}
-
-function raceAction() {
-  if (!raceNear && raceState === 'idle') return;
-  if (raceState === 'idle') {
-    raceState = 'countdown';
-    raceCountdown = 3.4;
-    raceCountdownLast = 4;
-    raceTime = 0;
-    raceIndex = 1;
-    player.speed = 0;
-    playTone(240, .22, .08, 'square', 20);
-    showToast('EVENT READY', 'Hold the line — the sprint starts now', 'MIDNIGHT SPRINT');
-  } else if (raceState === 'finished' && raceNear) {
-    raceState = 'countdown';
-    raceCountdown = 3.4;
-    raceCountdownLast = 4;
-    raceTime = 0;
-    raceIndex = 1;
-    player.speed = 0;
-    showToast('REMATCH', 'Beat your last line through Aurora Bay', 'MIDNIGHT SPRINT');
-  }
-}
-
-function updateRace(time, dt) {
-  const distanceToStart = player.position.distanceTo(raceRoute[0]);
-  raceNear = distanceToStart < 11;
-  if (raceState === 'countdown') {
-    raceCountdown -= dt;
-    const count = Math.ceil(raceCountdown);
-    if (count > 0 && count !== raceCountdownLast) {
-      raceCountdownLast = count;
-      playTone(250 + (4 - count) * 55, .16, .07, 'square', 20);
-    }
-    if (raceCountdown <= 0) {
-      raceState = 'active';
-      raceTime = 0;
-      playTone(620, .24, .1, 'sine', 240);
-    }
-  } else if (raceState === 'active') {
-    raceTime += dt;
-    const checkpointDistance = player.position.distanceTo(raceRoute[raceIndex]);
-    if (checkpointDistance < 7.4) {
-      playTone(480 + raceIndex * 34, .13, .06, 'sine', 90);
-      raceIndex += 1;
-      if (raceIndex >= raceRoute.length) {
-        raceState = 'finished';
-        const newBest = raceTime < raceBest;
-        if (newBest) raceBest = raceTime;
-        player.rep += newBest ? 300 : 120;
-        player.cash += newBest ? 180 : 80;
-        saveProgress();
-        playBeacon();
-        showToast(newBest ? 'NEW PERSONAL BEST' : 'SPRINT COMPLETE', `${formatRaceTime(raceTime)} through the city grid`, newBest ? '+300 REP' : '+120 REP');
-      }
-    }
-  }
-
-  gateRing.rotation.z += dt * 1.1;
-  const gatePulse = (Math.sin(time * .004) + 1) / 2;
-  gateRing.scale.setScalar(1 + gatePulse * .12);
-  raceMarkers.forEach((marker, markerIndex) => {
-    const routeIndex = markerIndex + 1;
-    const active = raceState === 'active' && raceIndex === routeIndex;
-    const visible = active || (raceState === 'countdown' && routeIndex === 1);
-    const data = marker.userData;
-    marker.visible = visible;
-    if (visible) {
-      data.ring.rotation.z -= dt * 1.4;
-      data.ring.scale.setScalar(1 + gatePulse * .14);
-      data.beam.scale.y = 1 + gatePulse * .2;
-      data.label.material.opacity = 1;
-    }
-  });
-
-  const panel = document.querySelector('#event-panel');
-  const panelVisible = raceNear || raceState === 'countdown' || raceState === 'active' || raceState === 'finished';
-  panel.classList.toggle('visible', panelVisible);
-  panel.classList.toggle('active', raceState === 'countdown' || raceState === 'active');
-  panel.classList.toggle('finished', raceState === 'finished');
-  const status = document.querySelector('#event-status');
-  const title = document.querySelector('#event-title');
-  const copy = document.querySelector('#event-copy');
-  const timeReadout = document.querySelector('#event-time');
-  const action = document.querySelector('#event-action');
-  document.querySelector('#event-best').textContent = formatRaceTime(raceBest);
-  if (raceState === 'idle') {
-    status.textContent = raceNear ? 'READY' : 'OPEN WORLD';
-    title.textContent = 'MIDNIGHT SPRINT';
-    copy.textContent = raceNear ? 'Hit E to launch a five-checkpoint time trial.' : 'Find the orange start gate on the map and chase a clean line.';
-    timeReadout.textContent = raceNear ? 'PRESS E' : 'ROUTE EVENT';
-    action.innerHTML = raceNear ? '<span class="keycap">E</span><span>START EVENT</span>' : '<span>ORANGE GATE // 5 CHECKPOINTS</span>';
-  } else if (raceState === 'countdown') {
-    status.textContent = raceCountdown > 0 ? `START ${Math.max(1, Math.ceil(raceCountdown))}` : 'GO';
-    title.textContent = 'MIDNIGHT SPRINT';
-    copy.textContent = 'Stay on the asphalt. Missed gates do not count.';
-    timeReadout.textContent = '00:00.00';
-    action.innerHTML = '<span class="keycap">W</span><span>LAUNCH</span>';
-  } else if (raceState === 'active') {
-    status.textContent = `CHECKPOINT ${String(raceIndex).padStart(2, '0')} / 05`;
-    title.textContent = 'MIDNIGHT SPRINT';
-    copy.textContent = 'Thread the next orange gate before the clock catches you.';
-    timeReadout.textContent = formatRaceTime(raceTime);
-    action.innerHTML = '<span class="event-live-dot"></span><span>EVENT LIVE</span>';
-  } else {
-    status.textContent = 'FINISHED';
-    title.textContent = 'SPRINT COMPLETE';
-    copy.textContent = `Run time ${formatRaceTime(raceTime)}. Return to the gate for a rematch.`;
-    timeReadout.textContent = formatRaceTime(raceTime);
-    action.innerHTML = raceNear ? '<span class="keycap">E</span><span>REMATCH</span>' : '<span>ROUTE CLEARED</span>';
-  }
-}
 
 const collectiblePositions = [
   new THREE.Vector3(-66, .42, 22),
@@ -2130,60 +1970,127 @@ const policeRed = addMesh(policeSiren, new THREE.BoxGeometry(.34, .14, .34), mat
 const policeBlue = addMesh(policeSiren, new THREE.BoxGeometry(.34, .14, .34), mats.windowBlue, [.23, 1.82, 0]);
 policeSiren.visible = false;
 actors.add(policeSiren);
+const speedRadarSites = [];
+let activeRadarSite = null;
 let policeState = 'idle';
 let policeTime = 0;
-let wantedLevel = 0;
 
-function startPoliceChase() {
-  if (policeState === 'active' || garageOpen || gamePaused) return;
-  const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
-  const side = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
-  policeVehicle.position.copy(player.position).addScaledVector(forward, -18).addScaledVector(side, 3.5);
-  policeVehicle.position.y = .02;
-  policeVehicle.rotation.y = player.heading;
-  policeVehicle.visible = true;
-  policeSiren.visible = true;
-  policeState = 'active';
+function createSpeedRadarSite(position, heading = 0) {
+  const group = new THREE.Group();
+  group.position.set(position.x, 0, position.z);
+  group.rotation.y = heading;
+  addMesh(group, new THREE.CylinderGeometry(.045, .07, 1.05, 7), mats.sidewalkDark, [0, .53, 0]);
+  addMesh(group, new THREE.BoxGeometry(.7, .32, .42), mats.asphaltEdge, [0, 1.1, 0], { castShadow: true });
+  addMesh(group, new THREE.SphereGeometry(.08, 8, 6), mats.event, [0, 1.22, .24]);
+  const label = makeLabel('RADAR', '#ff9d50', .3);
+  label.position.set(0, 1.72, 0);
+  group.add(label);
+  group.userData.label = label;
+  roadFurniture.add(group);
+  speedRadarSites.push({ group, position: new THREE.Vector3(position.x, .02, position.z), heading, cooldown: 0 });
+}
+
+function createSpeedRadarSites() {
+  const definitions = [
+    [new THREE.Vector3(-59.5, .02, -84), 0],
+    [new THREE.Vector3(28.5, .02, 84), 0],
+    [new THREE.Vector3(72.5, .02, -28), Math.PI],
+    [new THREE.Vector3(-84, .02, 28.5), Math.PI / 2],
+    [new THREE.Vector3(84, .02, 72.5), -Math.PI / 2],
+  ];
+  [.24, .52, .78].forEach((progress, index) => {
+    const sample = sampleMountainRoad(progress);
+    const shoulder = sample.position.clone().addScaledVector(sample.normal, index % 2 ? -6.7 : 6.7);
+    definitions.push([shoulder, Math.atan2(sample.tangent.x, sample.tangent.z)]);
+  });
+  [[0, .34], [1, .58], [2, .66], [3, .48]].forEach(([routeIndex, progress]) => {
+    const sample = sampleRegionalRoute(routeIndex, progress);
+    const shoulder = sample.position.clone().addScaledVector(sample.normal, routeIndex % 2 ? -7.4 : 7.4);
+    definitions.push([shoulder, Math.atan2(sample.tangent.x, sample.tangent.z)]);
+  });
+  // Shuffle the authored candidate locations each session so a familiar road
+  // does not always produce the same roadside stop.
+  for (let index = definitions.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [definitions[index], definitions[swapIndex]] = [definitions[swapIndex], definitions[index]];
+  }
+  definitions.slice(0, 8).forEach(([position, heading]) => createSpeedRadarSite(position, heading));
+}
+
+function nearestSpeedRadarSite() {
+  let nearest = null;
+  let nearestDistance = 12.5;
+  speedRadarSites.forEach((site) => {
+    if (site.cooldown > 0) return;
+    const distance = Math.hypot(player.position.x - site.position.x, player.position.z - site.position.z);
+    if (distance < nearestDistance) {
+      nearest = site;
+      nearestDistance = distance;
+    }
+  });
+  return nearest;
+}
+
+function beginRadarStop(site) {
+  if (!site || policeState !== 'idle' || garageOpen || gamePaused) return;
+  activeRadarSite = site;
+  site.cooldown = 26;
+  policeState = 'radar';
   policeTime = 0;
-  wantedLevel = 3;
-  playTone(110, .35, .09, 'sawtooth', 140);
-  showToast('NIGHT PATROL', 'Break line of sight for 30 seconds', 'HEAT 03');
+  policeVehicle.position.copy(site.position);
+  policeVehicle.position.y = .02;
+  policeVehicle.rotation.y = site.heading;
+  policeVehicle.visible = true;
+  policeSiren.visible = false;
+  showToast('SPEED RADAR', 'A roadside unit clocked your speed. Pull over when safe.', 'RADAR STOP');
+}
+
+function endRadarStop() {
+  policeState = 'idle';
+  policeTime = 0;
+  activeRadarSite = null;
+  policeVehicle.visible = false;
+  policeSiren.visible = false;
+  policeRed.visible = false;
+  policeBlue.visible = false;
 }
 
 function updatePolice(time, dt) {
-  if (policeState === 'active') {
+  if (policeState === 'radar') {
+    policeTime += dt;
+    policeVehicle.rotation.y = activeRadarSite?.heading || policeVehicle.rotation.y;
+    if (policeTime > 1.6) {
+      policeState = 'pull-over';
+      policeTime = 0;
+      policeSiren.visible = true;
+      showToast('PULL OVER', 'The radar unit is following. Find a safe place to stop.', 'SPEED CHECK');
+    }
+  } else if (policeState === 'pull-over') {
     policeTime += dt;
     const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
     const side = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
-    const target = player.position.clone().addScaledVector(forward, -6).addScaledVector(side, Math.sin(time * .0015) * 2.2);
-    policeVehicle.position.lerp(target, 1 - Math.exp(-2.6 * dt));
+    const target = player.position.clone().addScaledVector(forward, -10).addScaledVector(side, 3.2);
+    target.y = .02;
+    policeVehicle.position.lerp(target, 1 - Math.exp(-3.1 * dt));
     const toPlayer = player.position.clone().sub(policeVehicle.position);
     policeVehicle.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
     policeSiren.position.copy(policeVehicle.position);
     policeSiren.rotation.y = policeVehicle.rotation.y;
     policeRed.visible = Math.sin(time * .025) > 0;
     policeBlue.visible = !policeRed.visible;
-    wantedLevel = Math.max(1, Math.ceil((30 - policeTime) / 10));
-    if (policeVehicle.position.distanceTo(player.position) < 4.1) player.speed = damp(player.speed, 0, 2.2, dt);
-    if (policeTime >= 30) {
-      policeState = 'finished';
-      policeVehicle.visible = false;
+    const stoppedSafely = Math.abs(player.speed) < 1.4 && policeVehicle.position.distanceTo(player.position) < 16;
+    if (stoppedSafely || policeTime > 12) {
+      policeState = 'ticket';
+      policeTime = 0;
       policeSiren.visible = false;
-      wantedLevel = 0;
-      player.rep += 260;
-      player.cash += 160;
-      saveProgress();
-      playBeacon();
-      showToast('LINE BROKEN', 'You shook the patrol clean', '+260 REP');
+      showToast('SPEED CITATION', stoppedSafely ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
     }
-  } else if (policeState === 'finished') {
-    policeState = 'idle';
+  } else if (policeState === 'ticket') {
+    policeTime += dt;
+    if (policeTime > 3.2) endRadarStop();
   } else {
     policeSiren.visible = false;
   }
-  const heat = document.querySelector('#heat-readout');
-  heat.classList.toggle('hot', wantedLevel > 0);
-  document.querySelector('#heat-level').textContent = String(wantedLevel).padStart(2, '0');
 }
 
 createCollectibles();
@@ -2485,11 +2392,7 @@ function setStarterMenuOpen(open) {
     player.position.set(0, .02, 0);
     player.speed = 0;
     player.heading = 0;
-    policeState = 'idle';
-    policeVehicle.visible = false;
-    policeSiren.visible = false;
-    wantedLevel = 0;
-    raceState = 'idle';
+    endRadarStop();
     deliveryState = 'idle';
     mountainDeliveryState = 'idle';
     mountainDeliveryTime = 0;
@@ -2536,7 +2439,6 @@ function purchaseUpgrade(key) {
   if (!cost || player.cash < cost) return;
   player.cash -= cost;
   player.upgrades[key] += 1;
-  if (key === 'nitro') player.nitro = 100 + player.upgrades.nitro * 12;
   saveProgress();
   updateGarageUi();
   playTone(360 + player.upgrades[key] * 80, .2, .08, 'sine', 140);
@@ -2618,9 +2520,7 @@ function resetSavedProgress() {
   player.trafficViolations = 0;
   player.lastSignalKey = '';
   player.stopObservations = {};
-  player.upgrades = { engine: 0, nitro: 0, grip: 0 };
-  player.nitro = 76;
-  raceBest = 102.8;
+  player.upgrades = { engine: 0, grip: 0 };
   player.collectedCaches = [];
   applyPlayerVehicleStyle('sport', false);
   applyPlayerPaint(player.paint, false);
@@ -2629,15 +2529,14 @@ function resetSavedProgress() {
   showToast('PROGRESS RESET', 'Fresh run, same city', 'LOCAL SAVE CLEARED');
 }
 
-const input = { forward: false, back: false, left: false, right: false, nitro: false, handbrake: false };
+const input = { forward: false, back: false, left: false, right: false, handbrake: false };
 let touchSteer = 0;
-const gamepadState = { forward: false, back: false, nitro: false, handbrake: false, steer: 0 };
+const gamepadState = { forward: false, back: false, handbrake: false, steer: 0 };
 let cameraMode = 0;
 let soundOn = true;
 let routeStep = 0;
 let missionProgress = 42;
 let sessionSeconds = 0;
-let driftScore = 0;
 let collisionCooldown = 0;
 let toastTimeout;
 
@@ -2650,8 +2549,6 @@ const audioState = {
   engineGain: null,
   harmonicGain: null,
   roadNoiseGain: null,
-  nitroOsc: null,
-  nitroGain: null,
   initialized: false,
 };
 
@@ -2706,16 +2603,7 @@ function ensureAudio() {
     roadNoiseGain.connect(master);
     roadNoise.start();
 
-    const nitroOsc = context.createOscillator();
-    nitroOsc.type = 'square';
-    nitroOsc.frequency.value = 170;
-    const nitroGain = context.createGain();
-    nitroGain.gain.value = 0;
-    nitroOsc.connect(nitroGain);
-    nitroGain.connect(master);
-    nitroOsc.start();
-
-    Object.assign(audioState, { context, master, engineOsc, engineHarmonic, engineFilter, engineGain, harmonicGain, roadNoiseGain, nitroOsc, nitroGain, initialized: true });
+    Object.assign(audioState, { context, master, engineOsc, engineHarmonic, engineFilter, engineGain, harmonicGain, roadNoiseGain, initialized: true });
   }
   if (audioState.context.state === 'suspended') audioState.context.resume();
 }
@@ -2727,21 +2615,17 @@ function updateAudio() {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
-    audioState.nitroGain.gain.setTargetAtTime(0, now, .08);
     audioState.master.gain.setTargetAtTime(soundOn ? (starterMenuOpen ? .2 : garageOpen ? .22 : 0) : 0, now, .08);
     return;
   }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
   const accelerating = input.forward || gamepadState.forward;
-  const nitroActive = (input.nitro || gamepadState.nitro) && accelerating && player.nitro > 0 && player.speed > 4;
   audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (accelerating ? 15 : 0), now, .045);
   audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
   audioState.engineFilter.frequency.setTargetAtTime(520 + speedRatio * 820, now, .08);
   audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (accelerating ? .024 : 0), now, .08);
   audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
   audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (isOnRoad(player.position.x, player.position.z) ? .045 : .075), now, .12);
-  audioState.nitroOsc.frequency.setTargetAtTime(170 + speedRatio * 240, now, .04);
-  audioState.nitroGain.gain.setTargetAtTime(nitroActive ? .045 : 0, now, .06);
   audioState.master.gain.setTargetAtTime(soundOn ? .28 : 0, now, .08);
 }
 
@@ -2778,7 +2662,6 @@ function setInput(code, value) {
   if (code === 'KeyS' || code === 'ArrowDown') input.back = value;
   if (code === 'KeyA' || code === 'ArrowLeft') input.left = value;
   if (code === 'KeyD' || code === 'ArrowRight') input.right = value;
-  if (code === 'ShiftLeft' || code === 'ShiftRight') input.nitro = value;
   if (code === 'Space') input.handbrake = value;
 }
 window.addEventListener('keydown', (event) => {
@@ -2813,11 +2696,9 @@ window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   if (event.code === 'KeyC' && !event.repeat) {
     cameraMode = (cameraMode + 1) % 2;
-    showToast(cameraMode === 0 ? 'CHASE CAMERA' : 'HIGH CAMERA', 'Camera angle changed', '');
+    showToast(cameraMode === 0 ? 'FOLLOW CAMERA' : 'HIGH CAMERA', 'Camera angle changed', '');
   }
-  if (event.code === 'KeyE' && !event.repeat) raceAction();
   if (event.code === 'KeyV' && !event.repeat) deliveryAction();
-  if (event.code === 'KeyX' && !event.repeat) startPoliceChase();
   if (event.code === 'KeyR' && !event.repeat) resetPlayer();
   setInput(event.code, true);
 });
@@ -2826,21 +2707,20 @@ window.addEventListener('pointerdown', () => ensureAudio(), { passive: true });
 window.addEventListener('blur', () => {
   Object.keys(input).forEach((key) => { input[key] = false; });
   touchSteer = 0;
-  Object.assign(gamepadState, { forward: false, back: false, nitro: false, handbrake: false, steer: 0 });
+  Object.assign(gamepadState, { forward: false, back: false, handbrake: false, steer: 0 });
 });
 
 function updateGamepad() {
   if (!navigator.getGamepads) return;
   const gamepad = Array.from(navigator.getGamepads() || []).find(Boolean);
   if (!gamepad) {
-    Object.assign(gamepadState, { forward: false, back: false, nitro: false, handbrake: false, steer: 0 });
+    Object.assign(gamepadState, { forward: false, back: false, handbrake: false, steer: 0 });
     return;
   }
   const throttle = gamepad.buttons[7]?.value || gamepad.buttons[0]?.value || 0;
   const brake = gamepad.buttons[6]?.value || gamepad.buttons[1]?.value || 0;
   gamepadState.forward = throttle > .16;
   gamepadState.back = brake > .16;
-  gamepadState.nitro = Boolean(gamepad.buttons[4]?.pressed || gamepad.buttons[2]?.pressed);
   gamepadState.handbrake = Boolean(gamepad.buttons[1]?.pressed);
   gamepadState.steer = Math.abs(gamepad.axes[0] || 0) > .12 ? gamepad.axes[0] : 0;
 }
@@ -2874,7 +2754,7 @@ function setupMobileControls() {
   steerPad.addEventListener('pointerup', resetSteer);
   steerPad.addEventListener('pointercancel', resetSteer);
   const holdButtons = [
-    ['#mobile-gas', 'forward'], ['#mobile-brake', 'back'], ['#mobile-nitro', 'nitro'], ['#mobile-handbrake', 'handbrake'],
+    ['#mobile-gas', 'forward'], ['#mobile-brake', 'back'], ['#mobile-handbrake', 'handbrake'],
   ];
   holdButtons.forEach(([selector, key]) => {
     const button = document.querySelector(selector);
@@ -3015,18 +2895,21 @@ function getSpeedLimit(x, z) {
   return z < -72 ? 35 : 45;
 }
 
-function recordTrafficViolation(label, fine) {
+function recordTrafficViolation(label, fine, radarSite = null) {
   if (player.violationCooldown > 0) return;
   player.cash = Math.max(0, player.cash - fine);
   player.trafficViolations += 1;
   player.speedingTime = 0;
   player.violationCooldown = 7;
-  wantedLevel = Math.min(3, wantedLevel + 1);
   saveProgress();
   updateGarageUi();
   playTone(180, .18, .08, 'square', -55);
-  showToast('TRAFFIC CITATION', `${label} violation recorded`, `-$${fine}`);
-  if (player.trafficViolations >= 2 && policeState === 'idle') startPoliceChase();
+  if (radarSite) {
+    showToast('SPEED RADAR', `${label} detected at a roadside unit`, `-$${fine}`);
+    beginRadarStop(radarSite);
+  } else {
+    showToast('TRAFFIC CITATION', `${label} violation recorded`, `-$${fine}`);
+  }
 }
 
 function crossingRoadAxis(previous, current, axis, vertical) {
@@ -3040,7 +2923,8 @@ function updateTrafficRules(previousPosition, dt, onRoad) {
   const speedLimit = getSpeedLimit(player.position.x, player.position.z);
   if (onRoad && speedKmh > speedLimit + 10) {
     player.speedingTime += dt;
-    if (player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45);
+    const radarSite = nearestSpeedRadarSite();
+    if (radarSite && player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45, radarSite);
   } else {
     player.speedingTime = Math.max(0, player.speedingTime - dt * 1.8);
   }
@@ -3153,7 +3037,7 @@ function resolveTrafficCollisions(impactSpeed = 0) {
     registerTrafficIncident(vehicle, Math.abs(impactSpeed) + vehicle.currentSpeed, true);
     return { hit: true, trafficHit: true, vehicle, impactSpeed: Math.abs(impactSpeed) + vehicle.currentSpeed };
   }
-  if (policeState === 'active' && policeVehicle.visible) {
+  if (policeState !== 'idle' && policeVehicle.visible) {
     const dx = player.position.x - policeVehicle.position.x;
     const dz = player.position.z - policeVehicle.position.z;
     const distanceSq = dx * dx + dz * dz;
@@ -3212,24 +3096,18 @@ function updatePlayer(dt) {
   const onRoad = isOnRoad(player.position.x, player.position.z);
   const vehicleSpec = vehicleCatalogEntry();
   const engineLevel = player.upgrades.engine;
-  const nitroCapacity = 100 + player.upgrades.nitro * 12;
   const engineMultiplier = 1 + engineLevel * .1;
   const gripMultiplier = 1 + player.upgrades.grip * .1;
-  const usingNitro = (input.nitro || gamepadState.nitro) && throttle && player.nitro > 0 && player.speed > 4;
   const handbraking = input.handbrake && Math.abs(player.speed) > 6;
   const acceleration = (onRoad ? vehicleSpec.acceleration : vehicleSpec.acceleration * vehicleSpec.offRoadTraction) * engineMultiplier;
-  const nitroPower = vehicleSpec.nitroBoost + engineLevel * 3;
   const normalTopSpeed = vehicleSpec.topSpeed + engineLevel * 2;
-  const nitroTopSpeed = normalTopSpeed + 14 + player.upgrades.nitro * 1.5;
 
-  if (throttle) player.speed += (acceleration + (usingNitro ? nitroPower : 0)) * dt;
+  if (throttle) player.speed += acceleration * dt;
   if (braking) player.speed -= (player.speed > 0 ? vehicleSpec.brakePower : vehicleSpec.brakePower * .42) * dt;
   if (!throttle && !braking) player.speed = damp(player.speed, 0, onRoad ? .78 : 1.25, dt);
   if (handbraking) player.speed = damp(player.speed, 0, .14, dt);
-  if (usingNitro) player.nitro = clamp(player.nitro - (27 - player.upgrades.nitro * 2.5) * dt, 0, nitroCapacity);
-  else player.nitro = clamp(player.nitro + (throttle ? .9 : 2.8 + player.upgrades.nitro * .6) * dt, 0, nitroCapacity);
   if (!onRoad) player.speed *= Math.pow(clamp(vehicleSpec.offRoadTraction + player.upgrades.grip * .02, .55, .99), dt);
-  player.speed = clamp(player.speed, -12, usingNitro ? nitroTopSpeed : normalTopSpeed);
+  player.speed = clamp(player.speed, -12, normalTopSpeed);
 
   if (Math.abs(player.speed) > .3) {
     const turnFactor = clamp(Math.abs(player.speed) / vehicleSpec.turnSpeed, .12, 1.28) * (handbraking ? 1.8 : 1) * gripMultiplier;
@@ -3253,7 +3131,7 @@ function updatePlayer(dt) {
       const furnitureHit = staticCollision.breakable && !trafficHit;
       const damage = clamp(impactSpeed * (trafficHit ? 1.35 : furnitureHit ? .58 : .92) + (trafficCollision.policeHit ? 7 : 0), 2, 36);
       applyVehicleDamage(damage, trafficCollision.policeHit ? 'POLICE IMPACT' : furnitureHit ? 'ROAD FURNITURE' : 'COLLISION');
-      showToast(trafficCollision.policeHit ? 'POLICE CONTACT' : trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficCollision.policeHit ? 'The patrol is not going to forget that' : trafficHit ? 'Vehicle incident logged' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : `-${Math.round(damage)} CONDITION`);
+      showToast(trafficCollision.policeHit ? 'POLICE CONTACT' : trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficCollision.policeHit ? 'The officer is checking the roadside stop' : trafficHit ? 'Vehicle incident logged' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : `-${Math.round(damage)} CONDITION`);
       collisionCooldown = .75;
     } else {
       player.speed = damp(player.speed, 0, 3.5, dt);
@@ -3282,12 +3160,7 @@ function updatePlayer(dt) {
   updatePlayerLighting(steering);
   setBrakeLights(player.mesh, Boolean(braking || handbraking || staticCollision.hit || trafficHit));
 
-  if (handbraking && Math.abs(player.speed) > 10 && Math.abs(steering) > 0) {
-    driftScore += Math.abs(player.speed) * Math.abs(steering) * dt * 2.4;
-  } else {
-    driftScore = damp(driftScore, 0, 1.8, dt);
-  }
-  document.querySelector('#surface-state').textContent = onRoad ? (handbraking ? 'DRIFTING' : 'ASPHALT') : 'GRASS';
+  document.querySelector('#surface-state').textContent = onRoad ? (handbraking ? 'HAND BRAKE' : 'ASPHALT') : 'GRASS';
   document.querySelector('#surface-state').style.color = handbraking ? 'var(--orange)' : '';
 }
 
@@ -3795,7 +3668,7 @@ function updateCamera(dt) {
   const lookTarget = player.position.clone().add(forward.multiplyScalar(cameraMode === 0 ? 3.1 : 2.2));
   lookTarget.y = cameraMode === 0 ? 1.05 : .2;
   camera.lookAt(lookTarget);
-  const targetFov = 55 + clamp(Math.abs(player.speed) * .2, 0, 10) + (input.nitro ? 3 : 0);
+  const targetFov = 55 + clamp(Math.abs(player.speed) * .2, 0, 10);
   camera.fov = damp(camera.fov, targetFov, 4, dt);
   camera.updateProjectionMatrix();
 }
@@ -3870,14 +3743,6 @@ function drawMiniMap() {
     mapCtx.fillStyle = active ? '#ff9d50' : 'rgba(214, 250, 106, .45)'; mapCtx.fill();
     if (active) { mapCtx.strokeStyle = 'rgba(255,157,80,.35)'; mapCtx.lineWidth = 2; mapCtx.stroke(); }
   });
-  const eventPoint = worldToMap(raceRoute[0].x, raceRoute[0].z, size);
-  mapCtx.beginPath();
-  mapCtx.rect(eventPoint.x - 3, eventPoint.y - 3, 6, 6);
-  mapCtx.fillStyle = '#ff5b9c';
-  mapCtx.fill();
-  mapCtx.strokeStyle = 'rgba(255,91,156,.48)';
-  mapCtx.lineWidth = 1;
-  mapCtx.stroke();
   collectiblePositions.forEach((position, index) => {
     if (player.collectedCaches.includes(index)) return;
     const cachePoint = worldToMap(position.x, position.z, size);
@@ -3991,7 +3856,6 @@ function drawWorldMap() {
   drawRoute(mountainRoadPoints, 'rgba(125, 132, 117, .86)', 7, []);
   drawRoute(mountainRoadPoints, 'rgba(215, 192, 104, .9)', 1.5, [8, 7]);
   if (routeStep < beaconPositions.length) drawRoute([player.position, ...beaconPositions.slice(routeStep)], 'rgba(255, 157, 80, .72)', 3, [10, 7]);
-  if (raceState !== 'idle') drawRoute(raceRoute.slice(Math.max(0, raceIndex - 1)), 'rgba(255, 157, 80, .48)', 2, [5, 5]);
   if (deliveryState === 'active') drawRoute([player.position, deliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
   if (mountainDeliveryState === 'active') drawRoute([player.position, mountainDeliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
 
@@ -4036,14 +3900,6 @@ function drawWorldMap() {
     ctx.shadowBlur = 0;
     if (active) drawText(beaconNames[index], point.x + 12, point.y - 10, '#ffbd80');
   });
-  const eventPoint = worldToMap(raceRoute[0].x, raceRoute[0].z, mapSize);
-  ctx.fillStyle = '#ff5b9c';
-  ctx.shadowColor = '#ff5b9c';
-  ctx.shadowBlur = 10;
-  ctx.fillRect(eventPoint.x - 6, eventPoint.y - 6, 12, 12);
-  ctx.shadowBlur = 0;
-  drawText('SPRINT GATE', eventPoint.x + 11, eventPoint.y + 13, '#ff91bd');
-
   collectiblePositions.forEach((position, index) => {
     if (player.collectedCaches.includes(index)) return;
     const point = worldToMap(position.x, position.z, mapSize);
@@ -4081,11 +3937,11 @@ function drawWorldMap() {
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(point.x, point.y, vehicle.disabledTimer > 0 ? 6 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   });
-  if (policeState === 'active' && policeVehicle.visible) {
+  if (policeState !== 'idle' && policeVehicle.visible) {
     const patrolPoint = worldToMap(policeVehicle.position.x, policeVehicle.position.z, mapSize);
     ctx.fillStyle = '#ff5b9c';
     ctx.beginPath(); ctx.arc(patrolPoint.x, patrolPoint.y, 7, 0, Math.PI * 2); ctx.fill();
-    drawText('PATROL', patrolPoint.x + 11, patrolPoint.y - 10, '#ff91bd');
+    drawText('RADAR STOP', patrolPoint.x + 11, patrolPoint.y - 10, '#ff91bd');
   }
   const current = worldToMap(player.position.x, player.position.z, mapSize);
   ctx.save();
@@ -4110,9 +3966,6 @@ function drawWorldMap() {
   } else if (deliveryState === 'active') {
     routeTitle.textContent = 'COURIER DROP';
     routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP POINT`;
-  } else if (raceState !== 'idle') {
-    routeTitle.textContent = 'MIDNIGHT SPRINT';
-    routeCopy.textContent = `${Math.max(0, raceRoute.length - raceIndex + 1)} CHECKPOINTS REMAINING`;
   } else if (routeStep < beaconPositions.length) {
     routeTitle.textContent = beaconNames[routeStep];
     routeCopy.textContent = `${Math.round(player.position.distanceTo(beaconPositions[routeStep]))} M TO ACTIVE BEACON`;
@@ -4120,7 +3973,7 @@ function drawWorldMap() {
     routeTitle.textContent = 'FREE ROAM';
     routeCopy.textContent = 'All streets open. Choose your next line.';
   }
-  status.textContent = policeState === 'active' ? `PATROL ACTIVE // HEAT ${String(wantedLevel).padStart(2, '0')}` : `LIVE NAVIGATION // HEAT ${String(wantedLevel).padStart(2, '0')}`;
+  status.textContent = policeState !== 'idle' ? 'RADAR STOP // PULL OVER SAFELY' : 'LIVE NAVIGATION // LEGAL DRIVE';
   document.querySelector('#world-map-location').textContent = districtAt(player.position.x, player.position.z);
   document.querySelector('#world-map-coordinates').textContent = `X ${Math.round(player.position.x).toString().padStart(3, '0')} // Z ${Math.round(player.position.z).toString().padStart(3, '0')}`;
 }
@@ -4129,17 +3982,13 @@ function updateHud(dt) {
   const speed = Math.round(Math.abs(player.speed) * 3.1);
   document.querySelector('#speed-value').textContent = String(speed).padStart(3, '0');
   document.querySelector('#gear-value').textContent = player.speed < -0.5 ? 'R' : speed < 2 ? 'P' : (speed > 98 ? '5' : speed > 72 ? '4' : speed > 45 ? '3' : speed > 22 ? '2' : '1');
-  const nitroCapacity = 100 + player.upgrades.nitro * 12;
-  const nitroPercent = clamp(player.nitro / nitroCapacity * 100, 0, 100);
-  document.querySelector('#nitro-percent').textContent = `${Math.round(nitroPercent)}%`;
-  document.querySelector('#nitro-fill').style.width = `${nitroPercent}%`;
   document.querySelector('#district-name').textContent = districtAt(player.position.x, player.position.z);
   document.querySelector('#speed-limit').textContent = String(getSpeedLimit(player.position.x, player.position.z));
   const minutes = Math.floor(sessionSeconds / 60).toString().padStart(2, '0');
   const seconds = Math.floor(sessionSeconds % 60).toString().padStart(2, '0');
   document.querySelector('#session-clock').textContent = `${minutes}:${seconds}`;
   // Keep the little bar alive even when a player is idling, like a running vehicle telemetry display.
-  const engine = clamp(91 + Math.round(Math.abs(player.speed) / 4) - (driftScore > 1 ? 2 : 0), 0, 99);
+  const engine = clamp(91 + Math.round(Math.abs(player.speed) / 4), 0, 99);
   document.querySelector('.vehicle-bars .bar span').style.width = `${engine}%`;
   document.querySelector('.vehicle-bars .bar-label b').textContent = `${engine}%`;
   if (dt > 0) {
@@ -4185,8 +4034,7 @@ function animate(time) {
     updateDelivery(time, dt);
     updateMountainDelivery(time, dt);
     updatePolice(time, dt);
-    updateRace(time, dt);
-    updateBeacons(time, dt);
+      updateBeacons(time, dt);
   }
   updateAudio();
   updateWater(time);
