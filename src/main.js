@@ -93,6 +93,10 @@ const mountainRoadPoints = [
 ];
 const mountainVillagePosition = new THREE.Vector3(136, 18.55, 68);
 const mountainVillageDropPosition = new THREE.Vector3(151, 18.8, 54);
+const PINEWATCH_DIRT_ZONES = [
+  { x: 110, z: 58, width: 14, depth: 9, rotation: .1 },
+  { x: 156, z: 55, width: 13, depth: 8, rotation: -.12 },
+];
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // Homes are persistent spawn points. The starter is intentionally a modest,
@@ -217,6 +221,9 @@ world.add(waterfrontDetails);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
+const surfaceEffects = new THREE.Group();
+surfaceEffects.name = 'Loose dirt and gravel surface effects';
+world.add(surfaceEffects);
 const trafficSignals = [];
 
 function createWaterMaterial(surfaceColor, deepColor, opacity = .94) {
@@ -394,6 +401,8 @@ const mats = {
   mountainRockLit: new THREE.MeshStandardMaterial({ color: 0x3c4c4b, roughness: .92, flatShading: true }),
   mountainRoad: new THREE.MeshPhysicalMaterial({ color: 0x1a242c, roughness: .8, metalness: .08, clearcoat: .2, clearcoatRoughness: .22 }),
   mountainShoulder: new THREE.MeshStandardMaterial({ color: 0x68736e, roughness: .96 }),
+  dirt: new THREE.MeshStandardMaterial({ color: 0x51463b, roughness: 1, metalness: .01 }),
+  dirtDust: new THREE.MeshBasicMaterial({ color: 0x9a8062, transparent: true, opacity: .28, depthWrite: false }),
   guardrail: new THREE.MeshStandardMaterial({ color: 0x859494, roughness: .5, metalness: .65 }),
   cabinWood: new THREE.MeshStandardMaterial({ color: 0x684d3e, roughness: .88 }),
   cabinRoof: new THREE.MeshStandardMaterial({ color: 0x252f37, roughness: .9 }),
@@ -404,6 +413,19 @@ const mats = {
   cache: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x198f91, emissiveIntensity: 3.8, transparent: true, opacity: .95 }),
   indicator: new THREE.MeshStandardMaterial({ color: 0xffa13a, emissive: 0xe26012, emissiveIntensity: 1.2, transparent: true, opacity: .18 }),
 };
+const dirtDustGeometry = new THREE.SphereGeometry(1, 6, 4);
+const dirtDustParticles = [];
+for (let index = 0; index < 30; index += 1) {
+  const mesh = new THREE.Mesh(dirtDustGeometry, mats.dirtDust.clone());
+  mesh.visible = false;
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 3;
+  surfaceEffects.add(mesh);
+  dirtDustParticles.push({ mesh, life: 0, maxLife: 0, baseScale: .08, velocity: new THREE.Vector3() });
+}
+let dirtDustCursor = 0;
+let dirtDustAccumulator = 0;
+let dirtDustSeed = 1;
 const roadSheenMeshes = [];
 
 // A small shared visual language keeps the authored GLB, procedural fallback, and
@@ -3085,7 +3107,7 @@ function createPinewatchParkingLot(x, z, width, depth, rotation = 0, seed = 1) {
   group.position.set(x, groundHeight, z);
   group.rotation.y = rotation;
   group.name = 'Pinewatch gravel parking area';
-  addMesh(group, new THREE.BoxGeometry(width, .07, depth), mats.mountainShoulder, [0, .02, 0], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width, .07, depth), mats.dirt, [0, .02, 0], { receiveShadow: true });
   const spaces = Math.max(2, Math.floor((width - 1.4) / 4.1));
   for (let index = 0; index <= spaces; index += 1) {
     const px = -width / 2 + .7 + index * ((width - 1.4) / spaces);
@@ -3276,7 +3298,7 @@ function addRegionalRoadNetwork() {
   initializeRegionalRouteMetrics();
   regionalRoutes.forEach((route) => {
     const points = regionalRouteVector(route);
-    addMountainPathRibbon(points, 14.2, mats.mountainShoulder, 0, regionalRoadGroup);
+    addMountainPathRibbon(points, 14.2, mats.dirt, 0, regionalRoadGroup);
     addMountainPathRibbon(points, 11.4, mats.mountainRoad, .05, regionalRoadGroup);
     addMountainPathRibbon(points, 11.08, mats.roadSheen, .068, regionalRoadGroup);
     for (let index = 1; index < points.length; index += 1) {
@@ -3674,6 +3696,7 @@ const player = {
     surfaceLabel: 'ASPHALT',
     surfaceGrip: 1,
     surfaceRoughness: .025,
+    surfaceRoadLegal: true,
   },
   distance: 0,
   rep: 1280,
@@ -6209,11 +6232,12 @@ function updateAudio() {
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
   const accelerating = input.forward || gamepadState.forward;
   const physics = player.physics;
-  const onRoad = physics.surfaceId !== 'grass';
+  const onRoad = physics.surfaceRoadLegal !== false && physics.surfaceId !== 'grass';
+  const dirtLoad = physics.surfaceId === 'dirt' ? 1 : 0;
   const steeringLoad = clamp(Math.abs(drivingPresentation.steering) * speedRatio, 0, 1);
   const slipLoad = clamp(physics.wheelSlip + Math.abs(physics.slipAngle) * .35, 0, 1);
   const handbrakeLoad = (input.handbrake || gamepadState.handbrake) && speedRatio > .16 ? 1 : 0;
-  const offRoadLoad = onRoad ? (physics.surfaceId === 'sidewalk' || physics.surfaceId === 'road-shoulder' ? .12 : 0) : .32;
+  const offRoadLoad = dirtLoad ? .25 : onRoad ? (physics.surfaceId === 'sidewalk' || physics.surfaceId === 'road-shoulder' ? .12 : 0) : .32;
   audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (accelerating ? 15 : 0), now, .045);
   audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
   audioState.engineSub.frequency.setTargetAtTime(24 + speedRatio * 38, now, .08);
@@ -6221,9 +6245,9 @@ function updateAudio() {
   audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (accelerating ? .024 : 0), now, .08);
   audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
   audioState.subGain.gain.setTargetAtTime(.004 + speedRatio * .018 + (accelerating ? .006 : 0), now, .1);
-  audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (onRoad ? .045 : .075), now, .12);
-  audioState.tireNoiseFilter.frequency.setTargetAtTime(850 + steeringLoad * 950 + slipLoad * 720 + handbrakeLoad * 650, now, .08);
-  audioState.tireNoiseGain.gain.setTargetAtTime((steeringLoad * .022) + (slipLoad * .052) + (handbrakeLoad * .065) + offRoadLoad * speedRatio * .022, now, .08);
+  audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (dirtLoad ? .085 : onRoad ? .045 : .075), now, .12);
+  audioState.tireNoiseFilter.frequency.setTargetAtTime(850 + steeringLoad * 950 + slipLoad * 720 + handbrakeLoad * 650 - dirtLoad * 180, now, .08);
+  audioState.tireNoiseGain.gain.setTargetAtTime((steeringLoad * .022) + (slipLoad * .052) + (handbrakeLoad * .065) + offRoadLoad * speedRatio * (dirtLoad ? .045 : .022), now, .08);
   audioState.windNoiseFilter.frequency.setTargetAtTime(460 + speedRatio * 1180, now, .12);
   audioState.windNoiseGain.gain.setTargetAtTime(speedRatio * speedRatio * .052, now, .16);
   const indicatorActive = input.left || input.right || Math.abs(gamepadState.steer) > .2;
@@ -6543,15 +6567,29 @@ function showToast(title, copy, reward) {
 }
 
 const DRIVE_SURFACES = Object.freeze({
-  asphalt: { id: 'asphalt', label: 'ASPHALT', grip: 1, driveTraction: 1, rollingResistance: .32, drag: 1, roughness: .025, drivable: true },
-  mountainAsphalt: { id: 'mountain-asphalt', label: 'MOUNTAIN ASPHALT', grip: .9, driveTraction: .94, rollingResistance: .46, drag: 1.04, roughness: .055, drivable: true },
-  regionalAsphalt: { id: 'regional-asphalt', label: 'HIGHWAY ASPHALT', grip: .96, driveTraction: .98, rollingResistance: .28, drag: .96, roughness: .035, drivable: true },
-  sidewalk: { id: 'sidewalk', label: 'SIDEWALK', grip: .7, driveTraction: .72, rollingResistance: 1.05, drag: 1.08, roughness: .09, drivable: true },
-  shoulder: { id: 'road-shoulder', label: 'ROAD SHOULDER', grip: .61, driveTraction: .66, rollingResistance: 1.28, drag: 1.12, roughness: .13, drivable: true },
-  grass: { id: 'grass', label: 'GRASS', grip: .48, driveTraction: .56, rollingResistance: 2.15, drag: 1.22, roughness: .18, drivable: false },
+  asphalt: { id: 'asphalt', label: 'ASPHALT', grip: 1, driveTraction: 1, rollingResistance: .32, drag: 1, roughness: .025, drivable: true, roadLegal: true },
+  mountainAsphalt: { id: 'mountain-asphalt', label: 'MOUNTAIN ASPHALT', grip: .9, driveTraction: .94, rollingResistance: .46, drag: 1.04, roughness: .055, drivable: true, roadLegal: true },
+  regionalAsphalt: { id: 'regional-asphalt', label: 'HIGHWAY ASPHALT', grip: .96, driveTraction: .98, rollingResistance: .28, drag: .96, roughness: .035, drivable: true, roadLegal: true },
+  sidewalk: { id: 'sidewalk', label: 'SIDEWALK', grip: .7, driveTraction: .72, rollingResistance: 1.05, drag: 1.08, roughness: .09, drivable: true, roadLegal: true },
+  shoulder: { id: 'road-shoulder', label: 'ROAD SHOULDER', grip: .61, driveTraction: .66, rollingResistance: 1.28, drag: 1.12, roughness: .13, drivable: true, roadLegal: true },
+  dirt: { id: 'dirt', label: 'DIRT / GRAVEL', grip: .54, driveTraction: .61, rollingResistance: 1.58, drag: 1.17, roughness: .22, drivable: true, roadLegal: false },
+  grass: { id: 'grass', label: 'GRASS', grip: .48, driveTraction: .56, rollingResistance: 2.15, drag: 1.22, roughness: .18, drivable: false, roadLegal: false },
 });
 
+function pointInDirtZone(x, z) {
+  return PINEWATCH_DIRT_ZONES.some((zone) => {
+    const dx = x - zone.x;
+    const dz = z - zone.z;
+    const cos = Math.cos(zone.rotation);
+    const sin = Math.sin(zone.rotation);
+    const localX = dx * cos + dz * sin;
+    const localZ = -dx * sin + dz * cos;
+    return Math.abs(localX) <= zone.width / 2 && Math.abs(localZ) <= zone.depth / 2;
+  });
+}
+
 function drivingSurfaceAt(x, z) {
+  if (pointInDirtZone(x, z)) return DRIVE_SURFACES.dirt;
   const mountain = nearestMountainRoadPoint(x, z);
   const villageRadius = Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z);
   if (mountain.distance < 6.2 || (villageRadius < 38 && mountain.distance < 46)) {
@@ -6559,13 +6597,15 @@ function drivingSurfaceAt(x, z) {
   }
   const urban = nearestUrbanRoadPoint(x, z);
   if (urban.distance < 7.2) return urban.distance < 4.85 ? DRIVE_SURFACES.asphalt : DRIVE_SURFACES.sidewalk;
-  const regional = nearestRegionalRoadPoint(x, z);
-  if (regional.distance < 7.5) return regional.distance < 5.75 ? DRIVE_SURFACES.regionalAsphalt : DRIVE_SURFACES.shoulder;
   const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
   if (insideCityGrid) {
     const gridDistance = Math.min(...roadAxes.map((axis) => Math.min(Math.abs(x - axis), Math.abs(z - axis))));
     if (gridDistance < 5.2) return gridDistance < 4.35 ? DRIVE_SURFACES.asphalt : DRIVE_SURFACES.sidewalk;
   }
+  if (mountain.distance < 11.5) return DRIVE_SURFACES.dirt;
+  const regional = nearestRegionalRoadPoint(x, z);
+  if (regional.distance < 7.5) return regional.distance < 5.75 ? DRIVE_SURFACES.regionalAsphalt : DRIVE_SURFACES.shoulder;
+  if (regional.distance < 12.5) return DRIVE_SURFACES.dirt;
   return DRIVE_SURFACES.grass;
 }
 
@@ -6861,6 +6901,64 @@ function updateVehiclePresentation(dt, steering, onRoad, handbraking = false) {
   });
 }
 
+function spawnDirtDust(side = 1) {
+  const speed = Math.abs(player.speed);
+  if (speed < 1.5) return;
+  const particle = dirtDustParticles[dirtDustCursor];
+  dirtDustCursor = (dirtDustCursor + 1) % dirtDustParticles.length;
+  const seed = dirtDustSeed;
+  dirtDustSeed += 1;
+  const travelSign = Math.sign(player.speed) || 1;
+  const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  const right = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
+  const randomSide = side * (.63 + randomFrom(seed + 1) * .16);
+  const rear = -travelSign * 1.18;
+  const jitter = (randomFrom(seed + 2) - .5) * .18;
+  particle.mesh.position.set(
+    player.position.x + forward.x * rear + right.x * (randomSide + jitter),
+    player.position.y + .08 + randomFrom(seed + 3) * .05,
+    player.position.z + forward.z * rear + right.z * (randomSide + jitter),
+  );
+  particle.baseScale = .055 + randomFrom(seed + 4) * .075 + clamp(speed / 80, 0, .16);
+  particle.maxLife = .3 + randomFrom(seed + 5) * .32;
+  particle.life = particle.maxLife;
+  const lateralKick = (randomFrom(seed + 6) - .5) * (.45 + Math.abs(player.physics.lateralSpeed) * .08);
+  const backwardKick = .12 + speed * .028;
+  particle.velocity.set(
+    -forward.x * travelSign * backwardKick + right.x * lateralKick,
+    .2 + randomFrom(seed + 7) * .38,
+    -forward.z * travelSign * backwardKick + right.z * lateralKick,
+  );
+  particle.mesh.scale.setScalar(particle.baseScale);
+  particle.mesh.material.opacity = .12 + randomFrom(seed + 8) * .16;
+  particle.mesh.visible = true;
+}
+
+function updateDirtDust(dt, allowSpawn = true) {
+  dirtDustParticles.forEach((particle) => {
+    if (particle.life <= 0) return;
+    particle.life -= dt;
+    particle.velocity.y -= dt * .35;
+    particle.mesh.position.addScaledVector(particle.velocity, dt);
+    const lifeRatio = clamp(particle.life / Math.max(.001, particle.maxLife), 0, 1);
+    particle.mesh.scale.setScalar(particle.baseScale * (1 + (1 - lifeRatio) * 1.7));
+    particle.mesh.material.opacity = lifeRatio * .24;
+    if (particle.life <= 0) particle.mesh.visible = false;
+  });
+  const physics = player.physics;
+  if (!allowSpawn || physics.surfaceId !== 'dirt' || Math.abs(player.speed) < 2.5 || player.waterRecoveryPending || player.disabledTimer > 0) {
+    dirtDustAccumulator = Math.min(dirtDustAccumulator, .04);
+    return;
+  }
+  const sprayRate = clamp(Math.abs(player.speed) / 8 + physics.wheelSlip * 2.2 + Math.abs(physics.lateralSpeed) * .12, 0, 4.2);
+  dirtDustAccumulator += dt * sprayRate;
+  while (dirtDustAccumulator >= .13) {
+    dirtDustAccumulator -= .13;
+    spawnDirtDust(dirtDustCursor % 2 ? -1 : 1);
+    if (Math.abs(player.speed) > 13) spawnDirtDust(dirtDustCursor % 2 ? -1 : 1);
+  }
+}
+
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
   player.violationCooldown = Math.max(0, player.violationCooldown - dt);
@@ -6890,8 +6988,8 @@ function updatePlayer(dt) {
   const braking = input.back || gamepadState.back;
   const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
   const surface = drivingSurfaceAt(player.position.x, player.position.z);
-  const onRoad = surface.drivable;
-  if (onRoad) player.lastSafePosition.copy(player.position);
+  const onRoad = surface.roadLegal;
+  if (surface.drivable) player.lastSafePosition.copy(player.position);
   const vehicleSpec = vehicleCatalogEntry();
   const handling = vehiclePhysicsProfile(vehicleSpec.style);
   const conditionFactor = clamp(.65 + player.condition * .0035, .65, 1);
@@ -6989,6 +7087,7 @@ function updatePlayer(dt) {
   physics.surfaceLabel = surface.label;
   physics.surfaceGrip = surface.grip;
   physics.surfaceRoughness = surface.roughness;
+  physics.surfaceRoadLegal = surface.roadLegal;
   player.speed = longitudinal;
 
   const previousPosition = player.position.clone();
@@ -7071,7 +7170,7 @@ function updatePlayer(dt) {
   const surfaceState = document.querySelector('#surface-state');
   if (surfaceState) {
     surfaceState.textContent = handbraking ? 'HAND BRAKE' : physics.surfaceLabel;
-    surfaceState.style.color = handbraking ? 'var(--orange)' : physics.surfaceId === 'grass' ? 'var(--orange)' : '';
+    surfaceState.style.color = handbraking || physics.surfaceId === 'grass' || physics.surfaceId === 'dirt' ? 'var(--orange)' : '';
   }
 }
 
@@ -8328,6 +8427,7 @@ function animate(time) {
     updateMountainDelivery(time, dt);
     updatePolice(time, dt);
     updateBeacons(time, dt);
+    updateDirtDust(dt);
     saveAccumulator += dt;
     if (saveAccumulator >= 8) {
       saveProgress();
@@ -8335,6 +8435,7 @@ function animate(time) {
     }
   } else {
     physicsAccumulator = 0;
+    updateDirtDust(dt, false);
   }
   updateAudio();
   updateWater(time);
