@@ -968,16 +968,189 @@ const PROGRESSION_CONFIG = {
 };
 
 const VEHICLE_CATALOG = [
-  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
-  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
-  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78 },
-  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6 },
-  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84, acceleration: 19, topSpeed: 35, brakePower: 32, turnRate: 1.58, turnSpeed: 18, offRoadTraction: .74 },
-  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82, acceleration: 18, topSpeed: 33, brakePower: 39, turnRate: 1.48, turnSpeed: 19, offRoadTraction: .94 },
-  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86 },
-  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56 },
+  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, vehicleValue: 800, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
+  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, vehicleValue: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
+  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, vehicleValue: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78 },
+  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, vehicleValue: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6 },
+  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, vehicleValue: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84, acceleration: 19, topSpeed: 35, brakePower: 32, turnRate: 1.58, turnSpeed: 18, offRoadTraction: .74 },
+  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, vehicleValue: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82, acceleration: 18, topSpeed: 33, brakePower: 39, turnRate: 1.48, turnSpeed: 19, offRoadTraction: .94 },
+  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, vehicleValue: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86 },
+  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, vehicleValue: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56 },
 ];
 const fleetAssetScenes = {};
+
+// Crash damage is deliberately represented as geometry instead of a single
+// health tint. That keeps dents, scuffs, creases, broken-looking trim, and
+// cracked surfaces visible on both the procedural wrapper and an imported GLB.
+const DAMAGE_CONFIG = Object.freeze({
+  repairFraction: .8,
+  waterRecoveryFraction: .5,
+});
+const damageDentMaterial = new THREE.MeshStandardMaterial({ color: 0x111820, metalness: .18, roughness: .92, transparent: true, opacity: .74, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const damageScratchMaterial = new THREE.MeshBasicMaterial({ color: 0xd2a58c, transparent: true, opacity: .9, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+const damageBareMetalMaterial = new THREE.MeshStandardMaterial({ color: 0xb8c0c0, metalness: .82, roughness: .42, transparent: true, opacity: .84, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+const damageTransferMaterial = new THREE.MeshStandardMaterial({ color: 0x351f29, metalness: .12, roughness: .88, transparent: true, opacity: .82, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+const damageCrackMaterial = new THREE.LineBasicMaterial({ color: 0x10151c, transparent: true, opacity: .94, depthTest: false });
+
+function damageRandom(seed, offset = 0) {
+  const value = Math.sin((seed + offset * 19.173) * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function createDamageRig(vehicleRoot) {
+  if (vehicleRoot.userData.damageRig) return vehicleRoot.userData.damageRig;
+  const rig = new THREE.Group();
+  rig.name = 'persistent collision damage';
+  rig.userData.marks = [];
+  rig.userData.impactCount = 0;
+  rig.renderOrder = 4;
+  vehicleRoot.userData.damageRig = rig;
+  vehicleRoot.add(rig);
+  return rig;
+}
+
+function addDamageBox(parent, width, height, depth, material, position, rotation = null) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+  mesh.position.set(position[0], position[1], position[2]);
+  if (rotation) mesh.rotation.set(rotation[0] || 0, rotation[1] || 0, rotation[2] || 0);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  parent.add(mesh);
+  return mesh;
+}
+
+function addDamageCracks(parent, zone, x, y, surface, sign, seed) {
+  const vertices = [];
+  const crackCount = 3 + Math.floor(damageRandom(seed, 32) * 3);
+  for (let index = 0; index < crackCount; index += 1) {
+    const start = damageRandom(seed, 40 + index) * 2 - 1;
+    const spread = .2 + damageRandom(seed, 50 + index) * .42;
+    if (zone === 'left' || zone === 'right') {
+      const crackZ = surface + (damageRandom(seed, 60 + index) - .5) * .4;
+      vertices.push(
+        new THREE.Vector3(sign * 1.19, y + start * .15, crackZ),
+        new THREE.Vector3(sign * 1.195, y + start * .15 + spread * (damageRandom(seed, 70 + index) > .5 ? 1 : -1), crackZ + (damageRandom(seed, 80 + index) - .5) * .62),
+      );
+    } else {
+      const crackX = x + (damageRandom(seed, 60 + index) - .5) * .5;
+      vertices.push(
+        new THREE.Vector3(crackX, y + start * .14, surface + sign * .075),
+        new THREE.Vector3(crackX + (damageRandom(seed, 70 + index) - .5) * .38, y + start * .14 + spread * (damageRandom(seed, 80 + index) > .5 ? 1 : -1), surface + sign * .08),
+      );
+    }
+  }
+  const geometry = new THREE.BufferGeometry().setFromPoints(vertices);
+  const cracks = new THREE.LineSegments(geometry, damageCrackMaterial);
+  cracks.renderOrder = 8;
+  parent.add(cracks);
+}
+
+function localImpactPosition(impact = {}) {
+  if (Array.isArray(impact.localPosition) && impact.localPosition.length >= 3) {
+    return new THREE.Vector3(Number(impact.localPosition[0]) || 0, Number(impact.localPosition[1]) || .7, Number(impact.localPosition[2]) || 1.8);
+  }
+  if (impact.localPosition?.isVector3) return impact.localPosition.clone();
+  if (impact.worldPosition?.isVector3) {
+    const local = impact.worldPosition.clone().sub(player.position);
+    return local.applyAxisAngle(new THREE.Vector3(0, 1, 0), -player.heading);
+  }
+  return new THREE.Vector3((damageRandom(impact.seed || 1, 1) - .5) * 1.2, .7, 2.1);
+}
+
+function addVisibleDamage(vehicleRoot, impactSpeed = 0, impact = {}, persist = true) {
+  const rig = vehicleRoot?.userData?.damageRig || createDamageRig(vehicleRoot);
+  const seed = Number.isFinite(impact.seed) ? impact.seed : ((rig.userData.impactCount || 0) + 1);
+  rig.userData.impactCount = Math.max(rig.userData.impactCount || 0, seed);
+  const local = localImpactPosition(impact);
+  const sideDominant = Math.abs(local.x) > Math.abs(local.z) * .72;
+  const zone = impact.zone || (sideDominant ? (local.x < 0 ? 'left' : 'right') : (local.z < 0 ? 'rear' : 'front'));
+  const mark = new THREE.Group();
+  mark.name = `impact mark ${seed}`;
+  mark.userData = { zone, speed: impactSpeed, seed };
+  rig.add(mark);
+  rig.userData.marks.push(mark);
+
+  const wide = .23 + damageRandom(seed, 2) * .44;
+  const tall = .1 + damageRandom(seed, 3) * .2;
+  const long = .35 + damageRandom(seed, 4) * .72;
+  const hardImpact = impactSpeed >= 10;
+  const severeImpact = impactSpeed >= 18;
+  let surface;
+  let sign;
+  let x;
+  let y = clamp(local.y || .7, .5, 1.32);
+
+  if (zone === 'left' || zone === 'right') {
+    sign = zone === 'left' ? -1 : 1;
+    surface = (local.z || 0) * .72;
+    surface = clamp(surface, -1.55, 1.55);
+    x = sign * 1.13;
+    const dent = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 7), damageDentMaterial);
+    dent.position.set(x + sign * .035, y, surface);
+    dent.scale.set(.075 + wide * .08, tall + .07, long * .7);
+    mark.add(dent);
+    addDamageBox(mark, .035, .025 + tall * .12, long, damageScratchMaterial, [x + sign * .075, y + .08, surface + (damageRandom(seed, 5) - .5) * .22], [(damageRandom(seed, 6) - .5) * .7, 0, 0]);
+    addDamageBox(mark, .04, .035, long * .66, damageBareMetalMaterial, [x + sign * .078, y - .08, surface + .12], [(damageRandom(seed, 7) - .5) * .45, 0, 0]);
+    if (damageRandom(seed, 8) > .36) addDamageBox(mark, .07, .13 + tall, .2 + wide * .4, damageTransferMaterial, [x + sign * .07, y + .12, surface + .16], [0, damageRandom(seed, 9) * .8, damageRandom(seed, 10) * .45]);
+    if (hardImpact) addDamageCracks(mark, zone, x, y, surface, sign, seed);
+  } else {
+    sign = zone === 'front' ? 1 : -1;
+    surface = sign * 2.17;
+    x = clamp(local.x || 0, -.72, .72);
+    const dent = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 7), damageDentMaterial);
+    dent.position.set(x, y, surface + sign * .035);
+    dent.scale.set(wide, tall + .055, .075 + long * .06);
+    mark.add(dent);
+    addDamageBox(mark, long, .027 + tall * .1, .035, damageScratchMaterial, [x + (damageRandom(seed, 5) - .5) * .18, y + .08, surface + sign * .075], [0, 0, (damageRandom(seed, 6) - .5) * .58]);
+    addDamageBox(mark, long * .64, .038, .045, damageBareMetalMaterial, [x - .06, y - .09, surface + sign * .08], [0, 0, (damageRandom(seed, 7) - .5) * .38]);
+    if (damageRandom(seed, 8) > .32) addDamageBox(mark, .18 + wide * .45, .11 + tall, .07, damageTransferMaterial, [x + .2, y + .1, surface + sign * .065], [0, damageRandom(seed, 9) * .7, damageRandom(seed, 10) * .5]);
+    if (hardImpact) addDamageCracks(mark, zone, x, y, surface, sign, seed);
+  }
+
+  if (hardImpact) {
+    // A folded panel lip makes a hard strike read as deformation rather than a decal.
+    if (zone === 'left' || zone === 'right') {
+      addDamageBox(mark, .065, .08 + tall * .7, .5 + wide, damageDentMaterial, [sign * 1.17, y - .18, surface + .18], [damageRandom(seed, 11) * .55, 0, damageRandom(seed, 12) * .65]);
+    } else {
+      addDamageBox(mark, .5 + wide, .075 + tall * .5, .07, damageDentMaterial, [x - .1, y - .18, surface + sign * .08], [0, damageRandom(seed, 11) * .55, damageRandom(seed, 12) * .55]);
+    }
+  }
+  if (severeImpact) {
+    // A displaced fragment and a dark lamp/trim void sell a high-energy impact.
+    const fragment = zone === 'left' || zone === 'right'
+      ? [zone === 'left' ? -1.2 : 1.2, y + .08, surface + .32]
+      : [x + .34, y + .06, surface + sign * .1];
+    addDamageBox(mark, .11 + damageRandom(seed, 13) * .16, .08 + damageRandom(seed, 14) * .13, .16 + damageRandom(seed, 15) * .3, damageTransferMaterial, fragment, [damageRandom(seed, 16), damageRandom(seed, 17), damageRandom(seed, 18)]);
+    if (zone === 'front' || zone === 'rear') addDamageBox(mark, .22, .12, .04, damageDentMaterial, [x, y + .16, surface + sign * .08], [0, 0, damageRandom(seed, 19) * .5]);
+  }
+
+  if (persist && typeof player !== 'undefined') {
+    player.damageSequence = Math.max(player.damageSequence || 0, seed);
+    const record = { localPosition: [local.x, local.y, local.z], speed: impactSpeed, zone, seed };
+    player.damageRecords = Array.isArray(player.damageRecords) ? player.damageRecords : [];
+    player.damageRecords.push(record);
+  }
+  return mark;
+}
+
+function clearVisibleVehicleDamage(vehicleRoot = player.mesh, clearRecords = true) {
+  const rig = vehicleRoot?.userData?.damageRig;
+  if (rig) {
+    rig.userData.marks?.forEach((mark) => mark.traverse((object) => {
+      if (object.geometry?.dispose) object.geometry.dispose();
+    }));
+    rig.userData.marks?.forEach((mark) => rig.remove(mark));
+    rig.userData.marks = [];
+    rig.userData.impactCount = 0;
+  }
+  if (clearRecords && typeof player !== 'undefined') player.damageRecords = [];
+}
+
+function restoreVisibleDamage() {
+  if (!player.mesh || !Array.isArray(player.damageRecords)) return;
+  clearVisibleVehicleDamage(player.mesh, false);
+  player.damageRecords.forEach((record) => addVisibleDamage(player.mesh, record.speed || 0, record, false));
+}
 
 function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style = 'sport') {
   const profile = CAR_PROFILES[style] || CAR_PROFILES.sport;
@@ -1098,6 +1271,7 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   }
   root.add(lightingRig);
   root.userData.lightingRig = lightingRig;
+  if (playerCar) createDamageRig(root);
   root.scale.set(...profile.scale);
   return root;
 }
@@ -1354,10 +1528,12 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   // Keep the physics wrapper and replace only its visible geometry with the
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
   const preservedLighting = vehicleRoot.userData.lightingRig;
+  const preservedDamage = vehicleRoot.userData.damageRig;
   const previousLoaded = vehicleRoot.userData.loadedModel;
   if (previousLoaded) vehicleRoot.remove(previousLoaded);
-  vehicleRoot.children.forEach((child) => { if (child !== preservedLighting) child.visible = false; });
+  vehicleRoot.children.forEach((child) => { if (child !== preservedLighting && child !== preservedDamage) child.visible = false; });
   if (preservedLighting) preservedLighting.visible = true;
+  if (preservedDamage) preservedDamage.visible = true;
   const importedCar = prepareImportedModel(sourceScene.clone(true));
   importedCar.traverse((object) => {
     if (!object.isMesh || !object.material) return;
@@ -1426,7 +1602,7 @@ async function loadBlenderAssets() {
       console.warn(`Fleet asset unavailable for ${style}; using procedural fallback.`, result.reason);
     }
   });
-  applyPlayerVehicleStyle(player.selectedStyle, false);
+  applyPlayerVehicleStyle(player.selectedStyle, false, true);
   applyPaintToVehicleRoot(player.mesh, player.paint);
 }
 
@@ -2069,7 +2245,15 @@ const player = {
   completedDeliveries: 0,
   paint: vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint,
   condition: 100,
+  damageRecords: [],
+  damageSequence: 0,
   disabledTimer: 0,
+  submerged: false,
+  waterRecoveryPending: false,
+  waterBody: '',
+  waterSinkTime: 0,
+  recoveryCost: 0,
+  lastSafePosition: new THREE.Vector3(0, .02, 0),
   speedingTime: 0,
   violationCooldown: 0,
   trafficViolations: 0,
@@ -2187,8 +2371,11 @@ function saveProgress() {
       completedDeliveries: player.completedDeliveries,
       paint: player.paint,
       condition: player.condition,
+      damageRecords: player.damageRecords,
       upgrades: player.upgrades,
       cacheIds: player.collectedCaches,
+      waterRecoveryPending: player.waterRecoveryPending,
+      waterBody: player.waterBody,
     }));
   } catch (error) {
     console.warn('Progress save unavailable.', error);
@@ -2210,6 +2397,23 @@ function loadProgress() {
     if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
     if (typeof saved.paint === 'string' && /^#[0-9a-f]{6}$/i.test(saved.paint)) player.paint = saved.paint;
     if (Number.isFinite(saved.condition)) player.condition = clamp(saved.condition, 1, 100);
+    if (Array.isArray(saved.damageRecords)) {
+      player.damageRecords = saved.damageRecords
+        .filter((record) => record && Array.isArray(record.localPosition) && record.localPosition.length >= 3)
+        .map((record, index) => ({
+          localPosition: record.localPosition.slice(0, 3).map((value) => Number(value) || 0),
+          speed: clamp(Number(record.speed) || 0, 0, 100),
+          zone: ['front', 'rear', 'left', 'right'].includes(record.zone) ? record.zone : 'front',
+          seed: Number.isFinite(record.seed) ? record.seed : index + 1,
+        }));
+      player.damageSequence = player.damageRecords.reduce((highest, record) => Math.max(highest, record.seed), 0);
+    }
+    if (saved.waterRecoveryPending) {
+      player.waterRecoveryPending = true;
+      player.submerged = true;
+      player.waterBody = typeof saved.waterBody === 'string' ? saved.waterBody : 'water';
+      player.recoveryCost = vehicleRecoveryCost();
+    }
     if (Array.isArray(saved.cacheIds)) player.collectedCaches = saved.cacheIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
@@ -2219,6 +2423,7 @@ function loadProgress() {
   }
 }
 loadProgress();
+restoreVisibleDamage();
 
 const collectiblePositions = [
   new THREE.Vector3(-66, .42, 22),
@@ -2655,8 +2860,53 @@ function paintName(paint) {
   return names[paint.toLowerCase()] || 'CUSTOM FINISH';
 }
 
+function vehicleValue(style = player.selectedStyle) {
+  const vehicle = vehicleCatalogEntry(style);
+  // The starter is free at the Market, but it still has a real insured value so
+  // water recovery cannot become a cost-free reset button.
+  return Math.max(1, Number(vehicle.vehicleValue) || Number(vehicle.price) || 1000);
+}
+
 function vehicleRepairCost() {
-  return Math.ceil(Math.max(0, 100 - player.condition) * 5);
+  const missingCondition = Math.max(0, 100 - player.condition);
+  return missingCondition ? Math.ceil((missingCondition / 100) * vehicleValue() * DAMAGE_CONFIG.repairFraction) : 0;
+}
+
+function vehicleRecoveryCost() {
+  return Math.ceil(vehicleValue() * DAMAGE_CONFIG.waterRecoveryFraction);
+}
+
+function waterBodyAt(x, z) {
+  const lake = worldRegions.find((region) => region.type === 'lake');
+  if (lake && Math.abs(x - lake.x) <= 180 && Math.abs(z - lake.z) <= 135) return 'LAKE AURORA';
+  // The small waterfront loop has a visible ocean inlet below the promenade.
+  // Its road surface stays above z -120, so a driver must actually leave the
+  // road and enter the water rather than being punished for using the loop.
+  if (Math.abs(x) <= 154 && z >= -144 && z <= -120) return 'AURORA OCEAN';
+  if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return 'AURORA OCEAN';
+  return '';
+}
+
+function enterVehicleWater(body) {
+  if (player.waterRecoveryPending) return;
+  player.waterRecoveryPending = true;
+  player.submerged = true;
+  player.waterBody = body;
+  player.recoveryCost = vehicleRecoveryCost();
+  player.waterSinkTime = 0;
+  player.speed = 0;
+  player.condition = Math.min(player.condition, 1);
+  Object.keys(input).forEach((key) => { input[key] = false; });
+  player.mesh.position.copy(player.position);
+  player.mesh.position.y = player.position.y;
+  saveProgress();
+  updateGarageUi();
+  const surfaceState = document.querySelector('#surface-state');
+  if (surfaceState) {
+    surfaceState.textContent = 'SUBMERGED';
+    surfaceState.style.color = 'var(--pink)';
+  }
+  showToast('VEHICLE SUBMERGED', `${body} recovery requires half the vehicle value`, `$${player.recoveryCost.toLocaleString('en-US')}`);
 }
 
 function updateDamageUi() {
@@ -2681,16 +2931,38 @@ function updateDamageUi() {
   const menuCondition = document.querySelector('.menu-condition-block');
   if (menuCondition) menuCondition.classList.toggle('critical', percent < 35);
   const repairCost = vehicleRepairCost();
-  document.querySelectorAll('[data-repair-cost]').forEach((element) => { element.textContent = repairCost ? `$${repairCost}` : 'READY'; });
+  const recoveryCost = vehicleRecoveryCost();
+  document.querySelectorAll('[data-repair-cost]').forEach((element) => { element.textContent = repairCost ? `$${repairCost.toLocaleString('en-US')}` : 'READY'; });
   document.querySelectorAll('[data-repair-action]').forEach((button) => {
-    button.disabled = !repairCost || player.cash < repairCost;
-    button.classList.toggle('ready', !repairCost);
+    button.disabled = player.waterRecoveryPending || !repairCost || player.cash < repairCost;
+    button.classList.toggle('ready', !repairCost && !player.waterRecoveryPending);
   });
+  document.querySelectorAll('[data-revive-cost]').forEach((element) => { element.textContent = `$${recoveryCost.toLocaleString('en-US')}`; });
+  document.querySelectorAll('[data-revive-action]').forEach((button) => {
+    button.hidden = !player.waterRecoveryPending;
+    button.disabled = !player.waterRecoveryPending || player.cash < recoveryCost;
+    button.classList.toggle('ready', player.waterRecoveryPending && player.cash >= recoveryCost);
+  });
+  const recoveryPanel = document.querySelector('#water-recovery-panel');
+  if (recoveryPanel) {
+    recoveryPanel.classList.toggle('visible', player.waterRecoveryPending);
+    recoveryPanel.setAttribute('aria-hidden', String(!player.waterRecoveryPending));
+  }
+  const recoveryPanelCost = document.querySelector('#water-recovery-cost');
+  if (recoveryPanelCost) recoveryPanelCost.textContent = `$${recoveryCost.toLocaleString('en-US')}`;
+  const recoveryBody = document.querySelector('#water-recovery-body');
+  if (recoveryBody) recoveryBody.textContent = player.waterRecoveryPending
+    ? `${player.waterBody || 'Water'} recovery is required. Pay half the vehicle value to revive and tow it to your last safe road.`
+    : '';
+  const damageCount = document.querySelectorAll('[data-damage-count]');
+  const damageSummary = `${player.damageRecords?.length || 0} IMPACT MARKS // ${player.waterRecoveryPending ? `RECOVERY $${recoveryCost.toLocaleString('en-US')}` : repairCost ? `REPAIR $${repairCost.toLocaleString('en-US')}` : 'REPAIR READY'}`;
+  damageCount.forEach((element) => { element.textContent = damageSummary; });
 }
 
-function applyVehicleDamage(amount, source = 'impact') {
+function applyVehicleDamage(amount, source = 'impact', impact = {}) {
   if (amount <= 0 || player.disabledTimer > 0) return;
   player.condition = clamp(player.condition - amount, 1, 100);
+  addVisibleDamage(player.mesh, amount, impact);
   saveProgress();
   updateGarageUi();
   if (player.condition <= 8) {
@@ -2704,6 +2976,10 @@ function applyVehicleDamage(amount, source = 'impact') {
 }
 
 function repairVehicle() {
+  if (player.waterRecoveryPending) {
+    showToast('RECOVERY REQUIRED', 'Pay the water recovery fee before repair work can begin', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return;
+  }
   const cost = vehicleRepairCost();
   if (!cost) {
     showToast('VEHICLE HEALTHY', 'No repair work is currently required', 'READY TO DRIVE');
@@ -2716,10 +2992,42 @@ function repairVehicle() {
   player.cash -= cost;
   player.condition = 100;
   player.disabledTimer = 0;
+  clearVisibleVehicleDamage(player.mesh);
   saveProgress();
   updateGarageUi();
   playTone(320, .18, .08, 'sine', 180);
-  showToast('REPAIRS COMPLETE', 'Bodywork and drivetrain restored', `$${cost.toLocaleString('en-US')}`);
+  showToast('REPAIRS COMPLETE', 'Dents, scratches, and damaged panels restored', `$${cost.toLocaleString('en-US')}`);
+}
+
+function recoverVehicle() {
+  if (!player.waterRecoveryPending) {
+    showToast('RECOVERY NOT REQUIRED', 'The vehicle is already on solid ground', 'READY TO DRIVE');
+    return;
+  }
+  const cost = vehicleRecoveryCost();
+  if (player.cash < cost) {
+    showToast('RECOVERY FUNDS TOO LOW', `You need $${cost.toLocaleString('en-US')} to revive this vehicle`, 'EARN MORE CASH');
+    return;
+  }
+  player.cash -= cost;
+  player.condition = 100;
+  player.disabledTimer = 0;
+  player.submerged = false;
+  player.waterRecoveryPending = false;
+  player.waterBody = '';
+  player.waterSinkTime = 0;
+  player.recoveryCost = 0;
+  player.position.copy(player.lastSafePosition || new THREE.Vector3(0, .02, 0));
+  player.position.y = getRoadHeightAt(player.position.x, player.position.z);
+  player.speed = 0;
+  player.heading = 0;
+  player.mesh.position.copy(player.position);
+  player.mesh.rotation.y = player.heading;
+  clearVisibleVehicleDamage(player.mesh);
+  saveProgress();
+  updateGarageUi();
+  playTone(240, .2, .08, 'sine', 180);
+  showToast('VEHICLE RECOVERED', 'Tow service revived the vehicle and restored the body', `$${cost.toLocaleString('en-US')}`);
 }
 
 function updateMenuCash() {
@@ -2770,7 +3078,7 @@ function updateMenuVehicleUi() {
   if (selectedMarket) selectedMarket.style.setProperty('--card-paint', player.paint);
   // The profile line in the HUD remains useful after changing cars from the title screen.
   const meta = document.querySelector('.vehicle-meta');
-  if (meta) meta.innerHTML = `<span>${vehicle.className.includes('ELECTRIC') ? 'AWD' : 'RWD'}</span><i></i><span>${vehicle.className}</span><i></i><span id="surface-state">ASPHALT</span>`;
+  if (meta) meta.innerHTML = `<span>${vehicle.className.includes('ELECTRIC') ? 'AWD' : 'RWD'}</span><i></i><span>${vehicle.className}</span><i></i><span id="surface-state"${player.waterRecoveryPending ? ' style="color:var(--pink)"' : ''}>${player.waterRecoveryPending ? 'SUBMERGED' : 'ASPHALT'}</span>`;
   const garageHeading = document.querySelector('#garage-overlay .garage-header h2');
   if (garageHeading) garageHeading.textContent = vehicle.name;
   const profile = document.querySelector('#garage-overlay .garage-specs strong');
@@ -2807,6 +3115,7 @@ function renderMarket() {
       <div class="market-art"><div class="market-art-car"></div><div class="market-art-wheel a"></div><div class="market-art-wheel b"></div></div>
       <div class="market-tag"><span>${vehicle.className}</span><b>${status}</b></div>
       <h3>${vehicle.name}</h3><p>${!unlocked ? `${rule?.deliveries || 0} completed deliveries unlock this car.` : vehicle.description}</p>
+      <div class="market-card-costs"><span>REPAIR CAP $${Math.ceil(vehicle.vehicleValue * DAMAGE_CONFIG.repairFraction).toLocaleString('en-US')}</span><span>WATER $${Math.ceil(vehicle.vehicleValue * DAMAGE_CONFIG.waterRecoveryFraction).toLocaleString('en-US')}</span></div>
       <div class="market-card-footer"><span class="market-price ${vehicle.price || !unlocked ? '' : 'free'}">${price}</span><button class="market-card-button ${buttonClass}" data-market-style="${vehicle.style}" type="button" ${disabled}>${action}</button></div>
     </article>`;
   }).join('');
@@ -2838,7 +3147,11 @@ function scrollOwnedGarage(direction) {
   cards[garageCarouselIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
-function applyPlayerVehicleStyle(style, announce = true) {
+function applyPlayerVehicleStyle(style, announce = true, force = false) {
+  if (player.waterRecoveryPending && !force) {
+    showToast('RECOVERY REQUIRED', 'Revive the submerged vehicle before changing cars', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return false;
+  }
   if (!player.ownedCars.includes(style)) return false;
   const vehicle = vehicleCatalogEntry(style);
   const oldMesh = player.mesh;
@@ -2854,6 +3167,7 @@ function applyPlayerVehicleStyle(style, announce = true) {
   if (fleetAssetScenes[style]) replaceVehicleVisual(nextMesh, fleetAssetScenes[style], 1);
   applyPaintToVehicleRoot(nextMesh, player.paint);
   (wasMenuCar ? menuGarage : actors).add(nextMesh);
+  restoreVisibleDamage();
   updateGarageUi();
   if (announce) showToast('VEHICLE SELECTED', `${vehicle.name} is ready for Aurora Bay`, 'GARAGE UPDATED');
   return true;
@@ -2869,6 +3183,10 @@ function applyPlayerPaint(paint, announce = true) {
 }
 
 function purchaseMarketVehicle(style) {
+  if (player.waterRecoveryPending) {
+    showToast('RECOVERY REQUIRED', 'Revive the submerged vehicle before using the Market', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return;
+  }
   const vehicle = vehicleCatalogEntry(style);
   const rule = vehicleUnlockRule(style);
   if (!isVehicleUnlocked(style)) {
@@ -3080,7 +3398,15 @@ function resetSavedProgress() {
   deliveryState = 'idle';
   mountainDeliveryState = 'idle';
   player.condition = 100;
+  clearVisibleVehicleDamage(player.mesh);
+  player.damageSequence = 0;
   player.disabledTimer = 0;
+  player.submerged = false;
+  player.waterRecoveryPending = false;
+  player.waterBody = '';
+  player.waterSinkTime = 0;
+  player.recoveryCost = 0;
+  player.lastSafePosition.copy(new THREE.Vector3(0, .02, 0));
   player.speedingTime = 0;
   player.violationCooldown = 0;
   player.trafficViolations = 0;
@@ -3361,6 +3687,7 @@ document.querySelector('#world-map-overlay').addEventListener('click', (event) =
   if (event.target.id === 'world-map-overlay') setWorldMapOpen(false);
 });
 document.querySelector('#garage-open').addEventListener('click', () => setGarageOpen(true));
+document.querySelector('#water-recovery-open-garage').addEventListener('click', () => setGarageOpen(true));
 document.querySelector('#garage-close').addEventListener('click', () => setGarageOpen(false));
 document.querySelector('#garage-overlay').addEventListener('click', (event) => {
   if (event.target.id === 'garage-overlay') setGarageOpen(false);
@@ -3404,6 +3731,9 @@ document.querySelectorAll('[data-paint-group] .paint-swatch').forEach((button) =
 document.querySelectorAll('[data-repair-action]').forEach((button) => {
   button.addEventListener('click', repairVehicle);
 });
+document.querySelectorAll('[data-revive-action]').forEach((button) => {
+  button.addEventListener('click', recoverVehicle);
+});
 document.querySelector('#menu-sound-toggle').addEventListener('click', toggleSound);
 document.querySelector('#menu-settings-sound').addEventListener('click', toggleSound);
 document.querySelector('#menu-settings-quality').addEventListener('click', () => {
@@ -3424,11 +3754,17 @@ function resetRoadFurniture() {
 }
 
 function resetPlayer() {
+  if (player.waterRecoveryPending) {
+    showToast('RECOVERY REQUIRED', 'The vehicle is submerged. Open Garage and pay the recovery fee.', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return;
+  }
   resetRoadFurniture();
   player.position.set(0, .02, 0);
+  player.lastSafePosition.copy(player.position);
   player.mesh.position.copy(player.position);
   player.speed = 0;
   player.heading = 0;
+  player.mesh.rotation.set(0, player.heading, 0);
   showToast('VEHICLE RESET', 'Back at Northstar Avenue', '');
 }
 
@@ -3559,6 +3895,9 @@ function resolveStaticCollisions(impactSpeed = 0) {
   let impactType = '';
   let strongestObstacle = null;
   for (const obstacle of staticObstacles) {
+    // Water is a recoverable world state, not a solid bumper. Let the player
+    // cross the lake edge far enough for waterBodyAt() to trigger recovery.
+    if (obstacle.type === 'lake-water') continue;
     if (obstacle.broken) continue;
     const minX = obstacle.x - obstacle.halfX;
     const maxX = obstacle.x + obstacle.halfX;
@@ -3662,6 +4001,17 @@ function updatePlayerLighting(steering) {
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
   player.violationCooldown = Math.max(0, player.violationCooldown - dt);
+  if (player.waterRecoveryPending) {
+    player.waterSinkTime = Math.min(2.4, player.waterSinkTime + dt);
+    player.speed = 0;
+    player.mesh.position.copy(player.position);
+    player.mesh.position.y = player.position.y - Math.min(.92, player.waterSinkTime * .52);
+    player.mesh.rotation.y = player.heading;
+    player.mesh.rotation.z = Math.sin(player.waterSinkTime * 1.4) * .045;
+    updatePlayerLighting(0);
+    setBrakeLights(player.mesh, true);
+    return;
+  }
   if (player.disabledTimer > 0 || player.condition <= 8) {
     player.disabledTimer = Math.max(0, player.disabledTimer - dt);
     player.speed = damp(player.speed, 0, 8, dt);
@@ -3674,6 +4024,7 @@ function updatePlayer(dt) {
   const braking = input.back || gamepadState.back ? 1 : 0;
   const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
   const onRoad = isOnRoad(player.position.x, player.position.z);
+  if (onRoad) player.lastSafePosition.copy(player.position);
   const vehicleSpec = vehicleCatalogEntry();
   const engineLevel = player.upgrades.engine;
   const engineMultiplier = 1 + engineLevel * .1;
@@ -3697,6 +4048,11 @@ function updatePlayer(dt) {
   const movement = forward.clone().multiplyScalar(player.speed * dt);
   const previousPosition = player.position.clone();
   player.position.add(movement);
+  const waterBody = waterBodyAt(player.position.x, player.position.z);
+  if (waterBody) {
+    enterVehicleWater(waterBody);
+    return;
+  }
   player.position.y = isOnRoad(player.position.x, player.position.z) ? getRoadHeightAt(player.position.x, player.position.z) : .02;
   player.distance += Math.abs(player.speed * dt);
   updateTrafficRules(previousPosition, dt, onRoad);
@@ -3709,8 +4065,12 @@ function updatePlayer(dt) {
       player.speed *= trafficHit ? -.28 : -.22;
       playImpact(trafficHit);
       const furnitureHit = staticCollision.breakable && !trafficHit;
+      const impactOrigin = trafficCollision.policeHit
+        ? policeVehicle.position.clone()
+        : trafficCollision.vehicle?.mesh.position.clone()
+          || (staticCollision.obstacle ? new THREE.Vector3(staticCollision.obstacle.x, player.position.y, staticCollision.obstacle.z) : player.position.clone().add(forward));
       const damage = clamp(impactSpeed * (trafficHit ? 1.35 : furnitureHit ? .58 : .92) + (trafficCollision.policeHit ? 7 : 0), 2, 36);
-      applyVehicleDamage(damage, trafficCollision.policeHit ? 'POLICE IMPACT' : furnitureHit ? 'ROAD FURNITURE' : 'COLLISION');
+      applyVehicleDamage(damage, trafficCollision.policeHit ? 'POLICE IMPACT' : furnitureHit ? 'ROAD FURNITURE' : 'COLLISION', { worldPosition: impactOrigin, seed: (player.damageSequence || 0) + 1 });
       showToast(trafficCollision.policeHit ? 'POLICE CONTACT' : trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficCollision.policeHit ? 'The officer is checking the roadside stop' : trafficHit ? 'Vehicle incident logged' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : `-${Math.round(damage)} CONDITION`);
       collisionCooldown = .75;
     } else {
