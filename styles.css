@@ -91,7 +91,7 @@ button { font: inherit; color: inherit; }
 #mini-map { display: block; width: 192px; height: 192px; border-radius: 8px; background: #0d1b22; }
 .map-panel.expanded { transform: scale(1.18); transform-origin: bottom left; z-index: 8; }
 .map-panel.expanded #mini-map { width: 220px; height: 220px; }
-.map-footer { display: flex; justify-content: space-between; color: #788590; font: 8px var(--mono); letter-spacing: .06em; padding: 8px 1px 0; }
+.map-footer { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 5px 9px; color: #788590; font: 8px var(--mono); letter-spacing: .06em; padding: 8px 1px 0; }
 .legend-dot { display: inline-block; vertical-align: -1px; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; }
 .player-dot { background: var(--lime); box-shadow: 0 0 7px var(--lime); }
 .beacon-dot { background: var(--orange); box-shadow: 0 0 7px var(--orange); }

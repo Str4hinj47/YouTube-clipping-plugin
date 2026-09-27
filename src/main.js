@@ -102,21 +102,23 @@ const PINEWATCH_DIRT_ZONES = [
 ];
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const MECHANIC_SHOP_LOCATIONS = [
-  { id: 'waterfront-loop-mechanic', name: 'WATERFRONT LOOP GARAGE', district: 'WATERFRONT LOOP', x: -102, z: -84, heading: 0 },
-  { id: 'neon-district-mechanic', name: 'NEON DISTRICT MOTOR WORKS', district: 'NEON DISTRICT', x: 88, z: -22, heading: Math.PI / 2 },
-  { id: 'octane-row-mechanic', name: 'OCTANE ROW SERVICE', district: 'OCTANE ROW', x: -88, z: -22, heading: -Math.PI / 2 },
-  { id: 'northstar-avenue-mechanic', name: 'NORTHSTAR AVE GARAGE', district: 'NORTHSTAR AVE', x: 0, z: 88, heading: 0 },
-  { id: 'midtown-east-mechanic', name: 'MIDTOWN EAST AUTOWORKS', district: 'MIDTOWN EAST', x: 88, z: 22, heading: Math.PI / 2 },
-  { id: 'south-market-mechanic', name: 'SOUTH MARKET REPAIR', district: 'SOUTH MARKET', x: -42, z: -44, heading: 0 },
-  { id: 'outer-ridge-mechanic', name: 'OUTER RIDGE SERVICE', district: 'OUTER RIDGE', x: -140, z: 0, heading: Math.PI / 2 },
+  // Service pads sit beside existing collectors and parking edges rather than
+  // replacing a street or overlapping the authored storefront footprints.
+  { id: 'waterfront-loop-mechanic', name: 'WATERFRONT LOOP GARAGE', district: 'WATERFRONT LOOP', x: -104, z: -95, heading: 0 },
+  { id: 'neon-district-mechanic', name: 'NEON DISTRICT MOTOR WORKS', district: 'NEON DISTRICT', x: 79, z: 8, heading: -Math.PI / 2 },
+  { id: 'octane-row-mechanic', name: 'OCTANE ROW SERVICE', district: 'OCTANE ROW', x: -81, z: 9, heading: Math.PI / 2 },
+  { id: 'northstar-avenue-mechanic', name: 'NORTHSTAR AVE GARAGE', district: 'NORTHSTAR AVE', x: -86, z: 53, heading: 0 },
+  { id: 'midtown-east-mechanic', name: 'MIDTOWN EAST AUTOWORKS', district: 'MIDTOWN EAST', x: 12, z: 9, heading: 0 },
+  { id: 'south-market-mechanic', name: 'SOUTH MARKET REPAIR', district: 'SOUTH MARKET', x: -9, z: 9, heading: 0 },
+  { id: 'outer-ridge-mechanic', name: 'OUTER RIDGE SERVICE', district: 'OUTER RIDGE', x: -120, z: 0, heading: Math.PI / 2 },
   { id: 'mountain-pass-mechanic', name: 'MOUNTAIN PASS WORKSHOP', district: 'MOUNTAIN PASS', x: 122, z: 154, heading: .35 },
   { id: 'pinewatch-mechanic', name: 'PINEWATCH MOTOR HOUSE', district: 'PINEWATCH VILLAGE', x: 182, z: 72, heading: .15 },
-  { id: 'northstar-outpost-mechanic', name: 'NORTHSTAR OUTPOST SERVICE', district: 'NORTHSTAR OUTPOST', x: 400, z: 2025, heading: 0 },
-  { id: 'redwood-valley-mechanic', name: 'REDWOOD VALLEY GARAGE', district: 'REDWOOD VALLEY', x: -1750, z: 1780, heading: -.5 },
-  { id: 'lake-aurora-mechanic', name: 'LAKE AURORA SERVICE', district: 'LAKE AURORA', x: -2280, z: -1190, heading: .2 },
-  { id: 'cinder-flats-mechanic', name: 'CINDER FLATS MOTOR WORKS', district: 'CINDER FLATS', x: 2260, z: -1820, heading: -.65 },
-  { id: 'eastgate-mechanic', name: 'EASTGATE FLEET SERVICE', district: 'EASTGATE', x: 2760, z: 540, heading: .8 },
-  { id: 'southern-crossroads-mechanic', name: 'SOUTHERN CROSSROADS REPAIR', district: 'SOUTHERN CROSSROADS', x: 460, z: -2760, heading: -.9 },
+  { id: 'northstar-outpost-mechanic', name: 'NORTHSTAR OUTPOST SERVICE', district: 'NORTHSTAR OUTPOST', x: 420, z: 2025, heading: .04 },
+  { id: 'redwood-valley-mechanic', name: 'REDWOOD VALLEY GARAGE', district: 'REDWOOD VALLEY', x: -1760, z: 1762, heading: 1.7 },
+  { id: 'lake-aurora-mechanic', name: 'LAKE AURORA SERVICE', district: 'LAKE AURORA', x: -1970, z: -1380, heading: 1.22 },
+  { id: 'cinder-flats-mechanic', name: 'CINDER FLATS MOTOR WORKS', district: 'CINDER FLATS', x: 2270, z: -1832, heading: 1.08 },
+  { id: 'eastgate-mechanic', name: 'EASTGATE FLEET SERVICE', district: 'EASTGATE', x: 2760, z: 560, heading: 2.2 },
+  { id: 'southern-crossroads-mechanic', name: 'SOUTHERN CROSSROADS REPAIR', district: 'SOUTHERN CROSSROADS', x: 480, z: -2790, heading: 1.43 },
 ];
 const mechanicShops = [];
 
@@ -3519,7 +3521,7 @@ function mechanicShopGroundHeight(shop) {
   const villageDistance = Math.hypot(shop.x - mountainVillagePosition.x, shop.z - mountainVillagePosition.z);
   if (mountain.distance < 48 && (villageDistance < 90 || shop.district === 'MOUNTAIN PASS')) return mountain.height;
   const regional = nearestRegionalRoadPoint(shop.x, shop.z);
-  if (regional.distance < 18) return regional.height;
+  if (regional.distance < 30) return regional.height;
   return .02;
 }
 
@@ -3558,7 +3560,7 @@ function createMechanicShop(shop) {
   const obstacle = addObstacle(shop.x, shop.z, width / 2 + .35, depth / 2 + .35, 'mechanic-shop', group);
   obstacle.mechanicShopId = shop.id;
   mechanicShopGroup.add(group);
-  mechanicShops.push({ ...shop, group, ring, sign, light, groundY, interactionPoint, obstacle, pulse: Math.random() * Math.PI * 2 });
+  mechanicShops.push({ ...shop, group, ring, sign, light, groundY, interactionPoint, obstacle, pulse: randomFrom(shop.x * 13.17 + shop.z * 7.31 + 91) * Math.PI * 2 });
 }
 
 function buildMechanicShops() {
@@ -7066,6 +7068,11 @@ function resolveTrafficCollisions(impactSpeed = 0) {
 }
 
 function districtAt(x, z) {
+  // Service pads are intentionally just off the road centerline. Keep the
+  // district readout tied to the named facility while the player is inside its
+  // footprint, especially for the mountain-pass workshop.
+  const serviceDistrict = MECHANIC_SHOP_LOCATIONS.find((shop) => Math.hypot(x - shop.x, z - shop.z) < 14);
+  if (serviceDistrict) return serviceDistrict.district;
   if (Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z) < 25) return 'PINEWATCH VILLAGE';
   if (isOnMountainRoad(x, z)) return 'MOUNTAIN PASS';
   const region = worldRegionNear(x, z);
@@ -7443,6 +7450,9 @@ function updatePlayer(dt) {
     physics.velocity.z = -Math.abs(physics.velocity.z) * .25;
   }
   player.speed = physics.velocity.dot(newForward);
+  const importedSpeedRatio = clamp(Math.abs(player.speed) / Math.max(1, vehicleSpec.turnSpeed), 0, 1);
+  const importedSurfaceRoughness = physics.surfaceRoughness || (onRoad ? .025 : .18);
+  const importedSuspensionTravel = handling.suspension;
   player.mesh.userData.wheels.forEach((wheel) => {
     wheel.rotation.z = Math.PI / 2;
     wheel.children[0].rotation.x -= player.speed * dt * 1.8;
@@ -7450,7 +7460,7 @@ function updatePlayer(dt) {
   player.mesh.userData.loadedWheels?.forEach((wheel) => {
     wheel.rotation.x -= player.speed * dt * 1.8;
     if (wheel.userData.physicsBasePosition) {
-      const importedBounce = Math.sin(drivingPresentation.time * (9 + speedRatio * 5) + (wheel.position.z > 0 ? .6 : 0)) * surfaceRoughness * suspensionTravel * .55;
+      const importedBounce = Math.sin(drivingPresentation.time * (9 + importedSpeedRatio * 5) + (wheel.position.z > 0 ? .6 : 0)) * importedSurfaceRoughness * importedSuspensionTravel * .55;
       wheel.position.y = wheel.userData.physicsBasePosition.y + importedBounce;
     }
   });
