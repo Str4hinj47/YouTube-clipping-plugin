@@ -5010,10 +5010,18 @@ const audioState = {
   master: null,
   engineOsc: null,
   engineHarmonic: null,
+  engineSub: null,
   engineFilter: null,
   engineGain: null,
   harmonicGain: null,
+  subGain: null,
   roadNoiseGain: null,
+  tireNoiseGain: null,
+  tireNoiseFilter: null,
+  windNoiseGain: null,
+  windNoiseFilter: null,
+  noiseSources: [],
+  lastIndicatorTick: -1,
   initialized: false,
 };
 
@@ -5051,6 +5059,15 @@ function ensureAudio() {
     harmonicGain.connect(master);
     engineHarmonic.start();
 
+    const engineSub = context.createOscillator();
+    engineSub.type = 'sine';
+    engineSub.frequency.value = 24;
+    const subGain = context.createGain();
+    subGain.gain.value = .006;
+    engineSub.connect(subGain);
+    subGain.connect(master);
+    engineSub.start();
+
     const noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
     for (let i = 0; i < noiseData.length; i += 1) noiseData[i] = (Math.random() * 2 - 1) * .35;
@@ -5068,7 +5085,51 @@ function ensureAudio() {
     roadNoiseGain.connect(master);
     roadNoise.start();
 
-    Object.assign(audioState, { context, master, engineOsc, engineHarmonic, engineFilter, engineGain, harmonicGain, roadNoiseGain, initialized: true });
+    const tireNoise = context.createBufferSource();
+    tireNoise.buffer = noiseBuffer;
+    tireNoise.loop = true;
+    const tireNoiseFilter = context.createBiquadFilter();
+    tireNoiseFilter.type = 'bandpass';
+    tireNoiseFilter.frequency.value = 1100;
+    tireNoiseFilter.Q.value = 1.1;
+    const tireNoiseGain = context.createGain();
+    tireNoiseGain.gain.value = 0;
+    tireNoise.connect(tireNoiseFilter);
+    tireNoiseFilter.connect(tireNoiseGain);
+    tireNoiseGain.connect(master);
+    tireNoise.start();
+
+    const windNoise = context.createBufferSource();
+    windNoise.buffer = noiseBuffer;
+    windNoise.loop = true;
+    const windNoiseFilter = context.createBiquadFilter();
+    windNoiseFilter.type = 'highpass';
+    windNoiseFilter.frequency.value = 480;
+    const windNoiseGain = context.createGain();
+    windNoiseGain.gain.value = 0;
+    windNoise.connect(windNoiseFilter);
+    windNoiseFilter.connect(windNoiseGain);
+    windNoiseGain.connect(master);
+    windNoise.start();
+
+    Object.assign(audioState, {
+      context,
+      master,
+      engineOsc,
+      engineHarmonic,
+      engineSub,
+      engineFilter,
+      engineGain,
+      harmonicGain,
+      subGain,
+      roadNoiseGain,
+      tireNoiseGain,
+      tireNoiseFilter,
+      windNoiseGain,
+      windNoiseFilter,
+      noiseSources: [roadNoise, tireNoise, windNoise],
+      initialized: true,
+    });
   }
   if (audioState.context.state === 'suspended') audioState.context.resume();
 }
@@ -5079,18 +5140,38 @@ function updateAudio() {
   if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen || roadsideStopOpen) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
+    audioState.subGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
+    audioState.tireNoiseGain.gain.setTargetAtTime(0, now, .08);
+    audioState.windNoiseGain.gain.setTargetAtTime(0, now, .08);
     audioState.master.gain.setTargetAtTime(soundOn ? (starterMenuOpen ? .2 : garageOpen ? .22 : 0) : 0, now, .08);
     return;
   }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
   const accelerating = input.forward || gamepadState.forward;
+  const onRoad = isOnRoad(player.position.x, player.position.z);
+  const steeringLoad = clamp(Math.abs(drivingPresentation.steering) * speedRatio, 0, 1);
+  const handbrakeLoad = input.handbrake && speedRatio > .16 ? 1 : 0;
+  const offRoadLoad = onRoad ? 0 : .32;
   audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (accelerating ? 15 : 0), now, .045);
   audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
+  audioState.engineSub.frequency.setTargetAtTime(24 + speedRatio * 38, now, .08);
   audioState.engineFilter.frequency.setTargetAtTime(520 + speedRatio * 820, now, .08);
   audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (accelerating ? .024 : 0), now, .08);
   audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
-  audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (isOnRoad(player.position.x, player.position.z) ? .045 : .075), now, .12);
+  audioState.subGain.gain.setTargetAtTime(.004 + speedRatio * .018 + (accelerating ? .006 : 0), now, .1);
+  audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (onRoad ? .045 : .075), now, .12);
+  audioState.tireNoiseFilter.frequency.setTargetAtTime(850 + steeringLoad * 950 + handbrakeLoad * 650, now, .08);
+  audioState.tireNoiseGain.gain.setTargetAtTime((steeringLoad * .028) + (handbrakeLoad * .065) + offRoadLoad * speedRatio * .022, now, .08);
+  audioState.windNoiseFilter.frequency.setTargetAtTime(460 + speedRatio * 1180, now, .12);
+  audioState.windNoiseGain.gain.setTargetAtTime(speedRatio * speedRatio * .052, now, .16);
+  const indicatorActive = input.left || input.right || Math.abs(gamepadState.steer) > .2;
+  const indicatorTick = Math.floor(performance.now() / 520);
+  if (!indicatorActive) audioState.lastIndicatorTick = -1;
+  else if (indicatorTick !== audioState.lastIndicatorTick) {
+    audioState.lastIndicatorTick = indicatorTick;
+    playTone(760, .045, .018, 'square', -150);
+  }
   audioState.master.gain.setTargetAtTime(soundOn ? .28 : 0, now, .08);
 }
 
