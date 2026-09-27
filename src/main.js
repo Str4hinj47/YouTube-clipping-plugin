@@ -7681,6 +7681,187 @@ function worldToMap(x, z, size) {
   return { x: (x + WORLD_LIMIT) / (WORLD_LIMIT * 2) * size, y: size - (z + WORLD_LIMIT) / (WORLD_LIMIT * 2) * size };
 }
 
+let navigationGraph = null;
+let navigationRouteCache = null;
+
+function navigationIntersection(a, b, c, d) {
+  const denominator = (b.x - a.x) * (d.z - c.z) - (b.z - a.z) * (d.x - c.x);
+  if (Math.abs(denominator) < .0001) return null;
+  const t = ((c.x - a.x) * (d.z - c.z) - (c.z - a.z) * (d.x - c.x)) / denominator;
+  const u = ((c.x - a.x) * (b.z - a.z) - (c.z - a.z) * (b.x - a.x)) / denominator;
+  if (t < -.0001 || t > 1.0001 || u < -.0001 || u > 1.0001) return null;
+  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+}
+
+function navigationEdgeCost(type) {
+  return type === 'neighborhood' ? 1.18
+    : type === 'mountain' ? 1.12
+      : type === 'civic-loop' ? 1.04
+        : type === 'diagonal' ? 1.02
+          : type === 'waterfront' ? 1.03
+            : 1;
+}
+
+function buildNavigationGraph() {
+  if (navigationGraph) return navigationGraph;
+  const polylines = [];
+  urbanRoadRoutes.forEach((route, routeIndex) => polylines.push({ type: urbanRoadRouteTypes[routeIndex] || 'neighborhood', points: route.map(([x, z]) => ({ x, z })) }));
+  regionalRoutes.forEach((route) => polylines.push({ type: 'regional', points: route.points.map(([x, z]) => ({ x, z })) }));
+  polylines.push({ type: 'mountain', points: mountainRoadPoints.map((point) => ({ x: point.x, z: point.z })) });
+  const segments = [];
+  polylines.forEach((line) => {
+    for (let index = 1; index < line.points.length; index += 1) segments.push({ a: line.points[index - 1], b: line.points[index], type: line.type, splits: [line.points[index - 1], line.points[index]] });
+  });
+  for (let first = 0; first < segments.length; first += 1) {
+    for (let second = first + 1; second < segments.length; second += 1) {
+      const crossing = navigationIntersection(segments[first].a, segments[first].b, segments[second].a, segments[second].b);
+      if (crossing) {
+        segments[first].splits.push(crossing);
+        segments[second].splits.push(crossing);
+      }
+    }
+  }
+  const nodes = [];
+  const nodeByKey = new Map();
+  const adjacency = [];
+  const keyFor = (point) => `${point.x.toFixed(2)}:${point.z.toFixed(2)}`;
+  const nodeFor = (point) => {
+    const key = keyFor(point);
+    if (nodeByKey.has(key)) return nodeByKey.get(key);
+    const id = nodes.length;
+    nodes.push({ x: point.x, z: point.z });
+    adjacency.push([]);
+    nodeByKey.set(key, id);
+    return id;
+  };
+  const addEdge = (first, second, cost) => {
+    if (first === second) return;
+    adjacency[first].push({ id: second, cost });
+    adjacency[second].push({ id: first, cost });
+  };
+  segments.forEach((segment) => {
+    const dx = segment.b.x - segment.a.x;
+    const dz = segment.b.z - segment.a.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+    const ordered = segment.splits
+      .map((point) => ({ point, amount: clamp(((point.x - segment.a.x) * dx + (point.z - segment.a.z) * dz) / lengthSq, 0, 1) }))
+      .sort((left, right) => left.amount - right.amount);
+    const unique = [];
+    ordered.forEach((entry) => {
+      if (!unique.length || Math.hypot(entry.point.x - unique[unique.length - 1].point.x, entry.point.z - unique[unique.length - 1].point.z) > .08) unique.push(entry);
+    });
+    for (let index = 1; index < unique.length; index += 1) {
+      const first = nodeFor(unique[index - 1].point);
+      const second = nodeFor(unique[index].point);
+      const distance = Math.hypot(unique[index].point.x - unique[index - 1].point.x, unique[index].point.z - unique[index - 1].point.z);
+      addEdge(first, second, distance * navigationEdgeCost(segment.type));
+    }
+  });
+  navigationGraph = { nodes, adjacency, segments: [] };
+  segments.forEach((segment) => {
+    const dx = segment.b.x - segment.a.x;
+    const dz = segment.b.z - segment.a.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+    const ordered = segment.splits
+      .map((point) => ({ point, amount: clamp(((point.x - segment.a.x) * dx + (point.z - segment.a.z) * dz) / lengthSq, 0, 1) }))
+      .sort((left, right) => left.amount - right.amount);
+    for (let index = 1; index < ordered.length; index += 1) {
+      const first = nodeFor(ordered[index - 1].point);
+      const second = nodeFor(ordered[index].point);
+      if (first !== second) navigationGraph.segments.push({ first, second });
+    }
+  });
+  // The node list is complete before anchors are added; preserve the graph as a
+  // reusable road network for both the mini map and the full map.
+  return navigationGraph;
+}
+
+function nearestNavigationAnchor(position, graph, nodes, adjacency) {
+  let nearest = null;
+  graph.segments.forEach((segment) => {
+    const first = nodes[segment.first];
+    const second = nodes[segment.second];
+    const dx = second.x - first.x;
+    const dz = second.z - first.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+    const amount = clamp(((position.x - first.x) * dx + (position.z - first.z) * dz) / lengthSq, 0, 1);
+    const point = { x: first.x + dx * amount, z: first.z + dz * amount };
+    const distance = Math.hypot(position.x - point.x, position.z - point.z);
+    if (!nearest || distance < nearest.distance) nearest = { point, distance, first: segment.first, second: segment.second, amount };
+  });
+  if (!nearest) return null;
+  const id = nodes.length;
+  nodes.push(nearest.point);
+  adjacency.push([]);
+  const firstDistance = Math.hypot(nearest.point.x - nodes[nearest.first].x, nearest.point.z - nodes[nearest.first].z);
+  const secondDistance = Math.hypot(nearest.point.x - nodes[nearest.second].x, nearest.point.z - nodes[nearest.second].z);
+  adjacency[id].push({ id: nearest.first, cost: firstDistance });
+  adjacency[id].push({ id: nearest.second, cost: secondDistance });
+  adjacency[nearest.first].push({ id, cost: firstDistance });
+  adjacency[nearest.second].push({ id, cost: secondDistance });
+  return { id, point: nearest.point, distance: nearest.distance };
+}
+
+function shortestNavigationPath(start, target, graph) {
+  const nodes = graph.nodes.map((node) => ({ ...node }));
+  const adjacency = graph.adjacency.map((edges) => edges.map((edge) => ({ ...edge })));
+  const startAnchor = nearestNavigationAnchor(start, graph, nodes, adjacency);
+  const targetAnchor = nearestNavigationAnchor(target, graph, nodes, adjacency);
+  if (!startAnchor || !targetAnchor) return [new THREE.Vector3(start.x, 0, start.z), new THREE.Vector3(target.x, 0, target.z)];
+  const distances = new Array(nodes.length).fill(Infinity);
+  const previous = new Array(nodes.length).fill(-1);
+  const visited = new Array(nodes.length).fill(false);
+  distances[startAnchor.id] = 0;
+  for (let iteration = 0; iteration < nodes.length; iteration += 1) {
+    let current = -1;
+    let best = Infinity;
+    for (let index = 0; index < distances.length; index += 1) {
+      if (!visited[index] && distances[index] < best) { current = index; best = distances[index]; }
+    }
+    if (current < 0) break;
+    visited[current] = true;
+    if (current === targetAnchor.id) break;
+    adjacency[current].forEach((edge) => {
+      const nextDistance = distances[current] + edge.cost;
+      if (nextDistance < distances[edge.id]) {
+        distances[edge.id] = nextDistance;
+        previous[edge.id] = current;
+      }
+    });
+  }
+  const nodePath = [];
+  for (let current = targetAnchor.id; current >= 0; current = previous[current]) {
+    nodePath.unshift(nodes[current]);
+    if (current === startAnchor.id) break;
+  }
+  if (!nodePath.length || nodePath[0] !== nodes[startAnchor.id]) return [new THREE.Vector3(start.x, 0, start.z), new THREE.Vector3(startAnchor.point.x, 0, startAnchor.point.z), new THREE.Vector3(targetAnchor.point.x, 0, targetAnchor.point.z), new THREE.Vector3(target.x, 0, target.z)];
+  const points = [new THREE.Vector3(start.x, 0, start.z), new THREE.Vector3(startAnchor.point.x, 0, startAnchor.point.z)];
+  nodePath.forEach((node) => points.push(new THREE.Vector3(node.x, 0, node.z)));
+  points.push(new THREE.Vector3(targetAnchor.point.x, 0, targetAnchor.point.z), new THREE.Vector3(target.x, 0, target.z));
+  return points.filter((point, index) => index === 0 || point.distanceTo(points[index - 1]) > .7);
+}
+
+function navigationTargetPosition() {
+  const cityCargoActive = cargoRun.active && cargoRun.route === 'city' && deliveryState === 'active';
+  const mountainCargoActive = cargoRun.active && cargoRun.route === 'mountain' && mountainDeliveryState === 'active';
+  if (cityCargoActive) return deliveryTarget;
+  if (mountainCargoActive) return mountainDeliveryTarget;
+  if (routeStep < beaconPositions.length) return beaconPositions[routeStep];
+  return deliveryStart;
+}
+
+function roadNavigationRoute(start, target) {
+  const cacheTarget = `${target.x.toFixed(1)}:${target.z.toFixed(1)}`;
+  if (navigationRouteCache && navigationRouteCache.target === cacheTarget && navigationRouteCache.origin.distanceTo(start) < 12) {
+    const points = navigationRouteCache.points.slice();
+    points[0] = new THREE.Vector3(start.x, 0, start.z);
+    return points;
+  }
+  const route = shortestNavigationPath(start, target, buildNavigationGraph());
+  navigationRouteCache = { target: cacheTarget, origin: new THREE.Vector3(start.x, 0, start.z), points: route };
+  return route;
+}
+
 function drawMiniMap() {
   const size = miniMap.width;
   mapCtx.clearRect(0, 0, size, size);
@@ -7774,6 +7955,20 @@ function drawMiniMap() {
     mapCtx.beginPath(); mapCtx.arc(cachePoint.x, cachePoint.y, 2.1, 0, Math.PI * 2);
     mapCtx.fillStyle = '#5ce3d1'; mapCtx.fill();
   });
+  const navigationTarget = navigationTargetPosition();
+  const navigationRoute = roadNavigationRoute(player.position, navigationTarget);
+  mapCtx.save();
+  mapCtx.strokeStyle = cargoRun.active || routeStep < beaconPositions.length ? 'rgba(255,157,80,.86)' : 'rgba(92,227,209,.82)';
+  mapCtx.lineWidth = 2.4;
+  mapCtx.setLineDash([7, 5]);
+  mapCtx.beginPath();
+  navigationRoute.forEach((point, index) => {
+    const mapped = worldToMap(point.x, point.z, size);
+    if (index === 0) mapCtx.moveTo(mapped.x, mapped.y);
+    else mapCtx.lineTo(mapped.x, mapped.y);
+  });
+  mapCtx.stroke();
+  mapCtx.restore();
   const depotPoint = worldToMap(deliveryStart.x, deliveryStart.z, size);
   const dropPoint = worldToMap(deliveryTarget.x, deliveryTarget.z, size);
   const mountainDropPoint = worldToMap(mountainDeliveryTarget.x, mountainDeliveryTarget.z, size);
@@ -7910,9 +8105,9 @@ function drawWorldMap() {
   drawRoute(mountainRoadPoints, 'rgba(72, 80, 72, .9)', 11, []);
   drawRoute(mountainRoadPoints, 'rgba(125, 132, 117, .86)', 7, []);
   drawRoute(mountainRoadPoints, 'rgba(215, 192, 104, .9)', 1.5, [8, 7]);
-  if (routeStep < beaconPositions.length) drawRoute([player.position, ...beaconPositions.slice(routeStep)], 'rgba(255, 157, 80, .72)', 3, [10, 7]);
-  if (deliveryState === 'active') drawRoute([player.position, deliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
-  if (mountainDeliveryState === 'active') drawRoute([player.position, mountainDeliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
+  const navigationTarget = navigationTargetPosition();
+  const navigationRoute = roadNavigationRoute(player.position, navigationTarget);
+  drawRoute(navigationRoute, cargoRun.active || routeStep < beaconPositions.length ? 'rgba(255, 157, 80, .86)' : 'rgba(92, 227, 209, .8)', 3, [10, 7]);
 
   const drawText = (text, x, y, color = '#91a7a2', align = 'left') => {
     ctx.font = '500 10px DM Mono, monospace';
