@@ -3550,12 +3550,13 @@ function createMechanicShop(shop) {
   group.add(sign);
   const light = new THREE.PointLight(0xff9561, 1.25, 13, 2);
   light.position.set(0, 3.1, depth / 2 + .55);
+  const serviceOffset = depth / 2 + 3.7;
   light.userData.dayNightBaseIntensity = 1.25;
   dayNightLights.push(light);
   group.add(light);
   const ringMaterial = mats.event.clone();
-  const ring = addMesh(group, new THREE.TorusGeometry(1.65, .08, 8, 32), ringMaterial, [0, .16, depth / 2 + 2.15], { rotation: [Math.PI / 2, 0, 0] });
-  const interactionPoint = new THREE.Vector3(0, .02, depth / 2 + 2.15).applyAxisAngle(Y_AXIS, shop.heading);
+  const ring = addMesh(group, new THREE.TorusGeometry(1.65, .08, 8, 32), ringMaterial, [0, .16, serviceOffset], { rotation: [Math.PI / 2, 0, 0] });
+  const interactionPoint = new THREE.Vector3(0, .02, serviceOffset).applyAxisAngle(Y_AXIS, shop.heading);
   interactionPoint.add(new THREE.Vector3(shop.x, groundY, shop.z));
   const obstacle = addObstacle(shop.x, shop.z, width / 2 + .35, depth / 2 + .35, 'mechanic-shop', group);
   obstacle.mechanicShopId = shop.id;
@@ -3576,6 +3577,17 @@ function updateMechanicShopVisuals(time, dt) {
     shop.ring.material.opacity = .55 + pulse * .35;
     shop.sign.material.opacity = .8 + pulse * .2;
   });
+}
+
+function nearestMechanicShopAt(x, z, maxDistance = Infinity) {
+  let nearest = null;
+  mechanicShops.forEach((shop) => {
+    const centerDistance = Math.hypot(x - shop.x, z - shop.z);
+    const interactionDistance = shop.interactionPoint ? Math.hypot(x - shop.interactionPoint.x, z - shop.interactionPoint.z) : Infinity;
+    const distance = Math.min(centerDistance, interactionDistance);
+    if (distance <= maxDistance && (!nearest || distance < nearest.distance)) nearest = { shop, distance };
+  });
+  return nearest;
 }
 
 function worldSectorIndices(x, z) {
@@ -6839,6 +6851,8 @@ function pointInDirtZone(x, z) {
 }
 
 function drivingSurfaceAt(x, z) {
+  const serviceShop = nearestMechanicShopAt(x, z, 11);
+  if (serviceShop) return serviceShop.shop.district === 'MOUNTAIN PASS' ? DRIVE_SURFACES.shoulder : DRIVE_SURFACES.asphalt;
   if (pointInDirtZone(x, z)) return DRIVE_SURFACES.dirt;
   const mountain = nearestMountainRoadPoint(x, z);
   const villageRadius = Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z);
@@ -6865,6 +6879,8 @@ function isOnRoad(x, z) {
 }
 
 function getRoadHeightAt(x, z) {
+  const serviceShop = nearestMechanicShopAt(x, z, 11);
+  if (serviceShop) return serviceShop.shop.groundY + .06;
   if (isOnMountainRoad(x, z)) return mountainRoadHeightAt(x, z) + .06;
   const urbanRoad = nearestUrbanRoadPoint(x, z);
   if (urbanRoad.distance < 7.2) return urbanRoad.height + .06;
@@ -7095,7 +7111,8 @@ function updateMechanicShopPrompt() {
   const name = document.querySelector('#mechanic-shop-name');
   const district = document.querySelector('#mechanic-shop-district');
   const action = document.querySelector('#mechanic-shop-action');
-  if (!prompt || !name || !district || !action) return;
+  const actionLabel = document.querySelector('#mechanic-shop-action-label');
+  if (!prompt || !name || !district || !action || !actionLabel) return;
   let closest = null;
   let closestDistance = Infinity;
   mechanicShops.forEach((shop) => {
@@ -7116,7 +7133,7 @@ function updateMechanicShopPrompt() {
   const stopped = playerServiceSpeed() < 1.35;
   action.classList.toggle('ready', stopped);
   action.setAttribute('aria-disabled', String(!stopped));
-  action.querySelectorAll('span')[1].textContent = stopped ? 'OPEN REPAIR BAY' : 'STOP TO SERVICE';
+  actionLabel.textContent = stopped ? 'OPEN REPAIR BAY' : 'STOP TO SERVICE';
   action.querySelector('b').textContent = stopped ? 'REUSE GARAGE SYSTEM' : 'BRAKE TO INTERACT';
 }
 
