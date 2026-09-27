@@ -131,14 +131,16 @@ const BEACH_MANSION_ESTATES = [
 ];
 const shorelineEstate = BEACH_MANSION_ESTATES.find((estate) => estate.id === 'shoreline-estate');
 const HOME_CATALOG = [
-  { id: 'pinewatch-shack', name: 'PINEWATCH SHACK', className: 'STARTER HOME', price: 0, style: 'shack', location: 'PINEWATCH VILLAGE', description: 'A small, drafty room above the village road. It is not much, but it is yours.', position: [132, 86], spawn: [132, 18.58, 91.2], heading: -2.5 },
+  { id: 'pinewatch-shack', name: 'PINEWATCH SHACK', className: 'MOUNTAIN ROOM', price: 350, style: 'shack', location: 'PINEWATCH VILLAGE', description: 'A small, drafty room above the village road. It is not much, but it is yours.', position: [132, 86], spawn: [132, 18.58, 91.2], heading: -2.5 },
   { id: 'pinewatch-cottage', name: 'PINEWATCH COTTAGE', className: 'TWO-ROOM COTTAGE', price: 650, style: 'cottage', location: 'PINEWATCH VILLAGE', description: 'A warmer place with a porch and a clear view of the pass.', position: [145, 84], spawn: [145, 18.48, 89.5], heading: -2.35 },
-  { id: 'harbor-flat', name: 'HARBOR FLAT', className: 'CITY APARTMENT', price: 1100, style: 'flat', location: 'AURORA BAY', description: 'A narrow upstairs flat above the waterfront service lanes.', position: [-92, 89], spawn: [-92, .02, 95], heading: -1.55 },
+  { id: 'harbor-flat', name: 'HARBOR FLAT', className: 'STARTER HOME', price: 0, style: 'flat', location: 'AURORA BAY', description: 'A narrow upstairs flat above the waterfront service lanes. It is not much, but it is yours.', position: [-92, 89], spawn: [-66, .02, 89], heading: Math.PI },
   { id: 'shoreline-estate', name: 'SHORELINE ESTATE', className: 'WATERFRONT MANSION', price: 3750000, style: 'mansion', location: 'AURORA BAY // GOLDEN SHORE', description: 'A $3.75M glass-and-concrete beach house with a gated drive and room for the fast cars.', position: [shorelineEstate.x, shorelineEstate.z], spawn: [shorelineEstate.x, .02, -89], heading: 0 },
   { id: 'ridge-house', name: 'RIDGE HOUSE', className: 'REMOTE HOUSE', price: 1650, style: 'ridge', location: 'NORTHSTAR OUTPOST', description: 'A quiet remote house for drivers who prefer a long view and fewer neighbors.', position: [388, 2043], spawn: [388, .02, 2050], heading: .1 },
 ];
 
 const SAVE_SLOT_COUNT = 3;
+// Bump when old saves must be discarded (v2: pre-camera-fix saves stored positions inside buildings).
+const SAVE_FORMAT_VERSION = 2;
 const LEGACY_SAVE_KEY = 'neonline-aurora-save';
 const SAVE_SLOT_PREFIX = 'neonline-aurora-save-slot-';
 const LATEST_SAVE_KEY = 'neonline-aurora-latest-slot';
@@ -4024,11 +4026,11 @@ const player = {
   waterBody: '',
   waterSinkTime: 0,
   recoveryCost: 0,
-  lastSafePosition: new THREE.Vector3(132, 18.58, 91.2),
+  lastSafePosition: new THREE.Vector3(-66, .02, 89),
   resumePosition: null,
   resumeHeading: 0,
-  ownedHomes: ['pinewatch-shack'],
-  selectedHome: 'pinewatch-shack',
+  ownedHomes: ['harbor-flat'],
+  selectedHome: 'harbor-flat',
   speedingTime: 0,
   violationCooldown: 0,
   trafficViolations: 0,
@@ -4179,12 +4181,21 @@ function readSaveSlot(slot) {
   const normalized = normalizeSaveSlot(slot);
   try {
     const slotRaw = localStorage.getItem(saveSlotKey(normalized));
-    if (slotRaw) return JSON.parse(slotRaw);
+    if (slotRaw) {
+      const parsed = JSON.parse(slotRaw);
+      if (parsed?.formatVersion === SAVE_FORMAT_VERSION) return parsed;
+      localStorage.removeItem(saveSlotKey(normalized));
+      return null;
+    }
     // Migrate the original single-save format into slot one without deleting it.
     if (normalized !== 1) return null;
     const legacyRaw = localStorage.getItem(LEGACY_SAVE_KEY);
     if (!legacyRaw) return null;
     const legacy = JSON.parse(legacyRaw);
+    if (legacy?.formatVersion !== SAVE_FORMAT_VERSION) {
+      localStorage.removeItem(LEGACY_SAVE_KEY);
+      return null;
+    }
     return legacy?.saveSlot && legacy.saveSlot !== 1 ? null : legacy;
   } catch (error) {
     console.warn('Save slot read unavailable.', error);
@@ -4233,8 +4244,8 @@ function resetProgressStateToDefaults() {
   player.lastSafePosition.set(starter.spawn[0], starter.spawn[1], starter.spawn[2]);
   player.resumePosition = null;
   player.resumeHeading = starter.heading || 0;
-  player.ownedHomes = ['pinewatch-shack'];
-  player.selectedHome = 'pinewatch-shack';
+  player.ownedHomes = ['harbor-flat'];
+  player.selectedHome = 'harbor-flat';
   player.speedingTime = 0;
   player.violationCooldown = 0;
   player.trafficViolations = 0;
@@ -4298,6 +4309,7 @@ function saveProgress() {
       },
       updatedAt: Date.now(),
       saveSlot: activeSaveSlot,
+      formatVersion: SAVE_FORMAT_VERSION,
     };
     const serialized = JSON.stringify(payload);
     localStorage.setItem(saveSlotKey(activeSaveSlot), serialized);
@@ -4319,7 +4331,7 @@ function loadProgress(slot = latestSaveSlot()) {
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
     if (Number.isFinite(saved.completedDeliveries)) player.completedDeliveries = Math.max(0, Math.floor(saved.completedDeliveries));
     if (Array.isArray(saved.ownedHomes)) player.ownedHomes = saved.ownedHomes.filter((id) => HOME_CATALOG.some((home) => home.id === id));
-    if (!player.ownedHomes.includes('pinewatch-shack')) player.ownedHomes.unshift('pinewatch-shack');
+    if (!player.ownedHomes.includes('harbor-flat')) player.ownedHomes.unshift('harbor-flat');
     if (typeof saved.selectedHome === 'string' && player.ownedHomes.includes(saved.selectedHome)) player.selectedHome = saved.selectedHome;
     if (Array.isArray(saved.ownedCars)) player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
     if (!player.ownedCars.includes(PROGRESSION_CONFIG.starterStyle)) player.ownedCars.unshift(PROGRESSION_CONFIG.starterStyle);
