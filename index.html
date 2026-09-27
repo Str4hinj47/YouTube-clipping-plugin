@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c111c" />
+    <title>NEONLINE // Open World Drive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="Neonline open world driving game"></canvas>
+
+      <div class="screen-effects" aria-hidden="true">
+        <div class="top-glow"></div>
+        <div class="vignette"></div>
+        <div class="scanlines"></div>
+      </div>
+
+      <header class="topbar hud-layer">
+        <div class="brand-lockup">
+          <div class="brand-mark"><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">NEON<span>LINE</span></div>
+            <div class="brand-sub">AURORA BAY // FREE ROAM</div>
+          </div>
+        </div>
+        <div class="session-status"><i></i><span>LIVE SESSION</span><b id="session-clock">00:00</b></div>
+        <div class="top-actions">
+          <button class="icon-button phone-toggle" id="phone-toggle" type="button" aria-label="Open phone"><span aria-hidden="true">✆</span><b class="phone-unread-badge" id="phone-unread-badge" hidden>0</b></button>
+          <button class="icon-button" id="sound-toggle" type="button" aria-label="Toggle sound">◒</button>
+          <button class="profile-pill" id="garage-open" type="button" aria-label="Open garage"><span class="avatar">M</span><span class="profile-copy"><b>MILES</b><small>RANK 04</small></span><span class="chevron">⌄</span></button>
+        </div>
+      </header>
+
+      <section class="mission-panel glass-panel hud-layer">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> CURRENT RUN <span class="eyebrow-rule"></span><span id="mission-step">01 / 04</span></div>
+        <div class="mission-heading"><span id="mission-title">THE LONG WAY HOME</span><span class="mission-glyph">↗</span></div>
+        <p id="mission-description">Cruise to the next beacon. Keep your lines clean.</p>
+        <div class="mission-progress"><span id="mission-progress-fill"></span></div>
+        <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span id="delivery-milestone">0 DELIVERIES</span><span class="reward">+120 REP</span></div>
+      </section>
+
+      <section class="delivery-panel glass-panel hud-layer" id="delivery-panel">
+        <div class="delivery-topline"><span class="eyebrow"><span class="eyebrow-dot delivery-dot"></span> UNMARKED CARGO</span><span class="delivery-status" id="delivery-status">NEARBY</span></div>
+        <div class="delivery-title" id="delivery-title">NIGHT SHIFT DELIVERY</div>
+        <p id="delivery-copy">Move the sealed case before the deadline. Speed pays, attention costs.</p>
+        <div class="delivery-stats"><span id="delivery-time">PRESS V</span><span class="delivery-risk low" id="delivery-risk">RISK CLEAR</span><b id="delivery-reward">+$120 BASE</b></div>
+        <div class="delivery-action" id="delivery-action"><span class="keycap">V</span><span>ACCEPT HOT CARGO</span></div>
+      </section>
+
+      <section class="water-recovery-panel glass-panel hud-layer" id="water-recovery-panel" aria-hidden="true">
+        <div class="water-recovery-topline"><span class="eyebrow"><span class="eyebrow-dot water-dot"></span> VEHICLE STATUS</span><span class="water-recovery-status">SUBMERGED</span></div>
+        <h3>RECOVERY <b>REQUIRED</b></h3>
+        <p id="water-recovery-body">Water recovery is required.</p>
+        <div class="water-recovery-cost-row"><span>REVIVAL FEE // 50% VALUE</span><strong id="water-recovery-cost">$1,100</strong></div>
+        <button class="water-recovery-garage" id="water-recovery-open-garage" type="button">OPEN GARAGE <span>G</span></button>
+      </section>
+
+      <section class="world-readout hud-layer">
+        <div class="district-readout"><span class="district-pin">⌖</span><div><small>DISTRICT</small><strong id="district-name">NORTHSTAR AVE</strong></div></div>
+        <div class="weather-readout"><span>21°</span><span class="weather-icon">◒</span><small>CLEAR / <span id="world-time">22:48</span></small></div>
+        <div class="cache-readout"><small>CACHES</small><strong id="cache-count">00 / 12</strong></div>
+        <div class="speed-limit-readout"><small>LIMIT</small><strong id="speed-limit">45</strong></div>
+        <div class="home-readout"><small>SAFEHOUSE</small><strong id="home-name">PINEWATCH SHACK</strong><span id="home-location">PINEWATCH VILLAGE</span></div>
+      </section>
+
+      <section class="map-panel glass-panel hud-layer">
+        <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
+        <canvas id="mini-map" width="220" height="220"></canvas>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot delivery-map-dot"></i> WAYPOINT</span><span><i class="legend-dot shop-map-dot"></i> SHOP</span></div>
+      </section>
+
+      <section class="world-map-overlay" id="world-map-overlay" aria-hidden="true">
+        <div class="world-map-shell">
+          <header class="world-map-header">
+            <div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY // ISLAND ROAD NETWORK</span><h2>OPEN <b>MAP</b></h2></div>
+            <div class="world-map-header-meta"><span id="world-map-status">LIVE NAVIGATION</span><button id="world-map-close" type="button" aria-label="Close map">×</button></div>
+          </header>
+          <div class="world-map-body">
+            <div class="world-map-canvas-wrap"><canvas id="world-map" width="820" height="620" aria-label="Full map of Aurora Bay"></canvas><div class="map-north-arrow"><b>N</b><span>↑</span></div><div class="map-scale">WORLD RANGE = 10 KM</div></div>
+            <aside class="world-map-sidebar">
+              <div class="world-map-readout"><small>YOU ARE HERE</small><strong id="world-map-location">NORTHSTAR AVE</strong><span id="world-map-coordinates">X 000 // Z 000</span></div>
+              <div class="world-map-route-card"><span class="eyebrow"><span class="eyebrow-dot event-dot"></span> ACTIVE ROUTE</span><strong id="world-map-route">NEXT BEACON</strong><p id="world-map-route-copy">Follow the orange marker through the city.</p></div>
+              <div class="world-map-legend"><span class="world-map-section-title">ROAD LEGEND</span><div><i class="legend-dot player-dot"></i><span>YOU / HEADING</span></div><div><i class="legend-dot beacon-dot"></i><span>BEACON NETWORK</span></div><div><i class="legend-dot delivery-map-dot"></i><span>COURIER POINT</span></div><div><i class="legend-dot incident-map-dot"></i><span>RADAR STOP</span></div><div><i class="legend-dot shop-map-dot"></i><span>MECHANIC SHOP</span></div></div>
+              <div class="world-map-places"><span class="world-map-section-title">KNOWN PLACES</span><span>PINEWATCH VILLAGE</span><span>MOUNTAIN PASS</span><span>REDWOOD VALLEY</span><span>LAKE AURORA</span><span>CINDER FLATS</span><span>EASTGATE</span><span>NORTHSTAR OUTPOST</span><span>SOUTHERN CROSSROADS</span><span>NORTHSTAR OVERLOOK</span><span>PULSE STATION</span><span>OCTANE ROW</span><span>SOUTH MARKET</span><span>WATERFRONT LOOP</span></div>
+              <button class="world-map-close-button" id="world-map-close-button" type="button">RETURN TO DRIVE <span>ESC / M</span></button>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="phone-overlay" id="phone-overlay" aria-hidden="true">
+        <div class="phone-shell" role="dialog" aria-modal="false" aria-labelledby="phone-heading">
+          <header class="phone-header">
+            <div><span class="eyebrow"><span class="eyebrow-dot phone-dot"></span> SECURE DEVICE // FIELD LINE</span><h2 id="phone-heading">THE <b>PHONE.</b></h2></div>
+            <div class="phone-header-actions"><span class="phone-signal"><i></i><i></i><i></i><b>ENCRYPTED</b></span><button class="phone-close" id="phone-close" type="button" aria-label="Close phone">×</button></div>
+          </header>
+          <div class="phone-meta"><span><small>INBOX</small><b id="phone-inbox-count">0 THREADS</b></span><span><small>NETWORK</small><b>CARTEL OPERATIONS</b></span><span class="phone-meta-hint"><span class="keycap">P</span> CLOSE PHONE</span></div>
+          <div class="phone-body">
+            <aside class="phone-thread-list" id="phone-thread-list" aria-label="Phone inbox"></aside>
+            <article class="phone-thread-detail" id="phone-thread-detail">
+              <div class="phone-empty-state" id="phone-empty-state"><span class="phone-empty-icon">✆</span><b>NO SECURE TRAFFIC</b><p>Mission contacts will reach this line when a contract opens.</p></div>
+              <div class="phone-message-detail" id="phone-message-detail" hidden>
+                <div class="phone-detail-topline"><span class="phone-category" id="phone-detail-category">MISSION</span><span class="phone-detail-time" id="phone-detail-time">NOW</span></div>
+                <h3 id="phone-detail-subject">MISSION UPDATE</h3>
+                <div class="phone-detail-sender"><span class="phone-contact-avatar">M</span><span><b id="phone-detail-sender">MARA // OPERATIONS</b><small>FICTIONAL CARTEL CONTACT NETWORK</small></span></div>
+                <p class="phone-detail-body" id="phone-detail-body"></p>
+                <div class="phone-detail-status"><span>THREAD STATUS</span><b id="phone-detail-status">UNREAD</b></div>
+              </div>
+            </article>
+          </div>
+          <footer class="phone-footer"><span><span class="keycap">P</span> PHONE</span><span><span class="keycap">ESC</span> CLOSE</span><button id="phone-mark-all" type="button">MARK ALL READ</button><span class="phone-footer-note">NO REAL CONTACTS // FICTIONAL NETWORK</span></footer>
+        </div>
+      </section>
+
+      <section class="roadside-stop-overlay" id="roadside-stop-overlay" aria-hidden="true">
+        <div class="roadside-stop-card" role="dialog" aria-modal="true" aria-labelledby="roadside-stop-title">
+          <header class="roadside-stop-header"><div><span class="eyebrow"><span class="eyebrow-dot stop-dot"></span> AURORA BAY TRAFFIC // OFFICIAL CONTACT</span><h2 id="roadside-stop-title">PULL <b>OVER.</b></h2></div><span class="roadside-stop-siren"><i></i><b>RADAR UNIT</b></span></header>
+          <div class="roadside-stop-rule"><span id="roadside-stop-status">STOP REQUIRED</span><span>NO PURSUIT // NO HEAT LOOP</span></div>
+          <p class="roadside-stop-copy" id="roadside-stop-copy">The radar unit has requested a safe roadside stop. Keep the vehicle still and resolve the contact.</p>
+          <div class="roadside-stop-details"><div><small>REASON</small><b id="roadside-stop-reason">SPEED CHECK // POSTED LIMIT</b></div><div><small>LOCATION</small><b id="roadside-stop-location">AURORA BAY</b></div><div><small>CARGO STATUS</small><b id="roadside-stop-cargo">NO ACTIVE CASE</b></div><div><small>RECORD</small><b id="roadside-stop-record">CITATION // -$45</b></div></div>
+          <div class="roadside-stop-outcome" id="roadside-stop-outcome" hidden></div>
+          <section class="roadside-stop-history"><div class="roadside-history-heading"><span>RECENT RADAR CONTACTS</span><small id="roadside-stop-history-count">0 / 8 LOGGED</small></div><div id="roadside-stop-history-list"></div></section>
+          <button class="roadside-stop-action" id="roadside-stop-action" type="button">COOPERATE / RESOLVE STOP <span>ENTER</span></button>
+          <footer class="roadside-stop-footer"><span>Pull over safely to protect the run.</span><span><span class="keycap">ENTER</span> SELECT <span class="keycap">SPACE</span> CONFIRM</span></footer>
+        </div>
+      </section>
+
+      <section class="vehicle-panel glass-panel hud-layer">
+        <div class="vehicle-topline"><span class="eyebrow">PERSONAL VEHICLE</span><span class="vehicle-id">NL—07</span></div>
+        <div class="vehicle-name">MIDNIGHT <b>GT</b></div>
+        <div class="vehicle-meta"><span>RWD</span><i></i><span>SPORT COUPE</span><i></i><span id="surface-state">ASPHALT</span></div>
+        <div class="vehicle-bars">
+          <div class="bar-label"><span>ENGINE</span><b>94%</b></div><div class="bar"><span style="width:94%"></span></div>
+          <div class="bar-label condition-bar"><span>CONDITION</span><b id="condition-percent">100%</b></div><div class="bar condition-bar"><span id="condition-fill" style="width:100%"></span></div><div class="damage-readout" data-damage-count>0 IMPACT MARKS</div>
+        </div>
+      </section>
+
+      <section class="speed-panel hud-layer">
+        <div class="speed-ring"><div class="speed-ticks"></div><div class="speed-inner"><div class="speed-number" id="speed-value">000</div><div class="speed-unit">KM/H</div></div></div>
+        <div class="gear-readout"><span>GEAR</span><b id="gear-value">P</b><small id="drive-mode">SPORT</small></div>
+      </section>
+
+      <section class="controls-panel glass-panel hud-layer">
+        <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
+        <div class="control-row"><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
+        <div class="control-row"><span class="keycap">M</span><span class="control-label">MAP</span></div>
+        <div class="control-row"><span class="keycap">P</span><span class="control-label">PHONE</span></div>
+        <div class="control-row"><span class="keycap">V</span><span class="control-label">DELIVERY</span></div>
+        <div class="control-row muted"><span class="keycap">G</span><span class="control-label">GARAGE</span><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
+      </section>
+
+      <div class="rep-toast hud-layer" id="rep-toast"><span class="toast-icon">✦</span><div><b>BEACON DISCOVERED</b><small>New route unlocked in Neon District</small></div><span class="toast-rep">+120 REP</span></div>
+      <section class="mechanic-shop-prompt hud-layer" id="mechanic-shop-prompt" aria-hidden="true">
+        <div class="mechanic-shop-prompt-kicker"><span class="pulse-dot"></span> SERVICE BAY // <span id="mechanic-shop-district">NORTHSTAR AVE</span></div>
+        <strong id="mechanic-shop-name">NORTHSTAR AUTO WORKS</strong>
+        <button id="mechanic-shop-action" type="button"><span class="keycap">E</span><span id="mechanic-shop-action-label">OPEN REPAIR BAY</span><b>STOP TO SERVICE</b></button>
+      </section>
+      <div class="center-reticle hud-layer" aria-hidden="true"><span></span></div>
+      <div class="pause-hint hud-layer"><span class="pulse-dot"></span> OPEN WORLD <span>•</span> NO LIMITS</div>
+
+      <section class="pause-overlay" id="pause-overlay" aria-hidden="true">
+        <div class="pause-card glass-panel">
+          <div class="pause-mark"><span></span><span></span><span></span></div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY // SESSION PAUSED</div>
+          <h2>RUN <b>PAUSED</b></h2>
+          <p>Take a breath. Your route and progress are safe.</p>
+          <div class="pause-actions"><button class="pause-primary" id="resume-button" type="button">RESUME RUN <span>↗</span></button><button class="pause-secondary" id="pause-restart" type="button">RESET VEHICLE</button><button class="pause-secondary" id="main-menu-button" type="button">MAIN MENU</button></div>
+          <div class="pause-settings"><div><small>RENDER QUALITY</small><b id="quality-label">HIGH</b></div><button class="pause-secondary" id="quality-toggle" type="button">CHANGE</button><div><small>PROGRESS</small><b>LOCAL SAVE</b></div><button class="pause-secondary danger" id="reset-save" type="button">CLEAR SAVE</button></div>
+          <div class="pause-footer"><span><span class="keycap">P</span> PHONE</span><span><span class="keycap">ESC</span> CLOSE / PAUSE</span><span class="pause-version">NEONLINE 0.4 // BUILD 275BC9C</span></div>
+        </div>
+      </section>
+
+      <section class="main-menu-overlay open" id="main-menu-overlay" aria-hidden="false">
+        <div class="menu-grid-lines" aria-hidden="true"></div>
+        <div class="menu-showcase-wash" id="menu-showcase-wash" aria-hidden="true"></div>
+        <section class="save-select-overlay" id="save-select-overlay" aria-hidden="true">
+          <div class="save-select-card">
+            <header class="save-select-header"><div><span class="eyebrow"><span class="eyebrow-dot"></span> LOCAL PROFILES // PLAY</span><h2>SELECT YOUR <b>LINE.</b></h2></div><button class="save-select-close" id="save-select-close" type="button" aria-label="Close save selection">×</button></header>
+            <p class="save-select-intro">Choose any local save to continue from, or start a fresh profile in an empty slot. Continue always loads the latest profile automatically.</p>
+            <div class="save-slot-list" id="save-slot-list"></div>
+            <div class="save-slot-footer"><span><span class="keycap">ESC</span> BACK</span><span>LOCAL ONLY // 3 SLOTS</span></div>
+          </div>
+        </section>
+        <div class="menu-shell">
+          <header class="menu-header">
+            <div class="menu-brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><div class="brand-name">NEON<span>LINE</span></div><div class="brand-sub">AURORA BAY // NIGHT DRIVE</div></div></div>
+            <div class="menu-header-status"><span class="pulse-dot"></span><span>AURORA BAY // WORLD TOUR</span><b>LOCAL PROFILE</b></div>
+            <div class="menu-header-actions"><span class="menu-cash"><small>CASH</small><b id="menu-cash">$420</b></span><span class="menu-rep"><small>REP</small><b id="menu-rep">1,280</b></span><button class="menu-icon-button" id="menu-sound-toggle" type="button" aria-label="Toggle sound">◒</button></div>
+          </header>
+          <div class="menu-body">
+            <aside class="menu-sidebar">
+              <div class="menu-welcome"><span class="eyebrow-dot"></span> WELCOME BACK, MILES</div>
+              <h1>OWN THE<br><b>NIGHT.</b></h1>
+              <p>Build your line through Aurora Bay. Tune the ride, find the clean route, and leave your mark.</p>
+              <nav class="menu-nav" aria-label="Main menu">
+                <button class="menu-nav-button active" data-menu-page="home" type="button"><b>01</b><span>PLAY</span><small>FREE ROAM</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="market" type="button"><b>02</b><span>MARKET</span><small>UNLOCK // BUY</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="garage" type="button"><b>03</b><span>GARAGE</span><small>RESPRAY // TUNE</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="settings" type="button"><b>04</b><span>SETTINGS</span><small>OPTIONS // CONTROLS</small><i>↗</i></button>
+              </nav>
+              <div class="menu-sidebar-footer"><span class="pulse-dot"></span><span>AURORA BAY ONLINE</span><b>0.4</b></div>
+            </aside>
+            <main class="menu-main">
+              <section class="menu-page active world-tour-page" data-menu-content="home">
+                <div class="menu-page-kicker"><span>WORLD TOUR // LIVE FEED</span><b id="menu-showcase-index">01 / 08</b></div>
+                <div class="showcase-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> CURRENT REGION</span><h2 id="menu-showcase-region">AURORA BAY</h2><p id="menu-showcase-copy">Neon boulevards, irregular blocks, and the city line after dark.</p></div><div class="showcase-status"><span class="showcase-status-dot"></span><b>WORLD ONLINE</b><small>SCENE ROTATES // 05 SEC</small></div></div>
+                <div class="showcase-location-bar"><span><small>NOW VIEWING</small><b id="menu-showcase-location">AURORA BAY</b></span><div class="showcase-dots" aria-label="World regions"><button class="showcase-dot active" data-showcase-index="0" type="button" aria-label="Aurora Bay"></button><button class="showcase-dot" data-showcase-index="1" type="button" aria-label="Pinewatch Village"></button><button class="showcase-dot" data-showcase-index="2" type="button" aria-label="Northstar Outpost"></button><button class="showcase-dot" data-showcase-index="3" type="button" aria-label="Redwood Valley"></button><button class="showcase-dot" data-showcase-index="4" type="button" aria-label="Lake Aurora"></button><button class="showcase-dot" data-showcase-index="5" type="button" aria-label="Cinder Flats"></button><button class="showcase-dot" data-showcase-index="6" type="button" aria-label="Eastgate"></button><button class="showcase-dot" data-showcase-index="7" type="button" aria-label="Southern Crossroads"></button></div><span class="showcase-range"><small>CAMERA</small><b>FREE LOOK</b></span></div>
+                <div class="start-menu-actions">
+                  <button class="start-action continue" id="menu-continue-button" type="button"><span class="start-action-icon">↻</span><span><b>CONTINUE</b><small id="menu-latest-save">NO LOCAL SAVE // PLAY TO START A PROFILE</small></span><i>↗</i></button>
+                  <button class="start-action play" id="menu-play-button" type="button"><span class="start-action-icon">▶</span><span><b>PLAY</b><small>CHOOSE A SAVE OR START A NEW RUN</small></span><i>↗</i></button>
+                  <button class="start-settings-button" id="menu-settings-button" type="button"><span>⚙</span><b>SETTINGS</b><small>OPTIONS // CONTROLS</small><i>↗</i></button>
+                </div>
+                <div class="start-menu-footer"><span><i class="pulse-dot"></i> NO BRANDS. NO BOUNDARIES.</span><span>AURORA BAY // <b>08 REGIONS</b></span></div>
+              </section>
+
+              <section class="menu-page" data-menu-content="market">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY MARKET</span><h2>CHOOSE YOUR <b>LINE.</b></h2></div><span class="menu-page-note">DELIVERY UNLOCKS // LOGO-FREE</span></div>
+                <p class="menu-page-intro">Complete courier work to unlock new silhouettes, then buy or select them for every district. Every car is detailed, unbranded, and ready for the open world.</p>
+                <div class="market-toolbar"><span><b id="market-owned-count">1</b> / 8 GARAGE SLOTS FILLED</span><span>DELIVERIES <b id="market-deliveries">0</b> <small id="market-next-unlock">2 MORE // METRO HATCH</small></span><span>AVAILABLE <b id="market-cash">$420</b></span></div>
+                <div class="market-grid" id="market-grid"></div>
+              </section>
+
+              <section class="menu-page" data-menu-content="garage">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> GARAGE // BUILD SHEET</span><h2>MAKE IT <b>YOURS.</b></h2></div><span class="menu-page-note">AUTO-SAVE ENABLED</span></div>
+                <div class="menu-garage-identity"><div><span id="menu-garage-class">RWD / SPORT COUPE</span><strong id="menu-garage-name">MIDNIGHT GT</strong><small>Current vehicle // selected for free roam</small></div><div class="menu-garage-finance"><div><small>AVAILABLE FUNDS</small><b id="menu-garage-cash">$420</b></div><div class="menu-condition-block"><small>CONDITION <b id="menu-condition-percent">100%</b></small><i><em id="menu-condition-fill" style="width:100%"></em></i><button data-repair-action type="button">REPAIR <span data-repair-cost>READY</span></button><button class="recovery-action" data-revive-action hidden type="button">REVIVE <span data-revive-cost>$1,100</span></button><small class="recovery-copy">Water recovery costs half of vehicle value.</small><small class="damage-count-copy" data-damage-count>0 IMPACT MARKS</small></div></div></div>
+                <div class="owned-fleet-heading"><span>YOUR FLEET</span><small>SCROLL TO SELECT // <b id="owned-fleet-count">1</b> OWNED</small><div><button class="owned-fleet-nav" id="garage-prev" type="button" aria-label="Previous owned car">‹</button><button class="owned-fleet-nav" id="garage-next" type="button" aria-label="Next owned car">›</button></div></div>
+                <div class="owned-car-carousel" id="owned-car-carousel"></div>
+                <div class="menu-section-heading"><span>BODY SHOP // RESPRAY</span><small>SELECT FINISH</small></div>
+                <div class="paint-swatches menu-paints" data-paint-group>
+                  <button class="paint-swatch active" data-paint="#303fca" type="button"><i style="--paint:#303fca"></i><span>MIDNIGHT</span></button><button class="paint-swatch" data-paint="#d85062" type="button"><i style="--paint:#d85062"></i><span>SIGNAL</span></button><button class="paint-swatch" data-paint="#d6fa6a" type="button"><i style="--paint:#d6fa6a"></i><span>ACID</span></button><button class="paint-swatch" data-paint="#5ce3d1" type="button"><i style="--paint:#5ce3d1"></i><span>AQUA</span></button><button class="paint-swatch" data-paint="#f0e6cf" type="button"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button><button class="paint-swatch" data-paint="#141a24" type="button"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
+                </div>
+                <div class="menu-section-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS // 3 LEVELS</small></div>
+                <div class="upgrade-list menu-upgrade-list">
+                  <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+
+                  <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and road stability</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
+
+                  <button class="upgrade-card" data-upgrade="brakes" type="button"><span class="upgrade-icon">◈</span><span class="upgrade-copy"><b>BRAKE BIAS</b><small>Shorter stopping distance</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$220</small></span></button>
+                </div>
+                <div class="menu-garage-note"><span class="pulse-dot"></span> Paint changes are free. Performance modules use your Aurora Bay balance.</div>
+                <section class="property-section" aria-labelledby="property-heading">
+                  <div class="menu-section-heading"><span id="property-heading">SAFEHOUSES // PROPERTIES</span><small>BUY // OWN // SELECT SPAWN</small></div>
+                  <p class="property-intro">Your selected home is where every new run and vehicle reset begins. The Pinewatch shack is free; purchased homes are saved locally, including a gated waterfront mansion in Aurora Bay.</p>
+                  <div class="property-grid" id="property-grid"></div>
+                </section>
+              </section>
+
+              <section class="menu-page" data-menu-content="settings">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> SYSTEM CONFIGURATION</span><h2>SETTINGS <b>//</b> CONTROL.</h2></div><span class="menu-page-note">BUILD 275BC9C</span></div>
+                <div class="settings-list">
+                  <div class="settings-row"><div><b>AUDIO MIX</b><small>Engine, ambience, impacts, and menu UI</small></div><button class="settings-action" id="menu-settings-sound" type="button">ON</button></div>
+                  <div class="settings-row"><div><b>RENDER QUALITY</b><small>Shadows, pixel density, and lighting detail</small></div><button class="settings-action" id="menu-settings-quality" type="button">HIGH</button></div>
+                  <div class="settings-row"><div><b>TOUCH CONTROLS</b><small>Show mobile driving controls on touch devices</small></div><button class="settings-action static" type="button">AUTO</button></div>
+                  <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, cars, upgrades, routes, and safehouses</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
+                </div>
+                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>V</b> DELIVERY</span><span><b>P</b> PHONE</span><span><b>G</b> GARAGE</span></div></div>
+              </section>
+            </main>
+          </div>
+          <footer class="menu-footer"><span><span class="keycap">ENTER</span> SELECT</span><span><span class="keycap">ESC</span> BACK</span><span class="menu-footer-center">NO BRANDS. NO BOUNDARIES. JUST THE LINE.</span><span>NEONLINE // AURORA BAY</span></footer>
+        </div>
+      </section>
+
+      <section class="garage-overlay" id="garage-overlay" aria-hidden="true">
+        <div class="garage-card glass-panel">
+          <div class="garage-header"><div><span class="eyebrow"><span class="eyebrow-dot"></span> GARAGE // AURORA BAY</span><h2>MIDNIGHT <b>GT</b></h2></div><button class="garage-close" id="garage-close" type="button" aria-label="Close garage">×</button></div>
+          <div class="garage-vehicle-row">
+            <div class="garage-car-art"><div class="garage-car-glow"></div><div class="garage-car-body"><i></i><b></b><em></em></div><div class="garage-wheel wheel-a"></div><div class="garage-wheel wheel-b"></div></div>
+            <div class="garage-specs"><span>RWD / SPORT COUPE</span><strong>BLUE HOUR SPEC</strong><small>Build your line. Make the city yours.</small><div class="garage-balance"><span>AVAILABLE FUNDS</span><b id="garage-cash">$420</b></div><div class="garage-condition"><div><span>CONDITION</span><b>100%</b></div><i><em style="width:100%"></em></i><button data-repair-action type="button">REPAIR <span data-repair-cost>READY</span></button><button class="recovery-action" data-revive-action hidden type="button">REVIVE <span data-revive-cost>$1,100</span></button><small class="recovery-copy">Water recovery costs half of vehicle value.</small><small class="damage-count-copy" data-damage-count>0 IMPACT MARKS</small></div></div>
+          </div>
+          <div class="respray-heading"><span>BODY SHOP // RESPRAY</span><small>SELECT FINISH</small></div>
+          <div class="paint-swatches" data-paint-group>
+            <button class="paint-swatch active" data-paint="#303fca" type="button" aria-label="Midnight blue paint"><i style="--paint:#303fca"></i><span>MIDNIGHT</span></button>
+            <button class="paint-swatch" data-paint="#d85062" type="button" aria-label="Signal red paint"><i style="--paint:#d85062"></i><span>SIGNAL</span></button>
+            <button class="paint-swatch" data-paint="#d6fa6a" type="button" aria-label="Acid lime paint"><i style="--paint:#d6fa6a"></i><span>ACID</span></button>
+            <button class="paint-swatch" data-paint="#5ce3d1" type="button" aria-label="Aqua paint"><i style="--paint:#5ce3d1"></i><span>AQUA</span></button>
+            <button class="paint-swatch" data-paint="#f0e6cf" type="button" aria-label="Pearl paint"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button>
+            <button class="paint-swatch" data-paint="#141a24" type="button" aria-label="Obsidian paint"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
+          </div>
+          <div class="upgrade-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS / 3 LEVELS</small></div>
+          <div class="upgrade-list">
+            <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+
+            <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and road stability</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
+
+            <button class="upgrade-card" data-upgrade="brakes" type="button"><span class="upgrade-icon">◈</span><span class="upgrade-copy"><b>BRAKE BIAS</b><small>Shorter stopping distance</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$220</small></span></button>
+          </div>
+          <div class="garage-footer"><span><span class="keycap">G</span> GARAGE</span><span><span class="keycap">ESC</span> CLOSE</span><span class="garage-save">AUTO-SAVED TO RUN</span></div>
+        </div>
+      </section>
+
+      <div class="mobile-controls" id="mobile-controls" aria-label="Touch driving controls">
+        <div class="mobile-steer" id="mobile-steer"><span class="steer-ring"></span><span class="steer-knob" id="steer-knob"></span></div>
+        <div class="mobile-action-cluster"><button class="mobile-action gas" id="mobile-gas" type="button">▲<small>GO</small></button><button class="mobile-action brake" id="mobile-brake" type="button">▼<small>BRAKE</small></button><button class="mobile-action handbrake" id="mobile-handbrake" type="button">◼<small>HANDBRAKE</small></button></div>
+        <button class="mobile-phone" id="mobile-phone" type="button" aria-label="Open phone"><span>✆</span><b class="phone-unread-badge" id="mobile-phone-unread-badge" hidden>0</b><small>PHONE</small></button>
+        <button class="mobile-pause" id="mobile-pause" type="button">Ⅱ</button>
+      </div>
+
+      <div class="loading-screen" id="loading-screen">
+        <div class="loading-brand">NEON<span>LINE</span></div>
+        <div class="loading-line"><span id="loading-fill"></span></div>
+        <div class="loading-copy"><span>LOADING BLENDER ASSETS</span><b id="loading-percent">00%</b></div>
+      </div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
