@@ -20,7 +20,25 @@ const roadAxes = [-66, -22, 22, 66];
 const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
 const CITY_LIMIT = 116;
-const WORLD_LIMIT = 250;
+const WORLD_LIMIT = 5000;
+const WORLD_SECTOR_SIZE = 500;
+const WORLD_STREAM_RADIUS = 1;
+const worldRegions = [
+  { name: 'AURORA BAY', x: 0, z: 0, type: 'city', color: '#d6fa6a' },
+  { name: 'PINEWATCH VILLAGE', x: 136, z: 68, type: 'mountain', color: '#ff9d50' },
+  { name: 'NORTHSTAR OUTPOST', x: 400, z: 2050, type: 'highlands', color: '#d6fa6a' },
+  { name: 'REDWOOD VALLEY', x: -1750, z: 1750, type: 'forest', color: '#5ce3d1' },
+  { name: 'LAKE AURORA', x: -2200, z: -1450, type: 'lake', color: '#5ce3d1' },
+  { name: 'CINDER FLATS', x: 2300, z: -1850, type: 'desert', color: '#ff9d50' },
+  { name: 'EASTGATE', x: 2800, z: 500, type: 'industrial', color: '#ff5b9c' },
+  { name: 'SOUTHERN CROSSROADS', x: 500, z: -2800, type: 'rural', color: '#d6fa6a' },
+];
+const regionalRoutes = [
+  { name: 'NORTHSTAR HIGHWAY', speedLimit: 80, points: [[-2100, -4800], [-2100, -2500], [-1500, -1100], [0, 0], [350, 850], [400, 2050], [2050, 2050], [3500, 4800]] },
+  { name: 'WESTERN LAKE ROAD', speedLimit: 70, points: [[-4800, -2100], [-3100, -1900], [-2200, -1450], [-1100, -1050], [0, -900], [1700, -1100], [4800, -1500]] },
+  { name: 'EASTGATE CONNECTOR', speedLimit: 75, points: [[-4800, 2000], [-2700, 1880], [-1750, 1750], [0, 1220], [1700, 1380], [2800, 500], [4800, 0]] },
+  { name: 'SOUTHERN FREIGHTWAY', speedLimit: 80, points: [[-4200, -3800], [-2300, -3200], [500, -2800], [2300, -1850], [4200, -2500]] },
+];
 const mountainRoadPoints = [
   new THREE.Vector3(66, .08, 108),
   new THREE.Vector3(70, .22, 125),
@@ -87,6 +105,12 @@ world.add(fallbackBase);
 const mountainExpansion = new THREE.Group();
 mountainExpansion.name = 'Blender-authored mountain pass and village extension';
 world.add(mountainExpansion);
+const regionalRoadGroup = new THREE.Group();
+regionalRoadGroup.name = 'Streamed 10km regional highway network';
+world.add(regionalRoadGroup);
+const streamedWorld = new THREE.Group();
+streamedWorld.name = 'Streamed rural world sectors';
+world.add(streamedWorld);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
@@ -112,6 +136,11 @@ const mats = {
   water: new THREE.MeshStandardMaterial({ color: 0x0b3946, roughness: .28, metalness: .42, emissive: 0x031a24, emissiveIntensity: .55 }),
   waterLine: new THREE.MeshBasicMaterial({ color: 0x35a8ae, transparent: true, opacity: .33 }),
   mountainGround: new THREE.MeshStandardMaterial({ color: 0x1b2929, roughness: 1 }),
+  forestGround: new THREE.MeshStandardMaterial({ color: 0x18342b, roughness: 1 }),
+  lakeGround: new THREE.MeshStandardMaterial({ color: 0x153039, roughness: .96 }),
+  desertGround: new THREE.MeshStandardMaterial({ color: 0x4b3b2c, roughness: 1 }),
+  industrialGround: new THREE.MeshStandardMaterial({ color: 0x26313a, roughness: .96 }),
+  ruralGround: new THREE.MeshStandardMaterial({ color: 0x304334, roughness: 1 }),
   mountainRock: new THREE.MeshStandardMaterial({ color: 0x26353a, roughness: .96, flatShading: true }),
   mountainRockLit: new THREE.MeshStandardMaterial({ color: 0x3c4c4b, roughness: .92, flatShading: true }),
   mountainRoad: new THREE.MeshStandardMaterial({ color: 0x1a242c, roughness: .9, metalness: .08 }),
@@ -132,7 +161,9 @@ const mats = {
 const staticObstacles = [];
 
 function addObstacle(x, z, halfX, halfZ, type = 'building', object = null, breakable = false) {
-  staticObstacles.push({ x, z, halfX, halfZ, type, object, breakable, broken: false });
+  const obstacle = { x, z, halfX, halfZ, type, object, breakable, broken: false };
+  staticObstacles.push(obstacle);
+  return obstacle;
 }
 
 function addMesh(parent, geometry, material, position = [0, 0, 0], options = {}) {
@@ -828,8 +859,64 @@ function createMountainTraffic() {
   });
 }
 
+function regionalTrafficPosition(vehicle) {
+  const sample = sampleRegionalRoute(vehicle.routeIndex, vehicle.progress);
+  return {
+    sample,
+    position: sample.position.clone().addScaledVector(sample.normal, vehicle.direction * vehicle.laneSide * 2.55),
+    heading: Math.atan2(sample.tangent.x * vehicle.direction, sample.tangent.z * vehicle.direction),
+  };
+}
+
+function respawnRegionalTrafficVehicle(vehicle) {
+  vehicle.turnCount += 1;
+  vehicle.progress = .03 + randomFrom(vehicle.routeSeed + vehicle.turnCount * 2.8) * .94;
+  vehicle.direction = randomFrom(vehicle.routeSeed + vehicle.turnCount * 3.7) > .5 ? 1 : -1;
+  vehicle.currentSpeed = vehicle.cruiseSpeed;
+  vehicle.health = 100;
+  vehicle.disabledTimer = 0;
+  vehicle.hazardTimer = 0;
+  vehicle.incidentCooldown = 1.2;
+  const pose = regionalTrafficPosition(vehicle);
+  vehicle.mesh.position.copy(pose.position);
+  vehicle.mesh.rotation.y = pose.heading;
+}
+
+function createRegionalTraffic() {
+  const colors = [0xa94d59, 0x9b7652, 0x577d96, 0x6d6b9b, 0x547c73, 0x918d57, 0x844f78, 0x6c8d99];
+  const styles = ['hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'supercar', 'hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'hatch'];
+  styles.forEach((style, index) => {
+    const car = createCar(colors[index % colors.length], index % 2 ? 0x5ce3d1 : 0xff9d50, false, style);
+    car.scale.multiplyScalar(.74);
+    actors.add(car);
+    const vehicle = {
+      mesh: car,
+      routeIndex: index % regionalRoutes.length,
+      progress: .04 + (index % 8) * .11,
+      direction: index % 2 === 0 ? 1 : -1,
+      laneSide: 1,
+      cruiseSpeed: 12 + randomFrom(index + 760) * 6,
+      currentSpeed: 13,
+      health: 100,
+      disabledTimer: 0,
+      hazardTimer: 0,
+      incidentCooldown: 0,
+      laneChanging: null,
+      turning: null,
+      stopWait: 0,
+      routeSeed: index * 17.9 + 220,
+      turnCount: 0,
+    };
+    const pose = regionalTrafficPosition(vehicle);
+    car.position.copy(pose.position);
+    car.rotation.y = pose.heading;
+    regionalTraffic.push(vehicle);
+  });
+}
+
 const traffic = [];
 const mountainTraffic = [];
+const regionalTraffic = [];
 const gltfLoader = new GLTFLoader();
 
 function prepareImportedModel(root) {
@@ -928,7 +1015,7 @@ async function loadBlenderAssets() {
     const result = results[index + 2];
     if (result.status === 'fulfilled') {
       fleetAssetScenes[style] = result.value.scene;
-      traffic.filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
+      [...traffic, ...mountainTraffic, ...regionalTraffic].filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
         replaceVehicleVisual(vehicle.mesh, result.value.scene, .78);
       });
     } else {
@@ -988,6 +1075,42 @@ function buildMenuGarage() {
 
 let mountainRoadCumulative = [];
 let mountainRoadLength = 0;
+let regionalRouteMetrics = [];
+
+function initializeRegionalRouteMetrics() {
+  regionalRouteMetrics = regionalRoutes.map((route) => {
+    const cumulative = [0];
+    let length = 0;
+    for (let index = 1; index < route.points.length; index += 1) {
+      const [startX, startZ] = route.points[index - 1];
+      const [endX, endZ] = route.points[index];
+      length += Math.hypot(endX - startX, endZ - startZ);
+      cumulative.push(length);
+    }
+    return { length, cumulative };
+  });
+}
+
+function sampleRegionalRoute(routeIndex, progress) {
+  const route = regionalRoutes[routeIndex];
+  const metrics = regionalRouteMetrics[routeIndex];
+  const distance = clamp(progress, 0, 1) * metrics.length;
+  let segment = metrics.cumulative.length - 2;
+  for (let index = 1; index < metrics.cumulative.length; index += 1) {
+    if (distance <= metrics.cumulative[index]) {
+      segment = index - 1;
+      break;
+    }
+  }
+  const [startX, startZ] = route.points[segment];
+  const [endX, endZ] = route.points[segment + 1] || route.points[segment];
+  const segmentLength = Math.max(.001, metrics.cumulative[segment + 1] - metrics.cumulative[segment]);
+  const amount = clamp((distance - metrics.cumulative[segment]) / segmentLength, 0, 1);
+  const position = new THREE.Vector3(lerp(startX, endX, amount), .04, lerp(startZ, endZ, amount));
+  const tangent = new THREE.Vector3(endX - startX, 0, endZ - startZ).normalize();
+  const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+  return { position, tangent, normal };
+}
 
 function initializeMountainRoadMetrics() {
   mountainRoadCumulative = [0];
@@ -1051,7 +1174,7 @@ function isOnMountainRoad(x, z) {
   return nearestMountainRoadPoint(x, z).distance < 6.2;
 }
 
-function addMountainPathRibbon(points, width, material, yLift = .02) {
+function addMountainPathRibbon(points, width, material, yLift = .02, parent = mountainExpansion) {
   const vertices = [];
   const indices = [];
   points.forEach((point, index) => {
@@ -1071,7 +1194,7 @@ function addMountainPathRibbon(points, width, material, yLift = .02) {
   geometry.computeVertexNormals();
   const ribbon = new THREE.Mesh(geometry, material);
   ribbon.receiveShadow = true;
-  mountainExpansion.add(ribbon);
+  parent.add(ribbon);
   return ribbon;
 }
 
@@ -1172,6 +1295,183 @@ function buildMountainWorld() {
   createMountainTraffic();
 }
 
+const worldSectorRegistry = new Map();
+let lastStreamSectorKey = '';
+
+function regionalRouteVector(route) {
+  return route.points.map(([x, z]) => new THREE.Vector3(x, .04, z));
+}
+
+function nearestRegionalRoadPoint(x, z) {
+  let nearest = { distance: Infinity, height: .02, route: null };
+  regionalRoutes.forEach((route) => {
+    const points = route.points;
+    for (let index = 1; index < points.length; index += 1) {
+      const [startX, startZ] = points[index - 1];
+      const [endX, endZ] = points[index];
+      const dx = endX - startX;
+      const dz = endZ - startZ;
+      const lengthSq = dx * dx + dz * dz || 1;
+      const amount = clamp(((x - startX) * dx + (z - startZ) * dz) / lengthSq, 0, 1);
+      const pointX = startX + dx * amount;
+      const pointZ = startZ + dz * amount;
+      const distance = Math.hypot(x - pointX, z - pointZ);
+      if (distance < nearest.distance) nearest = { distance, height: .04, route };
+    }
+  });
+  return nearest;
+}
+
+function isOnRegionalRoad(x, z) {
+  return nearestRegionalRoadPoint(x, z).distance < 7.5;
+}
+
+function addRegionalRoadNetwork() {
+  initializeRegionalRouteMetrics();
+  regionalRoutes.forEach((route) => {
+    const points = regionalRouteVector(route);
+    addMountainPathRibbon(points, 14.2, mats.mountainShoulder, 0, regionalRoadGroup);
+    addMountainPathRibbon(points, 11.4, mats.mountainRoad, .05, regionalRoadGroup);
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+      const length = segment.length();
+      const heading = Math.atan2(segment.x, segment.z);
+      const tangent = segment.normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      for (let distance = 6; distance < length - 3; distance += 18) {
+        const center = start.clone().lerp(end, distance / length);
+        center.y = .11;
+        addMesh(regionalRoadGroup, new THREE.BoxGeometry(.18, .03, 8), mats.laneYellow, center, { rotation: [0, heading, 0] });
+      }
+      [-1, 1].forEach((side) => {
+        const edge = start.clone().lerp(end, .5).addScaledVector(normal, side * 5.15);
+        edge.y = .11;
+        addMesh(regionalRoadGroup, new THREE.BoxGeometry(.09, .035, length), mats.lane, edge, { rotation: [0, heading, 0] });
+      });
+    }
+    const signSegment = Math.min(2, points.length - 2);
+    const signStart = points[signSegment];
+    const signEnd = points[signSegment + 1];
+    const signTangent = new THREE.Vector3(signEnd.x - signStart.x, 0, signEnd.z - signStart.z).normalize();
+    const signNormal = new THREE.Vector3(signTangent.z, 0, -signTangent.x);
+    const signPoint = signStart.clone().lerp(signEnd, .42).addScaledVector(signNormal, 8.1);
+    createSpeedSign(signPoint.x, signPoint.z, route.speedLimit, Math.atan2(signTangent.x, signTangent.z));
+  });
+  worldRegions.filter((region) => region.type !== 'city' && region.type !== 'mountain').forEach((region) => {
+    const label = makeLabel(region.name, region.color, .62);
+    label.position.set(region.x, 7, region.z);
+    regionalRoadGroup.add(label);
+  });
+}
+
+function worldSectorIndices(x, z) {
+  return { x: Math.floor(x / WORLD_SECTOR_SIZE), z: Math.floor(z / WORLD_SECTOR_SIZE) };
+}
+
+function worldSectorKey(x, z) {
+  return `${x}:${z}`;
+}
+
+function worldRegionNear(x, z) {
+  return worldRegions.reduce((nearest, region) => {
+    const distance = Math.hypot(region.x - x, region.z - z);
+    return distance < nearest.distance ? { region, distance } : nearest;
+  }, { region: worldRegions[0], distance: Infinity }).region;
+}
+
+function sectorGroundMaterial(type) {
+  if (type === 'city') return mats.ground;
+  if (type === 'forest') return mats.forestGround;
+  if (type === 'lake') return mats.lakeGround;
+  if (type === 'desert') return mats.desertGround;
+  if (type === 'industrial') return mats.industrialGround;
+  if (type === 'rural' || type === 'highlands') return mats.ruralGround;
+  return mats.mountainGround;
+}
+
+function addSectorTree(group, x, z, scale, seed) {
+  addMesh(group, new THREE.CylinderGeometry(.16, .25, 1.45, 7), mats.treeTrunk, [x, .72, z], { castShadow: true });
+  const material = randomFrom(seed) > .5 ? mats.treeLeaf : mats.treeLeafDark;
+  addMesh(group, new THREE.IcosahedronGeometry(1.1, 1), material, [x, 1.95, z], { scale: [scale, scale, scale], castShadow: true });
+}
+
+function addSectorStructure(group, sector, x, z, width, depth, height, seed) {
+  const material = sector.region.type === 'industrial' ? mats.asphaltEdge : sector.region.type === 'desert' ? mats.cabinWood : mats.mountainRockLit;
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), material, [x, height / 2, z], { castShadow: true, receiveShadow: true });
+  if (sector.region.type !== 'industrial') {
+    addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .7, height * .45, 4), mats.cabinRoof, [x, height + height * .2, z], { rotation: [0, Math.PI / 4, 0], castShadow: true });
+  } else {
+    addMesh(group, new THREE.BoxGeometry(width * .55, .08, depth * .08), mats.lamp, [x, height * .7, z + depth / 2 + .04]);
+  }
+  const obstacle = addObstacle(sector.centerX + x, sector.centerZ + z, width / 2 + .5, depth / 2 + .5, `${sector.region.type}-structure`);
+  obstacle.sectorKey = sector.key;
+  sector.obstacles.push(obstacle);
+}
+
+function createWorldSector(sectorX, sectorZ) {
+  const key = worldSectorKey(sectorX, sectorZ);
+  const centerX = (sectorX + .5) * WORLD_SECTOR_SIZE;
+  const centerZ = (sectorZ + .5) * WORLD_SECTOR_SIZE;
+  const region = worldRegionNear(centerX, centerZ);
+  const group = new THREE.Group();
+  group.name = `World sector ${key} // ${region.name}`;
+  group.position.set(centerX, 0, centerZ);
+  const sector = { key, group, centerX, centerZ, region, obstacles: [] };
+  addMesh(group, new THREE.PlaneGeometry(WORLD_SECTOR_SIZE, WORLD_SECTOR_SIZE), sectorGroundMaterial(region.type), [0, -.28, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  const seed = Math.abs(sectorX * 92821 + sectorZ * 68917) + 31;
+  const propCount = region.type === 'forest' ? 28 : region.type === 'desert' ? 17 : 12;
+  for (let index = 0; index < propCount; index += 1) {
+    const localX = -235 + randomFrom(seed + index * 3.7) * 470;
+    const localZ = -235 + randomFrom(seed + index * 5.1) * 470;
+    const worldX = centerX + localX;
+    const worldZ = centerZ + localZ;
+    if (isOnRegionalRoad(worldX, worldZ) || isOnMountainRoad(worldX, worldZ) || (Math.abs(worldX) < 170 && Math.abs(worldZ) < 170)) continue;
+    if (region.type === 'forest' || (region.type === 'highlands' && index % 3 !== 0)) {
+      addSectorTree(group, localX, localZ, .75 + randomFrom(seed + index + 70) * .55, seed + index);
+    } else if (region.type === 'lake' && index % 3 === 0) {
+      addMesh(group, new THREE.CylinderGeometry(2.5, 3.2, .12, 12), mats.water, [localX, -.1, localZ], { receiveShadow: true });
+    } else {
+      addSectorStructure(group, sector, localX, localZ, 8 + randomFrom(seed + index + 80) * 10, 7 + randomFrom(seed + index + 90) * 8, 3 + randomFrom(seed + index + 100) * 7, seed + index);
+    }
+  }
+  streamedWorld.add(group);
+  worldSectorRegistry.set(key, sector);
+  return sector;
+}
+
+function unloadWorldSector(sector) {
+  sector.obstacles.forEach((obstacle) => {
+    const index = staticObstacles.indexOf(obstacle);
+    if (index >= 0) staticObstacles.splice(index, 1);
+  });
+  streamedWorld.remove(sector.group);
+  sector.group.traverse((object) => {
+    if (object.geometry?.dispose) object.geometry.dispose();
+  });
+  worldSectorRegistry.delete(sector.key);
+}
+
+function updateWorldStreaming(force = false) {
+  const indices = worldSectorIndices(player.position.x, player.position.z);
+  const centerKey = worldSectorKey(indices.x, indices.z);
+  if (!force && centerKey === lastStreamSectorKey) return;
+  lastStreamSectorKey = centerKey;
+  const needed = new Set();
+  for (let x = indices.x - WORLD_STREAM_RADIUS; x <= indices.x + WORLD_STREAM_RADIUS; x += 1) {
+    for (let z = indices.z - WORLD_STREAM_RADIUS; z <= indices.z + WORLD_STREAM_RADIUS; z += 1) {
+      if (Math.abs((x + .5) * WORLD_SECTOR_SIZE) > WORLD_LIMIT || Math.abs((z + .5) * WORLD_SECTOR_SIZE) > WORLD_LIMIT) continue;
+      const key = worldSectorKey(x, z);
+      needed.add(key);
+      if (!worldSectorRegistry.has(key)) createWorldSector(x, z);
+    }
+  }
+  [...worldSectorRegistry.values()].forEach((sector) => {
+    if (!needed.has(sector.key)) unloadWorldSector(sector);
+  });
+}
+
 function buildWorld() {
   buildSky();
   buildGroundAndWater();
@@ -1182,6 +1482,8 @@ function buildWorld() {
   buildRoadInfrastructure();
   createTraffic();
   buildMountainWorld();
+  addRegionalRoadNetwork();
+  createRegionalTraffic();
 }
 
 const player = {
@@ -2555,11 +2857,20 @@ function showToast(title, copy, reward) {
 
 function isOnRoad(x, z) {
   const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
-  return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnMountainRoad(x, z);
+  return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnMountainRoad(x, z) || isOnRegionalRoad(x, z);
+}
+
+function getRoadHeightAt(x, z) {
+  if (isOnMountainRoad(x, z)) return mountainRoadHeightAt(x, z) + .06;
+  const regionalRoad = nearestRegionalRoadPoint(x, z);
+  if (regionalRoad.distance < 7.5) return regionalRoad.height + .06;
+  return .02;
 }
 
 function getSpeedLimit(x, z) {
   if (isOnMountainRoad(x, z)) return 35;
+  const regionalRoad = nearestRegionalRoadPoint(x, z);
+  if (regionalRoad.distance < 7.5 && regionalRoad.route) return regionalRoad.route.speedLimit;
   return z < -72 ? 35 : 45;
 }
 
@@ -2690,7 +3001,7 @@ function resolveStaticCollisions(impactSpeed = 0) {
 
 function resolveTrafficCollisions(impactSpeed = 0) {
   const radius = 3.0;
-  for (const vehicle of [...traffic, ...mountainTraffic]) {
+  for (const vehicle of [...traffic, ...mountainTraffic, ...regionalTraffic]) {
     const dx = player.position.x - vehicle.mesh.position.x;
     const dz = player.position.z - vehicle.mesh.position.z;
     const distanceSq = dx * dx + dz * dz;
@@ -2718,6 +3029,8 @@ function resolveTrafficCollisions(impactSpeed = 0) {
 function districtAt(x, z) {
   if (Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z) < 25) return 'PINEWATCH VILLAGE';
   if (isOnMountainRoad(x, z)) return 'MOUNTAIN PASS';
+  const region = worldRegionNear(x, z);
+  if (Math.hypot(region.x - x, region.z - z) < 520 && region.type !== 'city') return region.name;
   if (z > 108 || x > 116 || x < -116) return 'OUTER RIDGE';
   if (z < -72) return 'WATERFRONT LOOP';
   if (x > 44 && z < 15) return 'NEON DISTRICT';
@@ -2785,7 +3098,7 @@ function updatePlayer(dt) {
   const movement = forward.clone().multiplyScalar(player.speed * dt);
   const previousPosition = player.position.clone();
   player.position.add(movement);
-  player.position.y = isOnMountainRoad(player.position.x, player.position.z) ? mountainRoadHeightAt(player.position.x, player.position.z) + .06 : .02;
+  player.position.y = isOnRoad(player.position.x, player.position.z) ? getRoadHeightAt(player.position.x, player.position.z) : .02;
   player.distance += Math.abs(player.speed * dt);
   updateTrafficRules(previousPosition, dt, onRoad);
   const impactSpeed = Math.abs(player.speed);
@@ -3188,6 +3501,60 @@ function updateMountainTraffic(dt) {
   }
 }
 
+function updateRegionalTraffic(dt) {
+  for (const vehicle of regionalTraffic) {
+    vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
+    vehicle.hazardTimer = Math.max(0, vehicle.hazardTimer - dt);
+    if (vehicle.disabledTimer > 0) {
+      vehicle.disabledTimer = Math.max(0, vehicle.disabledTimer - dt);
+      vehicle.currentSpeed = 0;
+      setBrakeLights(vehicle.mesh, true);
+      updateTrafficVehicleIndicators(vehicle);
+      if (vehicle.disabledTimer <= 0) respawnRegionalTrafficVehicle(vehicle);
+      continue;
+    }
+    vehicle.currentSpeed = damp(vehicle.currentSpeed, vehicle.cruiseSpeed, 2.1, dt);
+    const routeLength = regionalRouteMetrics[vehicle.routeIndex]?.length || 1;
+    vehicle.progress += vehicle.direction * vehicle.currentSpeed * dt / routeLength;
+    if (vehicle.progress > .995) vehicle.progress = .025;
+    if (vehicle.progress < .025) vehicle.progress = .995;
+    const pose = regionalTrafficPosition(vehicle);
+    vehicle.mesh.position.copy(pose.position);
+    vehicle.mesh.rotation.y = pose.heading;
+    updateTrafficVehicleIndicators(vehicle);
+    setBrakeLights(vehicle.mesh, vehicle.currentSpeed < .8);
+    const wheelSpin = vehicle.currentSpeed * dt * .8;
+    vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
+    vehicle.mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
+  }
+}
+
+function resolveRegionalTrafficCollisions() {
+  for (let first = 0; first < regionalTraffic.length; first += 1) {
+    const a = regionalTraffic[first];
+    if (a.disabledTimer > 0 || a.incidentCooldown > 0) continue;
+    for (let second = first + 1; second < regionalTraffic.length; second += 1) {
+      const b = regionalTraffic[second];
+      if (b.disabledTimer > 0 || b.incidentCooldown > 0 || a.routeIndex !== b.routeIndex) continue;
+      const dx = a.mesh.position.x - b.mesh.position.x;
+      const dz = a.mesh.position.z - b.mesh.position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq >= 2.65 * 2.65) continue;
+      const distance = Math.sqrt(distanceSq) || 1;
+      const relativeSpeed = Math.abs(a.currentSpeed - b.currentSpeed) + (a.direction !== b.direction ? Math.min(a.currentSpeed, b.currentSpeed) : 0);
+      if (relativeSpeed < 1.2) continue;
+      const aPosition = a.mesh.position.clone();
+      const bPosition = b.mesh.position.clone();
+      a.mesh.position.x += dx / distance * .48;
+      a.mesh.position.z += dz / distance * .48;
+      b.mesh.position.x -= dx / distance * .48;
+      b.mesh.position.z -= dz / distance * .48;
+      registerTrafficIncident(a, relativeSpeed, false, bPosition);
+      registerTrafficIncident(b, relativeSpeed, false, aPosition);
+    }
+  }
+}
+
 function resolveMountainTrafficCollisions() {
   for (let first = 0; first < mountainTraffic.length; first += 1) {
     const a = mountainTraffic[first];
@@ -3332,6 +3699,17 @@ function drawMiniMap() {
   const park = worldToMap(0, 44, size); mapCtx.fillRect(park.x - 14, park.y - 12, 28, 24);
   mapCtx.fillStyle = 'rgba(115, 163, 157, .34)';
   mapCtx.fillRect(0, coastY - 2, size, 3);
+  mapCtx.strokeStyle = 'rgba(91, 124, 124, .7)';
+  mapCtx.lineWidth = 2;
+  regionalRoutes.forEach((route) => {
+    mapCtx.beginPath();
+    route.points.forEach(([x, z], index) => {
+      const mapped = worldToMap(x, z, size);
+      if (index === 0) mapCtx.moveTo(mapped.x, mapped.y);
+      else mapCtx.lineTo(mapped.x, mapped.y);
+    });
+    mapCtx.stroke();
+  });
   mapCtx.strokeStyle = '#4e554d';
   mapCtx.lineWidth = 4;
   mapCtx.beginPath();
@@ -3459,6 +3837,7 @@ function drawWorldMap() {
     ctx.stroke();
     ctx.restore();
   };
+  regionalRoutes.forEach((route) => drawRoute(regionalRouteVector(route), 'rgba(71, 90, 91, .72)', 5, []));
   drawRoute(mountainRoadPoints, 'rgba(72, 80, 72, .9)', 11, []);
   drawRoute(mountainRoadPoints, 'rgba(125, 132, 117, .86)', 7, []);
   drawRoute(mountainRoadPoints, 'rgba(215, 192, 104, .9)', 1.5, [8, 7]);
@@ -3474,6 +3853,15 @@ function drawWorldMap() {
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x, y);
   };
+  worldRegions.filter((region) => region.type !== 'city').forEach((region) => {
+    const point = worldToMap(region.x, region.z, mapSize);
+    ctx.fillStyle = region.color;
+    ctx.shadowColor = region.color;
+    ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(point.x, point.y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    drawText(region.name, point.x + 10, point.y - 9, region.color);
+  });
   drawText('NORTHSTAR AVE', worldToMap(66, 66, mapSize).x + 9, worldToMap(66, 66, mapSize).y - 12, '#b6c5b3');
   drawText('OCTANE ROW', worldToMap(-66, 22, mapSize).x + 9, worldToMap(-66, 22, mapSize).y - 12, '#b6c5b3');
   drawText('MIDTOWN EAST', worldToMap(66, -22, mapSize).x + 9, worldToMap(66, -22, mapSize).y - 12, '#b6c5b3');
@@ -3536,7 +3924,7 @@ function drawWorldMap() {
     drawText('CABIN DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
   }
 
-  [...traffic, ...mountainTraffic].forEach((vehicle) => {
+  [...traffic, ...mountainTraffic, ...regionalTraffic].forEach((vehicle) => {
     if (vehicle.health >= 100 && vehicle.disabledTimer <= 0) return;
     const point = worldToMap(vehicle.mesh.position.x, vehicle.mesh.position.z, mapSize);
     ctx.fillStyle = vehicle.disabledTimer > 0 ? '#ff5b9c' : '#ff9d50';
@@ -3619,6 +4007,7 @@ function resize() {
 window.addEventListener('resize', resize);
 
 buildWorld();
+updateWorldStreaming(true);
 buildMenuGarage();
 
 let assetsReady = false;
@@ -3635,11 +4024,14 @@ function animate(time) {
   updateGamepad();
   if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen) {
     updatePlayer(dt);
+    updateWorldStreaming();
     updateTrafficSignals(time);
     updateTraffic(dt);
     updateMountainTraffic(dt);
+    updateRegionalTraffic(dt);
     resolveTrafficVehicleCollisions();
     resolveMountainTrafficCollisions();
+    resolveRegionalTrafficCollisions();
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
     updateMountainDelivery(time, dt);

@@ -1,4 +1,4 @@
-"""Create the low-poly car and environment source assets for Neonline.
+"""Create the detailed logo-free car and modular environment source assets for Neonline.
 
 Run from the repository root with Blender 4.x:
     blender -b --python blender/create_assets.py -- --out assets
@@ -66,6 +66,13 @@ GUARDRAIL = material("Mountain guardrail", (.5, .56, .55), .72, .45)
 CABIN_WOOD = material("Pinewatch cabin wood", (.38, .24, .17), .0, .88)
 CABIN_ROOF = material("Pinewatch cabin roof", (.09, .12, .14), .05, .9)
 VILLAGE_LIGHT = material("Pinewatch window light", (1.0, .5, .18), .05, .28, (1.0, .2, .04), 4.0)
+FOREST_GROUND = material("Redwood forest ground", (.055, .18, .12), .0, 1.0)
+LAKE_GROUND = material("Lake Aurora shore", (.025, .16, .2), .28, .35, (.0, .04, .06), .65)
+DESERT_GROUND = material("Cinder Flats sand", (.28, .16, .09), .0, 1.0)
+INDUSTRIAL_GROUND = material("Eastgate industrial ground", (.11, .14, .16), .12, .92)
+RURAL_GROUND = material("Southern rural ground", (.12, .24, .13), .0, 1.0)
+REGION_ROAD = material("Regional route asphalt", (.045, .06, .07), .08, .91)
+REGION_SHOULDER = material("Regional route shoulder", (.28, .32, .3), .04, .96)
 SIGN_RED = material("Road sign red", (.55, .03, .05), .15, .34, (.24, .005, .01), 1.3)
 SIGN_WHITE = material("Road sign white", (.88, .9, .88), .12, .38)
 SIGN_GREEN = material("Traffic signal green", (.03, .48, .22), .08, .28, (.01, .2, .07), 2.5)
@@ -329,6 +336,84 @@ def make_pinewatch_cabin(name, location, width, depth, height, rotation, parent)
     return cabin
 
 
+REGIONAL_KITS = (
+    ("northstar_outpost", "NORTHSTAR OUTPOST", "highlands"),
+    ("redwood_valley", "REDWOOD VALLEY", "forest"),
+    ("lake_aurora", "LAKE AURORA", "lake"),
+    ("cinder_flats", "CINDER FLATS", "desert"),
+    ("eastgate", "EASTGATE", "industrial"),
+    ("southern_crossroads", "SOUTHERN CROSSROADS", "rural"),
+)
+
+
+def make_regional_kit(slug, display_name, biome):
+    root = bpy.data.objects.new(f"{display_name} / modular Blender region kit", None)
+    bpy.context.collection.objects.link(root)
+    ground_materials = {
+        "highlands": MOUNTAIN_GROUND,
+        "forest": FOREST_GROUND,
+        "lake": LAKE_GROUND,
+        "desert": DESERT_GROUND,
+        "industrial": INDUSTRIAL_GROUND,
+        "rural": RURAL_GROUND,
+    }
+    cube(f"{display_name} sector ground", (0, -.15, 0), (190, .2, 190), ground_materials[biome], 0, root)
+    path = [(-90, .02, -22), (-48, .04, -12), (-4, .06, 0), (42, .08, 17), (92, .1, 29)]
+    make_path_ribbon(f"{display_name} regional road shoulder", path, 14.2, REGION_SHOULDER, root)
+    make_path_ribbon(f"{display_name} regional road", path, 11.4, REGION_ROAD, root)
+    for index in range(1, len(path)):
+        start = Vector(path[index - 1])
+        end = Vector(path[index])
+        flat = Vector((end.x - start.x, 0, end.z - start.z))
+        length = max(.001, flat.length())
+        heading = math.atan2(flat.x, flat.z)
+        tangent = flat.normalized()
+        normal = Vector((tangent.z, 0, -tangent.x))
+        for distance in range(7, max(7, int(length - 3)), 16):
+            center = start.lerp(end, distance / length)
+            center.y += .11
+            cube(f"{display_name} center dash", center, (.16, .035, 7.2), SIGN_AMBER, .01, root).rotation_euler[1] = heading
+        for side in (-1, 1):
+            edge = start.lerp(end, .5) + normal * (side * 5.15)
+            edge.y += .11
+            cube(f"{display_name} edge line", edge, (.08, .035, length), SIGN_WHITE, .005, root).rotation_euler[1] = heading
+    for index in range(7):
+        x = -72 + (index * 29) % 145
+        z = -75 + ((index * 47) % 145)
+        if abs(z - x * .28) < 17:
+            z += 27
+        if biome in ("forest", "highlands", "rural"):
+            make_tree(f"{display_name} tree {index:02d}", (x, 0, z), .9 + (index % 3) * .14).parent = root
+        elif biome == "desert":
+            make_mountain_rock(f"{display_name} cinder rock {index:02d}", (x, 1.5, z), 2.4 + index % 3, 3.2 + index % 4, MOUNTAIN_ROCK, root)
+        elif biome == "lake":
+            cylinder(f"{display_name} shore marker {index:02d}", (x, .02, z), 2.3 + index % 2, .08, WATER, 12, root)
+    if biome == "lake":
+        cube(f"{display_name} water basin", (-25, -.04, 34), (92, .12, 64), WATER, 0, root)
+        cube(f"{display_name} dock", (-25, .2, -2), (6, .35, 26), CABIN_WOOD, .04, root)
+    if biome == "industrial":
+        for index, location in enumerate(((-56, 0, 45), (-18, 0, 54), (34, 0, 42), (62, 0, -46))):
+            building = make_building(f"{display_name} warehouse {index:02d}", location, 18 + index * 2, 15, 8 + index * 2, INDUSTRIAL_GROUND)
+            building.parent = root
+    elif biome in ("highlands", "forest", "rural"):
+        for index, location in enumerate(((-44, 0, 45), (34, 0, 55), (55, 0, -45))):
+            cabin = make_pinewatch_cabin(f"{display_name} cabin {index:02d}", location, 7.2, 5.1, 4.5, index * .45, root)
+            cabin.parent = root
+    elif biome == "desert":
+        for index, location in enumerate(((-42, 0, 47), (36, 0, 54), (58, 0, -46))):
+            building = make_building(f"{display_name} service depot {index:02d}", location, 15, 11, 5 + index, INDUSTRIAL_GROUND)
+            building.parent = root
+    elif biome == "lake":
+        cabin = make_pinewatch_cabin(f"{display_name} ranger cabin", (51, 0, 48), 7.4, 5.2, 4.7, -.25, root)
+        cabin.parent = root
+    make_speed_sign(f"{display_name} speed sign", (16, 0, 9)).parent = root
+    make_stop_sign(f"{display_name} stop sign", (-10, 0, -8)).parent = root
+    label = bpy.data.objects.new(f"{display_name} marker", None)
+    bpy.context.collection.objects.link(label)
+    label.parent = root
+    return root
+
+
 def make_mountain_extension(root):
     cube("mountain extension ground", (0, -.22, 50), (520, .2, 520), MOUNTAIN_GROUND, 0, root)
     points = [(66, .08, 108), (70, .22, 125), (84, .62, 139), (112, 1.5, 151),
@@ -436,8 +521,13 @@ def main():
     environment = make_environment()
     export_collection(car, os.path.join(out, "midnight_gt.glb"))
     export_collection(environment, os.path.join(out, "aurora_bay_environment.glb"))
+    region_dir = os.path.join(out, "regions")
+    os.makedirs(region_dir, exist_ok=True)
+    for slug, display_name, biome in REGIONAL_KITS:
+        kit = make_regional_kit(slug, display_name, biome)
+        export_collection(kit, os.path.join(region_dir, f"{slug}.glb"))
     export_fleet(out)
-    print(f"Created Blender assets, including {len(FLEET_PROFILES)} logo-free fleet variants, in {out}")
+    print(f"Created Blender assets, including {len(FLEET_PROFILES)} logo-free fleet variants and {len(REGIONAL_KITS)} modular region kits, in {out}")
 
 
 if __name__ == "__main__":
