@@ -18,10 +18,11 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **V** — accept a hot-cargo delivery at the active city pickup waypoint (one of three fixed underpass/alley locations)
 - **G** — open the in-game garage, repair damage, buy performance upgrades, or respray the car
 - **P / Escape** — pause, open settings, or return to the full title menu
-- **Title menu** — Play, Market (buy and select cars), Garage (respray, upgrades, and safehouses), and Settings
+- **Title menu** — an automatic world-tour slideshow with one shot per region, Continue (latest save), Play (choose among local saves or start a new slot), Market, Garage, and Settings
 - **M** — open/close the full city map; the map pauses the drive while you plan
 - **R** — reset vehicle
 - **Gamepad / touch controls** — supported on compatible devices
+- **Local saves** — Play exposes three local save slots; Continue loads the most recently updated profile
 
 ## Road consequences
 

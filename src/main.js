@@ -74,6 +74,21 @@ const HOME_CATALOG = [
   { id: 'ridge-house', name: 'RIDGE HOUSE', className: 'REMOTE HOUSE', price: 1650, style: 'ridge', location: 'NORTHSTAR OUTPOST', description: 'A quiet remote house for drivers who prefer a long view and fewer neighbors.', position: [388, 2043], spawn: [388, .02, 2050], heading: .1 },
 ];
 
+const SAVE_SLOT_COUNT = 3;
+const LEGACY_SAVE_KEY = 'neonline-aurora-save';
+const SAVE_SLOT_PREFIX = 'neonline-aurora-save-slot-';
+const LATEST_SAVE_KEY = 'neonline-aurora-latest-slot';
+const MENU_SHOWCASE_SCENES = [
+  { id: 'aurora-bay', name: 'AURORA BAY', type: 'city', copy: 'Neon boulevards, irregular blocks, and the city line after dark.', camera: [-168, 64, -186], target: [0, 8, 0] },
+  { id: 'pinewatch', name: 'PINEWATCH VILLAGE', type: 'mountain', copy: 'A quiet pass town with warm windows and a long way home.', camera: [214, 52, 137], target: [136, 18, 68] },
+  { id: 'northstar', name: 'NORTHSTAR OUTPOST', type: 'highlands', copy: 'Remote roads above the bay, where the handoff lights are few.', camera: [545, 72, 2135], target: [400, 2, 2050] },
+  { id: 'redwood', name: 'REDWOOD VALLEY', type: 'forest', copy: 'Tree cover, open highway, and the island beyond the city edge.', camera: [-1940, 82, 1925], target: [-1750, 2, 1750] },
+  { id: 'lake-aurora', name: 'LAKE AURORA', type: 'lake', copy: 'Cold water and wide horizons on the western road.', camera: [-1770, 76, -1180], target: [-2200, -1, -1450] },
+  { id: 'cinder-flats', name: 'CINDER FLATS', type: 'desert', copy: 'Dry ground, long sightlines, and a road that does not forgive noise.', camera: [2070, 75, -2090], target: [2300, 2, -1850] },
+  { id: 'eastgate', name: 'EASTGATE', type: 'industrial', copy: 'Freight lanes, hard edges, and the far side of Aurora Bay.', camera: [2540, 82, 760], target: [2800, 2, 500] },
+  { id: 'southern-crossroads', name: 'SOUTHERN CROSSROADS', type: 'rural', copy: 'A lonely junction where the island opens into the night.', camera: [245, 74, -2550], target: [500, 2, -2800] },
+];
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -2332,6 +2347,20 @@ function updateWorldStreaming(force = false) {
   });
 }
 
+const menuShowcaseSectorKeys = new Set();
+
+function ensureMenuShowcaseSectors() {
+  if (!worldBuilt) return;
+  MENU_SHOWCASE_SCENES.forEach((showcase) => {
+    [showcase.camera, showcase.target].forEach(([x, , z]) => {
+      const indices = worldSectorIndices(x, z);
+      const key = worldSectorKey(indices.x, indices.z);
+      if (!worldSectorRegistry.has(key)) createWorldSector(indices.x, indices.z);
+      menuShowcaseSectorKeys.add(key);
+    });
+  });
+}
+
 function buildWorld() {
   buildSky();
   buildGroundAndWater();
@@ -2412,6 +2441,12 @@ let gamePaused = false;
 let worldMapOpen = false;
 let starterMenuOpen = true;
 let menuPage = 'home';
+let activeSaveSlot = 1;
+let worldBuilt = false;
+let saveSelectOpen = false;
+let menuShowcaseIndex = 0;
+let menuShowcaseElapsed = 0;
+let menuShowcaseTransition = 1;
 let garageCarouselIndex = 0;
 let qualityMode = 'HIGH';
 const upgradeConfig = {
@@ -2478,9 +2513,85 @@ function registerDeliveryCompletion() {
   return newlyUnlocked;
 }
 
+function normalizeSaveSlot(slot) {
+  const value = Number(slot);
+  return Number.isInteger(value) && value >= 1 && value <= SAVE_SLOT_COUNT ? value : 1;
+}
+
+function saveSlotKey(slot) {
+  return `${SAVE_SLOT_PREFIX}${normalizeSaveSlot(slot)}`;
+}
+
+function readSaveSlot(slot) {
+  const normalized = normalizeSaveSlot(slot);
+  try {
+    const slotRaw = localStorage.getItem(saveSlotKey(normalized));
+    if (slotRaw) return JSON.parse(slotRaw);
+    // Migrate the original single-save format into slot one without deleting it.
+    if (normalized !== 1) return null;
+    const legacyRaw = localStorage.getItem(LEGACY_SAVE_KEY);
+    if (!legacyRaw) return null;
+    const legacy = JSON.parse(legacyRaw);
+    return legacy?.saveSlot && legacy.saveSlot !== 1 ? null : legacy;
+  } catch (error) {
+    console.warn('Save slot read unavailable.', error);
+    return null;
+  }
+}
+
+function latestSaveSlot() {
+  try {
+    const recorded = normalizeSaveSlot(localStorage.getItem(LATEST_SAVE_KEY));
+    if (readSaveSlot(recorded)) return recorded;
+  } catch (error) {
+    console.warn('Latest save lookup unavailable.', error);
+  }
+  let latest = 0;
+  let latestTime = -1;
+  for (let slot = 1; slot <= SAVE_SLOT_COUNT; slot += 1) {
+    const saved = readSaveSlot(slot);
+    const updatedAt = Number(saved?.updatedAt) || 0;
+    if (saved && updatedAt >= latestTime) {
+      latest = slot;
+      latestTime = updatedAt;
+    }
+  }
+  return latest;
+}
+
+function resetProgressStateToDefaults() {
+  const starter = HOME_CATALOG[0];
+  player.distance = 0;
+  player.rep = 1280;
+  player.cash = 420;
+  player.selectedStyle = PROGRESSION_CONFIG.starterStyle;
+  player.ownedCars = [PROGRESSION_CONFIG.starterStyle];
+  player.completedDeliveries = 0;
+  player.paint = vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint;
+  player.condition = 100;
+  player.damageRecords = [];
+  player.damageSequence = 0;
+  player.disabledTimer = 0;
+  player.submerged = false;
+  player.waterRecoveryPending = false;
+  player.waterBody = '';
+  player.waterSinkTime = 0;
+  player.recoveryCost = 0;
+  player.lastSafePosition.set(starter.spawn[0], starter.spawn[1], starter.spawn[2]);
+  player.ownedHomes = ['pinewatch-shack'];
+  player.selectedHome = 'pinewatch-shack';
+  player.speedingTime = 0;
+  player.violationCooldown = 0;
+  player.trafficViolations = 0;
+  player.lastSignalKey = '';
+  player.stopObservations = {};
+  player.upgrades = { engine: 0, grip: 0 };
+  player.collectedCaches = [];
+}
+
 function saveProgress() {
   try {
-    localStorage.setItem('neonline-aurora-save', JSON.stringify({
+    const payload = {
       cash: player.cash,
       rep: player.rep,
       selectedStyle: player.selectedStyle,
@@ -2495,27 +2606,32 @@ function saveProgress() {
       cacheIds: player.collectedCaches,
       waterRecoveryPending: player.waterRecoveryPending,
       waterBody: player.waterBody,
-    }));
+      updatedAt: Date.now(),
+      saveSlot: activeSaveSlot,
+    };
+    const serialized = JSON.stringify(payload);
+    localStorage.setItem(saveSlotKey(activeSaveSlot), serialized);
+    // Keep the original key as a backwards-compatible mirror for existing installs.
+    localStorage.setItem(LEGACY_SAVE_KEY, serialized);
+    localStorage.setItem(LATEST_SAVE_KEY, String(activeSaveSlot));
   } catch (error) {
     console.warn('Progress save unavailable.', error);
   }
 }
 
-function loadProgress() {
+function loadProgress(slot = latestSaveSlot()) {
+  activeSaveSlot = normalizeSaveSlot(slot || 1);
+  resetProgressStateToDefaults();
+  const saved = readSaveSlot(activeSaveSlot);
+  if (!saved) return false;
   try {
-    const saved = JSON.parse(localStorage.getItem('neonline-aurora-save') || 'null');
-    if (!saved) return;
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
     if (Number.isFinite(saved.completedDeliveries)) player.completedDeliveries = Math.max(0, Math.floor(saved.completedDeliveries));
-    if (Array.isArray(saved.ownedHomes)) {
-      player.ownedHomes = saved.ownedHomes.filter((id) => HOME_CATALOG.some((home) => home.id === id));
-    }
+    if (Array.isArray(saved.ownedHomes)) player.ownedHomes = saved.ownedHomes.filter((id) => HOME_CATALOG.some((home) => home.id === id));
     if (!player.ownedHomes.includes('pinewatch-shack')) player.ownedHomes.unshift('pinewatch-shack');
     if (typeof saved.selectedHome === 'string' && player.ownedHomes.includes(saved.selectedHome)) player.selectedHome = saved.selectedHome;
-    if (Array.isArray(saved.ownedCars)) {
-      player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
-    }
+    if (Array.isArray(saved.ownedCars)) player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
     if (!player.ownedCars.includes(PROGRESSION_CONFIG.starterStyle)) player.ownedCars.unshift(PROGRESSION_CONFIG.starterStyle);
     grantUnlockedVehicles();
     if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
@@ -2542,11 +2658,14 @@ function loadProgress() {
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
     });
+    return true;
   } catch (error) {
     console.warn('Progress load unavailable.', error);
+    return false;
   }
 }
-loadProgress();
+activeSaveSlot = latestSaveSlot() || 1;
+loadProgress(activeSaveSlot);
 spawnPlayerAtHome();
 restoreVisibleDamage();
 
@@ -3579,7 +3698,7 @@ function applyPlayerVehicleStyle(style, announce = true, force = false) {
   const vehicle = vehicleCatalogEntry(style);
   const oldMesh = player.mesh;
   const oldParent = oldMesh.parent;
-  const wasMenuCar = oldParent === menuGarage || starterMenuOpen;
+  const wasMenuCar = oldParent === menuGarage;
   if (oldParent) oldParent.remove(oldMesh);
   const paintHex = new THREE.Color(player.paint).getHex();
   const nextMesh = createCar(paintHex, new THREE.Color(vehicle.accent).getHex(), true, style);
@@ -3590,6 +3709,7 @@ function applyPlayerVehicleStyle(style, announce = true, force = false) {
   if (fleetAssetScenes[style]) replaceVehicleVisual(nextMesh, fleetAssetScenes[style], 1);
   applyPaintToVehicleRoot(nextMesh, player.paint);
   (wasMenuCar ? menuGarage : actors).add(nextMesh);
+  nextMesh.visible = !starterMenuOpen;
   restoreVisibleDamage();
   updateGarageUi();
   if (announce) showToast('VEHICLE SELECTED', `${vehicle.name} is ready for Aurora Bay`, 'GARAGE UPDATED');
@@ -3726,6 +3846,88 @@ function updateGarageUi() {
   updateHomeUi();
 }
 
+function formatSaveStamp(saved) {
+  if (!saved?.updatedAt) return 'LOCAL SAVE // TIME UNKNOWN';
+  const date = new Date(saved.updatedAt);
+  if (Number.isNaN(date.getTime())) return 'LOCAL SAVE // TIME UNKNOWN';
+  return `LAST PLAYED // ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase()} ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function renderSaveSlots() {
+  const list = document.querySelector('#save-slot-list');
+  if (!list) return;
+  const latest = latestSaveSlot();
+  list.innerHTML = Array.from({ length: SAVE_SLOT_COUNT }, (_, index) => index + 1).map((slot) => {
+    const saved = readSaveSlot(slot);
+    const isLatest = saved && slot === latest;
+    const home = HOME_CATALOG.find((entry) => entry.id === saved?.selectedHome) || HOME_CATALOG[0];
+    const details = saved
+      ? `${home.name} // ${Number(saved.completedDeliveries) || 0} DELIVERIES // $${(Number(saved.cash) || 0).toLocaleString('en-US')}`
+      : 'EMPTY SLOT // START A NEW RUN';
+    return `<article class="save-slot-card ${saved ? 'filled' : 'empty'} ${isLatest ? 'latest' : ''}">
+      <div class="save-slot-mark"><span>0${slot}</span><i></i></div>
+      <div class="save-slot-copy"><div><b>SAVE SLOT ${slot}</b><small>${saved ? (isLatest ? 'LATEST SAVE' : 'LOCAL PROFILE') : 'AVAILABLE'}</small></div><strong>${details}</strong><p>${saved ? formatSaveStamp(saved) : 'Your progress, cars, homes, and deliveries will be stored here.'}</p></div>
+      <button class="save-slot-action ${saved ? '' : 'new'}" data-save-slot="${slot}" data-save-action="${saved ? 'load' : 'new'}" type="button">${saved ? 'LOAD SAVE' : 'START NEW RUN'} <span>↗</span></button>
+    </article>`;
+  }).join('');
+}
+
+function updateStartMenuUi() {
+  const latestSlot = latestSaveSlot();
+  const latest = latestSlot ? readSaveSlot(latestSlot) : null;
+  const continueButton = document.querySelector('#menu-continue-button');
+  const latestCopy = document.querySelector('#menu-latest-save');
+  if (continueButton) continueButton.disabled = !latest;
+  if (latestCopy) latestCopy.textContent = latest ? `SLOT ${latestSlot} // ${formatSaveStamp(latest)}` : 'NO LOCAL SAVE // PLAY TO START A PROFILE';
+}
+
+function setSaveSelectOpen(open) {
+  saveSelectOpen = open;
+  const overlay = document.querySelector('#save-select-overlay');
+  if (!overlay) return;
+  overlay.classList.toggle('open', open);
+  overlay.setAttribute('aria-hidden', String(!open));
+  if (open) renderSaveSlots();
+}
+
+function activateSaveSlot(slot, newRun = false) {
+  const normalized = normalizeSaveSlot(slot);
+  if (!newRun && !readSaveSlot(normalized)) return false;
+  if (newRun) {
+    activeSaveSlot = normalized;
+    resetProgressStateToDefaults();
+  } else {
+    loadProgress(normalized);
+  }
+  endRadarStop();
+  deliveryState = 'idle';
+  mountainDeliveryState = 'idle';
+  clearCargoRun();
+  mountainDeliveryTime = 0;
+  setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
+  spawnPlayerAtHome();
+  if (player.selectedStyle !== player.mesh.userData?.style) applyPlayerVehicleStyle(player.selectedStyle, false, true);
+  else applyPaintToVehicleRoot(player.mesh, player.paint);
+  restoreVisibleDamage();
+  saveProgress();
+  updateGarageUi();
+  renderSaveSlots();
+  updateStartMenuUi();
+  setSaveSelectOpen(false);
+  setStarterMenuOpen(false);
+  showToast(newRun ? 'NEW PROFILE READY' : 'SAVE LOADED', `Save slot ${normalized} // ${selectedHomeEntry().name}`, `${player.completedDeliveries} DELIVERIES`);
+  return true;
+}
+
+function continueLatestSave() {
+  const latest = latestSaveSlot();
+  if (!latest) {
+    setSaveSelectOpen(true);
+    return;
+  }
+  activateSaveSlot(latest, false);
+}
+
 function setMenuPage(page) {
   const validPages = ['home', 'market', 'garage', 'settings'];
   menuPage = validPages.includes(page) ? page : 'home';
@@ -3734,36 +3936,66 @@ function setMenuPage(page) {
   updateGarageUi();
 }
 
+function updateMenuShowcaseReadout(showcase) {
+  const region = document.querySelector('#menu-showcase-region');
+  const location = document.querySelector('#menu-showcase-location');
+  const copy = document.querySelector('#menu-showcase-copy');
+  const index = document.querySelector('#menu-showcase-index');
+  if (region) region.textContent = showcase.name;
+  if (location) location.textContent = showcase.name;
+  if (copy) copy.textContent = showcase.copy;
+  if (index) index.textContent = `${String(menuShowcaseIndex + 1).padStart(2, '0')} / ${String(MENU_SHOWCASE_SCENES.length).padStart(2, '0')}`;
+  document.querySelectorAll('.showcase-dot').forEach((dot) => dot.classList.toggle('active', Number(dot.dataset.showcaseIndex) === menuShowcaseIndex));
+}
+
+function resetMenuShowcase() {
+  menuShowcaseElapsed = 0;
+  menuShowcaseTransition = 1;
+  const showcase = MENU_SHOWCASE_SCENES[menuShowcaseIndex];
+  camera.position.set(showcase.camera[0], showcase.camera[1], showcase.camera[2]);
+  camera.lookAt(new THREE.Vector3(showcase.target[0], showcase.target[1], showcase.target[2]));
+  camera.fov = 48;
+  camera.updateProjectionMatrix();
+  updateMenuShowcaseReadout(showcase);
+}
+
 function setStarterMenuOpen(open) {
   starterMenuOpen = open;
   const overlay = document.querySelector('#main-menu-overlay');
   overlay.classList.toggle('open', open);
   overlay.setAttribute('aria-hidden', String(!open));
   if (open) {
+    setSaveSelectOpen(false);
     if (garageOpen) setGarageOpen(false);
     if (gamePaused) setPauseOpen(false);
     if (worldMapOpen) setWorldMapOpen(false);
     Object.keys(input).forEach((key) => { input[key] = false; });
     touchSteer = 0;
-    world.visible = false;
-    menuGarage.visible = true;
-    if (player.mesh.parent !== menuGarage) {
-      player.mesh.parent?.remove(player.mesh);
-      menuGarage.add(player.mesh);
+    world.visible = true;
+    menuGarage.visible = false;
+    if (player.mesh.parent === menuGarage) {
+      player.mesh.parent.remove(player.mesh);
+      actors.add(player.mesh);
     }
-    player.mesh.position.set(0, .02, 0);
+    player.mesh.visible = false;
     player.speed = 0;
+    ensureMenuShowcaseSectors();
+    resetMenuShowcase();
     setMenuPage('home');
+    renderSaveSlots();
+    updateStartMenuUi();
     updateGarageUi();
     ensureAudio();
     if (audioState.master && audioState.context) audioState.master.gain.setTargetAtTime(soundOn ? .2 : 0, audioState.context.currentTime, .08);
   } else {
+    setSaveSelectOpen(false);
     world.visible = true;
     menuGarage.visible = false;
     if (player.mesh.parent !== actors) {
       player.mesh.parent?.remove(player.mesh);
       actors.add(player.mesh);
     }
+    player.mesh.visible = true;
     spawnPlayerAtHome();
     endRadarStop();
     deliveryState = 'idle';
@@ -3772,6 +4004,8 @@ function setStarterMenuOpen(open) {
     mountainDeliveryTime = 0;
     player.mesh.position.copy(player.position);
     player.mesh.rotation.y = player.heading;
+    lastStreamSectorKey = '';
+    updateWorldStreaming(true);
     gamePaused = false;
     if (soundOn) ensureAudio();
   }
@@ -3779,16 +4013,23 @@ function setStarterMenuOpen(open) {
 
 function updateMenuShowcase(time, dt) {
   if (!starterMenuOpen) return;
-  player.mesh.position.set(0, .02, 0);
-  player.mesh.rotation.y = .18 + Math.sin(time * .00028) * .17;
-  const desiredCamera = new THREE.Vector3(8.7, 4.35, 10.8);
-  camera.position.lerp(desiredCamera, 1 - Math.exp(-3.2 * dt));
-  const lookTarget = new THREE.Vector3(0, 1.05, 0);
-  camera.lookAt(lookTarget);
+  menuShowcaseElapsed += dt;
+  if (menuShowcaseElapsed >= 5.5) {
+    menuShowcaseElapsed = 0;
+    menuShowcaseTransition = 0;
+    menuShowcaseIndex = (menuShowcaseIndex + 1) % MENU_SHOWCASE_SCENES.length;
+    updateMenuShowcaseReadout(MENU_SHOWCASE_SCENES[menuShowcaseIndex]);
+  }
+  menuShowcaseTransition = Math.min(1, menuShowcaseTransition + dt / 1.1);
+  const showcase = MENU_SHOWCASE_SCENES[menuShowcaseIndex];
+  const drift = Math.sin(time * .00024 + menuShowcaseIndex) * 3.5;
+  const desiredCamera = new THREE.Vector3(showcase.camera[0] + drift * .22, showcase.camera[1] + Math.sin(time * .00019) * 1.2, showcase.camera[2] + drift);
+  camera.position.lerp(desiredCamera, 1 - Math.exp(-1.8 * dt));
+  camera.lookAt(new THREE.Vector3(showcase.target[0], showcase.target[1], showcase.target[2]));
   camera.fov = damp(camera.fov, 48, 3, dt);
   camera.updateProjectionMatrix();
-  const pulse = (Math.sin(time * .002) + 1) / 2;
-  menuGarage.userData.lights?.forEach((light, index) => { light.intensity = [13, 8 + pulse * 2, 10 + (1 - pulse) * 2][index]; });
+  const wash = document.querySelector('#menu-showcase-wash');
+  if (wash) wash.style.opacity = menuShowcaseTransition < .5 ? String((.5 - menuShowcaseTransition) * 1.6) : '0';
 }
 
 function setGarageOpen(open) {
@@ -3881,41 +4122,28 @@ function setPauseOpen(open) {
 }
 
 function resetSavedProgress() {
-  try { localStorage.removeItem('neonline-aurora-save'); } catch (error) { console.warn('Progress reset unavailable.', error); }
-  player.cash = 420;
-  player.rep = 1280;
-  player.ownedCars = [PROGRESSION_CONFIG.starterStyle];
-  player.completedDeliveries = 0;
-  player.ownedHomes = ['pinewatch-shack'];
-  player.selectedHome = 'pinewatch-shack';
-  player.selectedStyle = PROGRESSION_CONFIG.starterStyle;
-  player.paint = vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint;
+  try {
+    const previous = readSaveSlot(activeSaveSlot);
+    localStorage.removeItem(saveSlotKey(activeSaveSlot));
+    if (activeSaveSlot === 1 || previous?.saveSlot === activeSaveSlot) localStorage.removeItem(LEGACY_SAVE_KEY);
+    if (Number(localStorage.getItem(LATEST_SAVE_KEY)) === activeSaveSlot) localStorage.removeItem(LATEST_SAVE_KEY);
+  } catch (error) {
+    console.warn('Progress reset unavailable.', error);
+  }
+  resetProgressStateToDefaults();
   setCityDeliveryMission(0);
   deliveryState = 'idle';
   mountainDeliveryState = 'idle';
   clearCargoRun();
-  player.condition = 100;
   clearVisibleVehicleDamage(player.mesh);
-  player.damageSequence = 0;
-  player.disabledTimer = 0;
-  player.submerged = false;
-  player.waterRecoveryPending = false;
-  player.waterBody = '';
-  player.waterSinkTime = 0;
-  player.recoveryCost = 0;
-  spawnPlayerAtHome();
-  player.speedingTime = 0;
-  player.violationCooldown = 0;
-  player.trafficViolations = 0;
-  player.lastSignalKey = '';
-  player.stopObservations = {};
-  player.upgrades = { engine: 0, grip: 0 };
-  player.collectedCaches = [];
-  applyPlayerVehicleStyle(PROGRESSION_CONFIG.starterStyle, false);
+  applyPlayerVehicleStyle(PROGRESSION_CONFIG.starterStyle, false, true);
   applyPlayerPaint(player.paint, false);
+  spawnPlayerAtHome();
   resetCollectibles();
+  renderSaveSlots();
+  updateStartMenuUi();
   updateGarageUi();
-  showToast('PROGRESS RESET', 'Fresh run, same city', 'LOCAL SAVE CLEARED');
+  showToast('PROFILE RESET', `Save slot ${activeSaveSlot} cleared`, 'LOCAL SAVE REMOVED');
 }
 
 const input = { forward: false, back: false, left: false, right: false, handbrake: false };
@@ -4056,8 +4284,12 @@ function setInput(code, value) {
 window.addEventListener('keydown', (event) => {
   ensureAudio();
   if (starterMenuOpen) {
+    if (saveSelectOpen) {
+      if (event.code === 'Escape' && !event.repeat) setSaveSelectOpen(false);
+      return;
+    }
     if (event.code === 'Escape' && !event.repeat && menuPage !== 'home') setMenuPage('home');
-    if (event.code === 'Enter' && !event.repeat && menuPage === 'home') setStarterMenuOpen(false);
+    if (event.code === 'Enter' && !event.repeat && menuPage === 'home') setSaveSelectOpen(true);
     return;
   }
   if (event.code === 'Escape' && !event.repeat) {
@@ -4207,8 +4439,28 @@ document.querySelectorAll('.menu-nav-button').forEach((button) => {
 document.querySelectorAll('[data-menu-goto]').forEach((button) => {
   button.addEventListener('click', () => setMenuPage(button.dataset.menuGoto));
 });
-document.querySelector('#menu-play-button').addEventListener('click', () => setStarterMenuOpen(false));
+document.querySelector('#menu-play-button').addEventListener('click', () => setSaveSelectOpen(true));
+document.querySelector('#menu-continue-button').addEventListener('click', continueLatestSave);
+document.querySelector('#menu-settings-button').addEventListener('click', () => setMenuPage('settings'));
+document.querySelector('#save-select-close').addEventListener('click', () => setSaveSelectOpen(false));
+document.querySelector('#save-select-overlay').addEventListener('click', (event) => {
+  if (event.target.id === 'save-select-overlay') setSaveSelectOpen(false);
+});
+document.querySelector('#save-slot-list').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-save-slot]');
+  if (!button) return;
+  activateSaveSlot(button.dataset.saveSlot, button.dataset.saveAction === 'new');
+});
+document.querySelectorAll('.showcase-dot').forEach((dot) => {
+  dot.addEventListener('click', () => {
+    menuShowcaseIndex = clamp(Number(dot.dataset.showcaseIndex), 0, MENU_SHOWCASE_SCENES.length - 1);
+    menuShowcaseElapsed = 0;
+    menuShowcaseTransition = 0;
+    updateMenuShowcaseReadout(MENU_SHOWCASE_SCENES[menuShowcaseIndex]);
+  });
+});
 document.querySelector('#main-menu-button').addEventListener('click', () => {
+  saveProgress();
   setPauseOpen(false);
   setStarterMenuOpen(true);
 });
@@ -5487,12 +5739,13 @@ function resize() {
 window.addEventListener('resize', resize);
 
 buildWorld();
+worldBuilt = true;
 buildHomeProperties();
 createCargoPickupVisuals();
 updateHomePropertyVisuals();
 updateCargoPickupVisuals();
 updateWorldStreaming(true);
-buildMenuGarage();
+ensureMenuShowcaseSectors();
 
 let assetsReady = false;
 loadBlenderAssets()

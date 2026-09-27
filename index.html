@@ -133,10 +133,19 @@
 
       <section class="main-menu-overlay open" id="main-menu-overlay" aria-hidden="false">
         <div class="menu-grid-lines" aria-hidden="true"></div>
+        <div class="menu-showcase-wash" id="menu-showcase-wash" aria-hidden="true"></div>
+        <section class="save-select-overlay" id="save-select-overlay" aria-hidden="true">
+          <div class="save-select-card">
+            <header class="save-select-header"><div><span class="eyebrow"><span class="eyebrow-dot"></span> LOCAL PROFILES // PLAY</span><h2>SELECT YOUR <b>LINE.</b></h2></div><button class="save-select-close" id="save-select-close" type="button" aria-label="Close save selection">×</button></header>
+            <p class="save-select-intro">Choose any local save to continue from, or start a fresh profile in an empty slot. Continue always loads the latest profile automatically.</p>
+            <div class="save-slot-list" id="save-slot-list"></div>
+            <div class="save-slot-footer"><span><span class="keycap">ESC</span> BACK</span><span>LOCAL ONLY // 3 SLOTS</span></div>
+          </div>
+        </section>
         <div class="menu-shell">
           <header class="menu-header">
             <div class="menu-brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><div class="brand-name">NEON<span>LINE</span></div><div class="brand-sub">AURORA BAY // NIGHT DRIVE</div></div></div>
-            <div class="menu-header-status"><span class="pulse-dot"></span><span>GARAGE BAY 07</span><b>LOCAL PROFILE</b></div>
+            <div class="menu-header-status"><span class="pulse-dot"></span><span>AURORA BAY // WORLD TOUR</span><b>LOCAL PROFILE</b></div>
             <div class="menu-header-actions"><span class="menu-cash"><small>CASH</small><b id="menu-cash">$420</b></span><span class="menu-rep"><small>REP</small><b id="menu-rep">1,280</b></span><button class="menu-icon-button" id="menu-sound-toggle" type="button" aria-label="Toggle sound">◒</button></div>
           </header>
           <div class="menu-body">
@@ -153,15 +162,16 @@
               <div class="menu-sidebar-footer"><span class="pulse-dot"></span><span>AURORA BAY ONLINE</span><b>0.4</b></div>
             </aside>
             <main class="menu-main">
-              <section class="menu-page active" data-menu-content="home">
-                <div class="menu-page-kicker"><span>GARAGE FLOOR // BAY 07</span><b>22:48 / CLEAR</b></div>
-                <div class="menu-hero-copy"><div><span class="eyebrow"><span class="eyebrow-dot"></span> CURRENT RIDE</span><h2 id="menu-vehicle-name">MIDNIGHT <b>GT</b></h2><p id="menu-vehicle-copy">The city is still awake. Your line is waiting.</p></div><div class="menu-ready-badge"><span></span><b>READY TO DRIVE</b><small>ALL SYSTEMS NOMINAL</small></div></div>
-                <div class="menu-vehicle-card">
-                  <div class="menu-vehicle-card-art"><span class="menu-art-scan"></span><span class="menu-art-label">NL—07 // BLUE HOUR SPEC</span><div class="menu-art-floor"></div><div class="menu-art-car"><i></i><b></b><em></em></div><div class="menu-art-wheel menu-art-wheel-a"></div><div class="menu-art-wheel menu-art-wheel-b"></div></div>
-                  <div class="menu-vehicle-info"><div class="menu-stat-line"><span>CLASS</span><b id="menu-vehicle-class">SPORT COUPE</b></div><div class="menu-stat-line"><span>DRIVETRAIN</span><b>RWD // 6 SPEED</b></div><div class="menu-stat-line"><span>PAINT</span><b id="menu-vehicle-paint">MIDNIGHT BLUE</b></div><div class="menu-stat-bars"><div><span>POWER</span><i><em style="width:86%"></em></i></div><div><span>GRIP</span><i><em style="width:72%"></em></i></div><div><span>STYLE</span><i><em style="width:94%"></em></i></div></div><button class="menu-ghost-button" data-menu-goto="garage" type="button">CUSTOMIZE RIDE <span>↗</span></button></div>
+              <section class="menu-page active world-tour-page" data-menu-content="home">
+                <div class="menu-page-kicker"><span>WORLD TOUR // LIVE FEED</span><b id="menu-showcase-index">01 / 08</b></div>
+                <div class="showcase-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> CURRENT REGION</span><h2 id="menu-showcase-region">AURORA BAY</h2><p id="menu-showcase-copy">Neon boulevards, irregular blocks, and the city line after dark.</p></div><div class="showcase-status"><span class="showcase-status-dot"></span><b>WORLD ONLINE</b><small>SCENE ROTATES // 05 SEC</small></div></div>
+                <div class="showcase-location-bar"><span><small>NOW VIEWING</small><b id="menu-showcase-location">AURORA BAY</b></span><div class="showcase-dots" aria-label="World regions"><button class="showcase-dot active" data-showcase-index="0" type="button" aria-label="Aurora Bay"></button><button class="showcase-dot" data-showcase-index="1" type="button" aria-label="Pinewatch Village"></button><button class="showcase-dot" data-showcase-index="2" type="button" aria-label="Northstar Outpost"></button><button class="showcase-dot" data-showcase-index="3" type="button" aria-label="Redwood Valley"></button><button class="showcase-dot" data-showcase-index="4" type="button" aria-label="Lake Aurora"></button><button class="showcase-dot" data-showcase-index="5" type="button" aria-label="Cinder Flats"></button><button class="showcase-dot" data-showcase-index="6" type="button" aria-label="Eastgate"></button><button class="showcase-dot" data-showcase-index="7" type="button" aria-label="Southern Crossroads"></button></div><span class="showcase-range"><small>CAMERA</small><b>FREE LOOK</b></span></div>
+                <div class="start-menu-actions">
+                  <button class="start-action continue" id="menu-continue-button" type="button"><span class="start-action-icon">↻</span><span><b>CONTINUE</b><small id="menu-latest-save">NO LOCAL SAVE // PLAY TO START A PROFILE</small></span><i>↗</i></button>
+                  <button class="start-action play" id="menu-play-button" type="button"><span class="start-action-icon">▶</span><span><b>PLAY</b><small>CHOOSE A SAVE OR START A NEW RUN</small></span><i>↗</i></button>
+                  <button class="start-settings-button" id="menu-settings-button" type="button"><span>⚙</span><b>SETTINGS</b><small>OPTIONS // CONTROLS</small><i>↗</i></button>
                 </div>
-                <div class="menu-home-bottom"><div class="menu-quick-card"><span class="quick-icon">⌁</span><div><small>NEXT OBJECTIVE</small><b>THE LONG WAY HOME</b><p>Reach the next beacon and keep the city moving.</p></div><strong>+120 REP</strong></div><div class="menu-quick-card"><span class="quick-icon cyan">◈</span><div><small>GARAGE BALANCE</small><b id="menu-balance-copy">$420 AVAILABLE</b><p>Complete deliveries to unlock new silhouettes, then tune the one you own.</p></div><button class="menu-quick-link" data-menu-goto="market" type="button">VISIT MARKET ↗</button></div></div>
-                <button class="menu-play-button" id="menu-play-button" type="button"><span class="play-mark">▶</span><span><b>PLAY AURORA BAY</b><small>ENTER OPEN WORLD // FREE ROAM</small></span><i>↗</i></button>
+                <div class="start-menu-footer"><span><i class="pulse-dot"></i> NO BRANDS. NO BOUNDARIES.</span><span>AURORA BAY // <b>08 REGIONS</b></span></div>
               </section>
 
               <section class="menu-page" data-menu-content="market">
