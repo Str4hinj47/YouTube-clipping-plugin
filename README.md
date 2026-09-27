@@ -8,6 +8,8 @@ A stylized open-world night driving game built as a browser prototype. Cruise le
 python3 -m http.server 4173 --bind 0.0.0.0
 ```
 
+The production scope, vertical-slice gates, art rules, and initial runtime budgets are documented in [`PRODUCTION_DIRECTION.md`](./PRODUCTION_DIRECTION.md). This is being built as a serious publishable game prototype; the browser build is the current iteration target, not a reason to lower the art or systems bar.
+
 Then open `http://localhost:4173` (or use the Arena live preview).
 
 ## Controls

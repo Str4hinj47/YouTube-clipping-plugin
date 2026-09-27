@@ -4,7 +4,7 @@ The game scene is built around a stylized but detailed Blender art direction: ha
 
 - `midnight_gt.glb` — the player coupe, wheels, lights, spoiler, and underglow.
 - `fleet/*.glb` — seven fictional, logo-free road-car variants with distinct hard-surface silhouettes and detail packages.
-- `aurora_bay_environment.glb` — a reusable block of roads, buildings, trees, lights, the Pulse Station landmark, and the Pinewatch mountain-pass/village extension.
+- `aurora_bay_environment.glb` — a reusable block of roads, detailed facade kits, trees, lights, the Pulse Station, Aurora Spire skyline set, illuminated harbor gateway, and the Pinewatch mountain-pass/village extension.
 - `regions/*.glb` — six modular sector kits for Northstar Outpost, Redwood Valley, Lake Aurora, Cinder Flats, Eastgate, and Southern Crossroads. They are authored as reusable Blender chunks rather than one monolithic 10 km file, so the browser can stream regional content near the player.
 
 Run it with Blender 4.x:
@@ -13,4 +13,4 @@ Run it with Blender 4.x:
 blender -b --python blender/create_assets.py -- --out assets
 ```
 
-The browser loads the core GLBs through Three.js `GLTFLoader` at startup. The regional runtime currently uses deterministic sector geometry so it can load and unload without waiting for six large files; the exported kits are the art-source handoff for replacing those sector props with authored GLBs. Lake Aurora's authored kit provides the shore and dock context while the runtime water shader supplies animated waves, foam, Fresnel, and sun glints. The procedural scene remains available as a fallback if an asset is missing. Re-exporting the Blender files preserves the same filenames and requires no gameplay code changes.
+The browser loads the core GLBs through Three.js `GLTFLoader` at startup. When the six optional files are present under `assets/regions/`, the streamed runtime hydrates the matching regional sector with the authored kit and hides only that sector's deterministic visual fallback; missing kits are handled silently and do not block boot. Lake Aurora's authored kit provides the shore and dock context while the runtime water shader supplies animated waves, foam, Fresnel, and sun glints. The procedural scene remains available as a fallback if an asset is missing. Re-exporting the Blender files preserves the same filenames and requires no gameplay code changes.

@@ -44,6 +44,10 @@ def material(name, color, metallic=0.0, roughness=0.5, emission=None, strength=0
 
 PAINT = material("Midnight cobalt paint", (0.08, 0.12, 0.55), .8, .22)
 LIME = material("Aurora lime trim", (0.68, 1.0, 0.18), .35, .22, (0.35, 0.95, 0.08), 2.4)
+CYAN = material("Aurora cyan trim", (0.16, 0.78, 0.78), .3, .24, (0.04, 0.62, 0.66), 3.8)
+PINK = material("Aurora magenta trim", (0.95, 0.16, 0.48), .26, .26, (0.58, 0.03, 0.3), 3.2)
+AMBER = material("Aurora amber trim", (1.0, 0.48, 0.14), .24, .3, (0.72, 0.12, 0.025), 2.8)
+DARK_METAL = material("Landmark dark metal", (0.035, 0.055, 0.07), .72, .34)
 RUBBER = material("Tire rubber", (0.008, 0.012, 0.016), .05, .84)
 RIM = material("Machined rims", (.46, .52, .56), .9, .18)
 GLASS = material("Smoked glass", (.025, .09, .13), .55, .14, (.01, .08, .11), .6)
@@ -214,12 +218,78 @@ def make_building(name, location, width, depth, height, material_slot=BUILDING):
     root = bpy.data.objects.new(name, None)
     bpy.context.collection.objects.link(root)
     root.location = location
-    cube("modular building body", (0, height / 2, 0), (width, height, depth), material_slot, .04, root)
-    for floor in range(max(2, int(height / 3.1))):
+    cube("modular building body", (0, height / 2, 0), (width, height, depth), material_slot, .08, root)
+    cube("building roof coping", (0, height + .08, 0), (width + .18, .14, depth + .18), DARK_METAL, .025, root)
+    floors = max(2, int(height / 3.1))
+    front_columns = max(2, int(width / 2.7))
+    side_columns = max(2, int(depth / 2.7))
+    for floor in range(floors):
         y = 1.35 + floor * 3.05
-        for col in range(max(2, int(width / 2.7))):
-            x = -width / 2 + 1.35 + col * ((width - 2.2) / max(1, int(width / 2.7) - 1))
-            cube("cyan lit window", (x, y, depth / 2 + .025), (.72, .45, .035), WINDOW, .015, root)
+        for col in range(front_columns):
+            x = -width / 2 + 1.35 + col * ((width - 2.2) / max(1, front_columns - 1))
+            cube("front lit window", (x, y, depth / 2 + .025), (.72, .45, .035), WINDOW, .015, root)
+            if floor == 0 and col % 2 == 0:
+                cube("ground floor facade reveal", (x, .54, depth / 2 + .045), (.82, .08, .06), SIDEWALK, .012, root)
+        for col in range(side_columns):
+            z = -depth / 2 + 1.35 + col * ((depth - 2.2) / max(1, side_columns - 1))
+            if col % 2 == 0 or floor == 0:
+                cube("side lit window", (width / 2 + .025, y, z), (.035, .45, .72), WINDOW, .015, root)
+    for side in (-1, 1):
+        cube("facade vertical pilaster", (side * (width / 2 - .24), height / 2, depth / 2 + .07), (.16, height * .88, .12), SIDEWALK, .025, root)
+    return root
+
+
+def make_aurora_spire(name, location, height, accent, variant=0, parent=None):
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+    root.location = location
+    base_radius = 2.25 if variant % 2 == 0 else 1.8
+    cylinder("landmark dark base", (0, .14, 0), base_radius + .85, .28, DARK_METAL, 10, root)
+    cylinder("landmark tapered core", (0, height * .42, 0), base_radius, height * .84, accent, 8 if variant != 1 else 6, root)
+    for side in (-1, 1):
+        cube("landmark vertical light blade", (side * base_radius * .72, height * .4, 0), (.16, height * .77, .16), accent, .025, root)
+        cube("landmark side light blade", (0, height * .34, side * base_radius * .72), (.11, height * .64, .11), accent, .018, root)
+    ring_count = 4 if variant == 2 else 3
+    for index in range(ring_count):
+        bpy.ops.mesh.primitive_torus_add(
+            major_radius=base_radius + .2 + (index % 2) * .28,
+            minor_radius=.07,
+            major_segments=32,
+            minor_segments=7,
+            location=(0, height * (.2 + index * .19), 0),
+            rotation=(math.pi / 2, 0, 0),
+        )
+        ring = bpy.context.object
+        ring.name = "animated landmark light ring"
+        ring.data.materials.append(accent)
+        ring.parent = root
+    if variant == 1:
+        cube("landmark cross crown", (0, height * .9, 0), (base_radius * 1.8, .16, .16), accent, .02, root)
+        cube("landmark cross crown depth", (0, height * .9, 0), (.16, .16, base_radius * 1.8), accent, .02, root)
+    else:
+        bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=.28, radius2=.02, depth=2.4, location=(0, height + 1.2, 0))
+        crown = bpy.context.object
+        crown.name = "landmark antenna"
+        crown.data.materials.append(accent)
+        crown.parent = root
+    if parent:
+        root.parent = parent
+    return root
+
+
+def make_harbor_gateway(name, location, parent=None):
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+    root.location = location
+    cube("harbor gateway left column", (-9, 3.9, 0), (1.05, 7.8, 1.05), DARK_METAL, .05, root)
+    cube("harbor gateway right column", (9, 3.9, 0), (1.05, 7.8, 1.05), DARK_METAL, .05, root)
+    cube("harbor gateway top beam", (0, 7.55, 0), (19.5, .42, .42), DARK_METAL, .04, root)
+    cube("harbor gateway cyan blade", (-8.35, 3.8, .54), (.18, 7.2, .18), CYAN, .02, root)
+    cube("harbor gateway amber blade", (8.35, 3.8, .54), (.18, 7.2, .18), AMBER, .02, root)
+    cube("harbor gateway cyan rail", (0, 7.36, .55), (17.2, .11, .11), CYAN, .02, root)
+    cube("harbor gateway pink rail", (0, 7.67, .55), (17.2, .08, .08), PINK, .02, root)
+    if parent:
+        root.parent = parent
     return root
 
 
@@ -500,6 +570,13 @@ def make_environment():
         ring.data.materials.append(LIME)
         ring.parent = station
     cylinder("station beacon", (0, 3.8, 0), .14, 7, LIME, 8, station)
+    # Primary skyline assets live in the source scene as authored geometry. The
+    # runtime keeps a deterministic fallback, but it should not be the final art.
+    make_aurora_spire("AURORA SPIRE landmark", (0, 0, 44), 40, CYAN, 0, root)
+    make_aurora_spire("NORTH LIGHT landmark", (-88, 0, -62), 27, PINK, 1, root)
+    make_aurora_spire("EAST LOOP landmark", (88, 0, -53), 32, AMBER, 2, root)
+    make_aurora_spire("HARBOR LINK landmark", (-4, 0, 91), 24, LIME, 3, root)
+    make_harbor_gateway("AURORA HARBOR gateway", (0, 0, -95), root)
     make_mountain_extension(root)
     return root
 

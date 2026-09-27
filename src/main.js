@@ -1736,6 +1736,15 @@ const parkedVehicles = [];
 const mountainTraffic = [];
 const regionalTraffic = [];
 const gltfLoader = new GLTFLoader();
+const AUTHORED_REGION_ASSETS = [
+  { type: 'highlands', url: './assets/regions/northstar_outpost.glb' },
+  { type: 'forest', url: './assets/regions/redwood_valley.glb' },
+  { type: 'lake', url: './assets/regions/lake_aurora.glb' },
+  { type: 'desert', url: './assets/regions/cinder_flats.glb' },
+  { type: 'industrial', url: './assets/regions/eastgate.glb' },
+  { type: 'rural', url: './assets/regions/southern_crossroads.glb' },
+];
+const authoredRegionScenes = new Map();
 
 function prepareImportedModel(root) {
   root.traverse((object) => {
@@ -1821,12 +1830,55 @@ function loadOneAsset(url) {
   });
 }
 
+async function loadOptionalAsset(url) {
+  try {
+    const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    return response.ok ? loadOneAsset(url) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function cloneImportedSectorAsset(sourceScene) {
+  const clone = sourceScene.clone(true);
+  clone.traverse((object) => {
+    if (!object.isMesh) return;
+    // Sector instances are unloaded independently. Clone geometry so removing a
+    // streamed sector never disposes the source scene or another live instance.
+    if (object.geometry?.clone) object.geometry = object.geometry.clone();
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
+  return clone;
+}
+
+function hydrateAuthoredRegionSector(sector) {
+  if (!sector || sector.authoredKit) return;
+  const sourceScene = authoredRegionScenes.get(sector.region.type);
+  if (!sourceScene) return;
+  const distance = Math.hypot(sector.region.x - sector.centerX, sector.region.z - sector.centerZ);
+  if (distance > WORLD_SECTOR_SIZE * .8) return;
+  const authoredKit = cloneImportedSectorAsset(sourceScene);
+  authoredKit.name = `${sector.region.name} authored modular kit`;
+  authoredKit.position.set(sector.region.x - sector.centerX, 0, sector.region.z - sector.centerZ);
+  sector.group.add(authoredKit);
+  sector.authoredKit = authoredKit;
+  // The source asset is the final art when available. Deterministic geometry
+  // stays available for sectors without an exported kit or a failed asset load.
+  if (sector.fallbackVisuals) sector.fallbackVisuals.visible = false;
+}
+
+function hydrateAuthoredRegionSectors() {
+  worldSectorRegistry.forEach((sector) => hydrateAuthoredRegionSector(sector));
+}
+
 async function loadBlenderAssets() {
   const fleetStyles = ['hatch', 'supercar', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport'];
   const results = await Promise.allSettled([
     loadOneAsset('./assets/aurora_bay_environment.glb'),
     loadOneAsset('./assets/midnight_gt.glb'),
     ...fleetStyles.map((style) => loadOneAsset(`./assets/fleet/${style}.glb`)),
+    ...AUTHORED_REGION_ASSETS.map(({ url }) => loadOptionalAsset(url)),
   ]);
   const [environmentResult, carResult] = results;
   if (environmentResult.status === 'fulfilled') {
@@ -1862,6 +1914,16 @@ async function loadBlenderAssets() {
       console.warn(`Fleet asset unavailable for ${style}; using procedural fallback.`, result.reason);
     }
   });
+  const regionAssetOffset = 2 + fleetStyles.length;
+  AUTHORED_REGION_ASSETS.forEach((entry, index) => {
+    const result = results[regionAssetOffset + index];
+    if (result?.status === 'fulfilled' && result.value?.scene) {
+      const sourceScene = prepareImportedModel(result.value.scene);
+      sourceScene.name = `${entry.type} authored modular region kit`;
+      authoredRegionScenes.set(entry.type, sourceScene);
+    }
+  });
+  hydrateAuthoredRegionSectors();
   applyPlayerVehicleStyle(player.selectedStyle, false, true);
   applyPaintToVehicleRoot(player.mesh, player.paint);
 }
@@ -2549,15 +2611,18 @@ function createWorldSector(sectorX, sectorZ) {
   const group = new THREE.Group();
   group.name = `World sector ${key} // ${region.name}`;
   group.position.set(centerX, 0, centerZ);
-  const sector = { key, group, centerX, centerZ, region, obstacles: [] };
-  addMesh(group, new THREE.PlaneGeometry(WORLD_SECTOR_SIZE, WORLD_SECTOR_SIZE), sectorGroundMaterial(region.type), [0, -.28, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  const fallbackVisuals = new THREE.Group();
+  fallbackVisuals.name = `${region.name} deterministic fallback visuals`;
+  group.add(fallbackVisuals);
+  const sector = { key, group, centerX, centerZ, region, obstacles: [], fallbackVisuals, authoredKit: null };
+  addMesh(fallbackVisuals, new THREE.PlaneGeometry(WORLD_SECTOR_SIZE, WORLD_SECTOR_SIZE), sectorGroundMaterial(region.type), [0, -.28, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
   const lakeCore = region.type === 'lake'
     && Math.abs(centerX - region.x) < WORLD_SECTOR_SIZE / 2
     && Math.abs(centerZ - region.z) < WORLD_SECTOR_SIZE / 2;
   if (lakeCore) {
     const lakeWidth = 360;
     const lakeDepth = 270;
-    addMesh(group, new THREE.PlaneGeometry(lakeWidth, lakeDepth, 72, 54), mats.water, [region.x - centerX, -.07, region.z - centerZ], { rotation: [-Math.PI / 2, 0, 0] });
+    addMesh(fallbackVisuals, new THREE.PlaneGeometry(lakeWidth, lakeDepth, 72, 54), mats.water, [region.x - centerX, -.07, region.z - centerZ], { rotation: [-Math.PI / 2, 0, 0] });
     const waterObstacle = addObstacle(region.x, region.z, lakeWidth / 2 + 2, lakeDepth / 2 + 2, 'lake-water');
     waterObstacle.sectorKey = sector.key;
     sector.obstacles.push(waterObstacle);
@@ -2571,16 +2636,17 @@ function createWorldSector(sectorX, sectorZ) {
     const worldZ = centerZ + localZ;
     if (isOnRegionalRoad(worldX, worldZ) || isOnMountainRoad(worldX, worldZ) || (Math.abs(worldX) < 170 && Math.abs(worldZ) < 170)) continue;
     if (region.type === 'forest' || (region.type === 'highlands' && index % 3 !== 0)) {
-      addSectorTree(group, localX, localZ, .75 + randomFrom(seed + index + 70) * .55, seed + index);
+      addSectorTree(fallbackVisuals, localX, localZ, .75 + randomFrom(seed + index + 70) * .55, seed + index);
     } else if (region.type === 'lake') {
-      addMesh(group, new THREE.ConeGeometry(1.5 + randomFrom(seed + index) * 1.6, 3.2 + randomFrom(seed + index + 12) * 2.6, 7), mats.mountainRock, [localX, 1.45, localZ], { castShadow: true });
+      addMesh(fallbackVisuals, new THREE.ConeGeometry(1.5 + randomFrom(seed + index) * 1.6, 3.2 + randomFrom(seed + index + 12) * 2.6, 7), mats.mountainRock, [localX, 1.45, localZ], { castShadow: true });
     } else {
-      addSectorStructure(group, sector, localX, localZ, 8 + randomFrom(seed + index + 80) * 10, 7 + randomFrom(seed + index + 90) * 8, 3 + randomFrom(seed + index + 100) * 7, seed + index);
+      addSectorStructure(fallbackVisuals, sector, localX, localZ, 8 + randomFrom(seed + index + 80) * 10, 7 + randomFrom(seed + index + 90) * 8, 3 + randomFrom(seed + index + 100) * 7, seed + index);
     }
   }
-  addRegionalRoadsideDetails(group, sector, seed + 400);
+  addRegionalRoadsideDetails(fallbackVisuals, sector, seed + 400);
   streamedWorld.add(group);
   worldSectorRegistry.set(key, sector);
+  hydrateAuthoredRegionSector(sector);
   return sector;
 }
 
