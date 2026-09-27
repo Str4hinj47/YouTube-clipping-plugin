@@ -16,6 +16,8 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **Shift** — nitro
 - **Space** — handbrake / drift
 - **C** — chase / high camera
+- **E** — start or rematch Midnight Sprint when near the orange gate
+- **M** — expand/collapse the map
 - **R** — reset vehicle
 
 ## Art pipeline

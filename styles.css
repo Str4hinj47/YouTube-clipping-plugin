@@ -61,6 +61,25 @@ button { font: inherit; color: inherit; }
 .mission-footer { display: flex; justify-content: space-between; color: #85919b; font: 9px var(--mono); letter-spacing: .06em; }
 .reward { color: var(--lime); }
 
+.event-panel { top: 300px; left: 38px; width: 289px; padding: 15px 18px 14px; border-radius: 10px; border-left: 2px solid var(--orange); opacity: 0; transform: translateX(-12px); pointer-events: none; transition: opacity .25s ease, transform .25s ease; }
+.event-panel.visible { opacity: 1; transform: translateX(0); }
+.event-topline { display: flex; justify-content: space-between; align-items: center; }
+.event-dot { background: var(--orange); box-shadow: 0 0 8px rgba(255,157,80,.8); }
+.event-status { color: var(--orange); font: 9px var(--mono); letter-spacing: .08em; }
+.event-title { color: #f1f2ed; font-size: 17px; font-weight: 600; letter-spacing: .04em; margin: 11px 0 4px; }
+.event-panel p { color: #89949e; font-size: 10px; line-height: 1.45; margin: 0 0 12px; }
+.event-stats { display: flex; justify-content: space-between; color: #77838d; font: 9px var(--mono); letter-spacing: .07em; }
+.event-stats b { color: #d8e1d7; font-weight: 400; margin-left: 4px; }
+#event-time { color: var(--orange); }
+.event-action { display: flex; align-items: center; gap: 8px; color: var(--orange); font: 9px var(--mono); letter-spacing: .09em; margin-top: 12px; }
+.event-action .keycap { color: #1b1712; background: var(--orange); border-color: var(--orange); font-weight: 600; }
+.event-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 9px var(--lime); }
+.event-panel.active { border-left-color: var(--lime); }
+.event-panel.active .event-dot { background: var(--lime); box-shadow: 0 0 8px rgba(214,250,106,.7); }
+.event-panel.active .event-status { color: var(--lime); }
+.event-panel.active .event-action { color: var(--lime); }
+.event-panel.finished { border-left-color: var(--lime); }
+
 .world-readout { top: 112px; right: 40px; display: flex; align-items: center; gap: 25px; text-align: right; }
 .district-readout { display: flex; align-items: center; gap: 10px; text-align: left; }
 .district-pin { color: var(--lime); font-size: 22px; line-height: 1; }
@@ -81,6 +100,7 @@ button { font: inherit; color: inherit; }
 .legend-dot { display: inline-block; vertical-align: -1px; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; }
 .player-dot { background: var(--lime); box-shadow: 0 0 7px var(--lime); }
 .beacon-dot { background: var(--orange); box-shadow: 0 0 7px var(--orange); }
+.event-map-dot { background: var(--pink); box-shadow: 0 0 7px var(--pink); }
 
 .vehicle-panel { left: 281px; bottom: 38px; width: 258px; padding: 15px 18px 17px; border-radius: 12px; }
 .vehicle-topline { display: flex; justify-content: space-between; align-items: center; }
@@ -141,6 +161,8 @@ button { font: inherit; color: inherit; }
 
 @media (max-width: 900px) {
   .mission-panel { left: 20px; top: 98px; transform: scale(.86); transform-origin: top left; }
+  .event-panel { left: 20px; top: 270px; transform: scale(.86) translateX(-12px); transform-origin: top left; }
+  .event-panel.visible { transform: scale(.86) translateX(0); }
   .map-panel { left: 20px; bottom: 20px; transform: scale(.8); transform-origin: bottom left; }
   .vehicle-panel { left: 200px; bottom: 20px; transform: scale(.8); transform-origin: bottom left; }
   .controls-panel { bottom: 17px; transform: translateX(-50%) scale(.8); }
@@ -151,6 +173,8 @@ button { font: inherit; color: inherit; }
   .brand-sub, .session-status, .profile-copy, .chevron, .district-readout, .weather-readout, .pause-hint { display: none; }
   .topbar { height: 60px; padding: 0 16px; }.icon-button { margin-left: auto; }
   .mission-panel { top: 77px; left: 15px; transform: scale(.75); }
+  .event-panel { top: 214px; left: 15px; transform: scale(.7) translateX(-12px); transform-origin: top left; }
+  .event-panel.visible { transform: scale(.7) translateX(0); }
   .map-panel { left: 12px; bottom: 12px; transform: scale(.63); }
   .vehicle-panel { left: 145px; bottom: 9px; transform: scale(.62); }
   .controls-panel { display: none; }

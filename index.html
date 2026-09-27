@@ -43,6 +43,14 @@
         <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span class="reward">+120 REP</span></div>
       </section>
 
+      <section class="event-panel glass-panel hud-layer" id="event-panel">
+        <div class="event-topline"><span class="eyebrow"><span class="eyebrow-dot event-dot"></span> LIVE EVENT</span><span class="event-status" id="event-status">NEARBY</span></div>
+        <div class="event-title" id="event-title">MIDNIGHT SPRINT</div>
+        <p id="event-copy">Hit the start gate for a clean five-checkpoint time trial.</p>
+        <div class="event-stats"><span>BEST <b id="event-best">01:42.80</b></span><span id="event-time">READY</span></div>
+        <div class="event-action" id="event-action"><span class="keycap">E</span><span>START EVENT</span></div>
+      </section>
+
       <section class="world-readout hud-layer">
         <div class="district-readout"><span class="district-pin">⌖</span><div><small>DISTRICT</small><strong id="district-name">NORTHSTAR AVE</strong></div></div>
         <div class="weather-readout"><span>21°</span><span class="weather-icon">◒</span><small>CLEAR / 22:48</small></div>
@@ -51,7 +59,7 @@
       <section class="map-panel glass-panel hud-layer">
         <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
         <canvas id="mini-map" width="220" height="220"></canvas>
-        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span></div>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot event-map-dot"></i> EVENT</span></div>
       </section>
 
       <section class="vehicle-panel glass-panel hud-layer">
@@ -72,6 +80,7 @@
       <section class="controls-panel glass-panel hud-layer">
         <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
         <div class="control-row"><span class="keycap wide">SHIFT</span><span class="control-label">NITRO</span><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
+        <div class="control-row"><span class="keycap">E</span><span class="control-label">EVENT</span><span class="keycap">M</span><span class="control-label">MAP</span></div>
         <div class="control-row muted"><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
       </section>
 

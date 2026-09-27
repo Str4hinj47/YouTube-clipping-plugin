@@ -83,6 +83,7 @@ const mats = {
   waterLine: new THREE.MeshBasicMaterial({ color: 0x35a8ae, transparent: true, opacity: .33 }),
   lamp: new THREE.MeshStandardMaterial({ color: 0xffd7a4, emissive: 0xff723e, emissiveIntensity: 5 }),
   beacon: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x8abf30, emissiveIntensity: 3.5, transparent: true, opacity: .94 }),
+  event: new THREE.MeshStandardMaterial({ color: 0xff9d50, emissive: 0xa64618, emissiveIntensity: 3.3, transparent: true, opacity: .94 }),
 };
 
 // Collision volumes are kept separate from render geometry so the imported GLB
@@ -574,6 +575,162 @@ beaconPositions.forEach((position, index) => {
   beacons.push(group);
 });
 
+const raceRoute = [
+  new THREE.Vector3(22, .08, 22),
+  new THREE.Vector3(22, .08, 66),
+  new THREE.Vector3(-22, .08, 66),
+  new THREE.Vector3(-22, .08, -22),
+  new THREE.Vector3(66, .08, -22),
+  new THREE.Vector3(66, .08, 66),
+];
+const raceMarkers = [];
+const raceGate = new THREE.Group();
+raceGate.position.copy(raceRoute[0]);
+addMesh(raceGate, new THREE.BoxGeometry(.42, 4.7, .42), mats.event, [-4.2, 2.35, 0], { castShadow: true });
+addMesh(raceGate, new THREE.BoxGeometry(.42, 4.7, .42), mats.event, [4.2, 2.35, 0], { castShadow: true });
+addMesh(raceGate, new THREE.BoxGeometry(8.8, .34, .42), mats.event, [0, 4.6, 0], { castShadow: true });
+const gateRing = addMesh(raceGate, new THREE.TorusGeometry(3.25, .09, 8, 36), mats.event, [0, 2.15, 0], { rotation: [Math.PI / 2, 0, 0] });
+const gateLabel = makeLabel('MIDNIGHT SPRINT', '#ff9d50', .62);
+gateLabel.position.set(0, 5.55, 0);
+raceGate.add(gateLabel);
+world.add(raceGate);
+for (let index = 1; index < raceRoute.length; index += 1) {
+  const marker = new THREE.Group();
+  marker.position.copy(raceRoute[index]);
+  const ring = addMesh(marker, new THREE.TorusGeometry(2.45, .08, 8, 32), mats.event, [0, .2, 0], { rotation: [Math.PI / 2, 0, 0] });
+  const beam = addMesh(marker, new THREE.CylinderGeometry(.028, .028, 4.6, 6), mats.event, [0, 2.3, 0]);
+  const label = makeLabel(index === raceRoute.length - 1 ? 'FINISH' : `CHECKPOINT 0${index}`, '#ff9d50', .42);
+  label.position.y = 4.8;
+  marker.add(label);
+  marker.userData = { ring, beam, label };
+  world.add(marker);
+  raceMarkers.push(marker);
+}
+let raceState = 'idle';
+let raceIndex = 1;
+let raceTime = 0;
+let raceCountdown = 0;
+let raceCountdownLast = 0;
+let raceBest = 102.8;
+let raceNear = false;
+
+function formatRaceTime(seconds) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60).toString().padStart(2, '0');
+  const remainder = (safeSeconds % 60).toFixed(2).padStart(5, '0');
+  return `${minutes}:${remainder}`;
+}
+
+function raceAction() {
+  if (!raceNear && raceState === 'idle') return;
+  if (raceState === 'idle') {
+    raceState = 'countdown';
+    raceCountdown = 3.4;
+    raceCountdownLast = 4;
+    raceTime = 0;
+    raceIndex = 1;
+    player.speed = 0;
+    playTone(240, .22, .08, 'square', 20);
+    showToast('EVENT READY', 'Hold the line — the sprint starts now', 'MIDNIGHT SPRINT');
+  } else if (raceState === 'finished' && raceNear) {
+    raceState = 'countdown';
+    raceCountdown = 3.4;
+    raceCountdownLast = 4;
+    raceTime = 0;
+    raceIndex = 1;
+    player.speed = 0;
+    showToast('REMATCH', 'Beat your last line through Aurora Bay', 'MIDNIGHT SPRINT');
+  }
+}
+
+function updateRace(time, dt) {
+  const distanceToStart = player.position.distanceTo(raceRoute[0]);
+  raceNear = distanceToStart < 11;
+  if (raceState === 'countdown') {
+    raceCountdown -= dt;
+    const count = Math.ceil(raceCountdown);
+    if (count > 0 && count !== raceCountdownLast) {
+      raceCountdownLast = count;
+      playTone(250 + (4 - count) * 55, .16, .07, 'square', 20);
+    }
+    if (raceCountdown <= 0) {
+      raceState = 'active';
+      raceTime = 0;
+      playTone(620, .24, .1, 'sine', 240);
+    }
+  } else if (raceState === 'active') {
+    raceTime += dt;
+    const checkpointDistance = player.position.distanceTo(raceRoute[raceIndex]);
+    if (checkpointDistance < 7.4) {
+      playTone(480 + raceIndex * 34, .13, .06, 'sine', 90);
+      raceIndex += 1;
+      if (raceIndex >= raceRoute.length) {
+        raceState = 'finished';
+        const newBest = raceTime < raceBest;
+        if (newBest) raceBest = raceTime;
+        player.rep += newBest ? 300 : 120;
+        player.cash += newBest ? 180 : 80;
+        playBeacon();
+        showToast(newBest ? 'NEW PERSONAL BEST' : 'SPRINT COMPLETE', `${formatRaceTime(raceTime)} through the city grid`, newBest ? '+300 REP' : '+120 REP');
+      }
+    }
+  }
+
+  gateRing.rotation.z += dt * 1.1;
+  const gatePulse = (Math.sin(time * .004) + 1) / 2;
+  gateRing.scale.setScalar(1 + gatePulse * .12);
+  raceMarkers.forEach((marker, markerIndex) => {
+    const routeIndex = markerIndex + 1;
+    const active = raceState === 'active' && raceIndex === routeIndex;
+    const visible = active || (raceState === 'countdown' && routeIndex === 1);
+    const data = marker.userData;
+    marker.visible = visible;
+    if (visible) {
+      data.ring.rotation.z -= dt * 1.4;
+      data.ring.scale.setScalar(1 + gatePulse * .14);
+      data.beam.scale.y = 1 + gatePulse * .2;
+      data.label.material.opacity = 1;
+    }
+  });
+
+  const panel = document.querySelector('#event-panel');
+  const panelVisible = raceNear || raceState === 'countdown' || raceState === 'active' || raceState === 'finished';
+  panel.classList.toggle('visible', panelVisible);
+  panel.classList.toggle('active', raceState === 'countdown' || raceState === 'active');
+  panel.classList.toggle('finished', raceState === 'finished');
+  const status = document.querySelector('#event-status');
+  const title = document.querySelector('#event-title');
+  const copy = document.querySelector('#event-copy');
+  const timeReadout = document.querySelector('#event-time');
+  const action = document.querySelector('#event-action');
+  document.querySelector('#event-best').textContent = formatRaceTime(raceBest);
+  if (raceState === 'idle') {
+    status.textContent = raceNear ? 'READY' : 'OPEN WORLD';
+    title.textContent = 'MIDNIGHT SPRINT';
+    copy.textContent = raceNear ? 'Hit E to launch a five-checkpoint time trial.' : 'Find the orange start gate on the map and chase a clean line.';
+    timeReadout.textContent = raceNear ? 'PRESS E' : 'ROUTE EVENT';
+    action.innerHTML = raceNear ? '<span class="keycap">E</span><span>START EVENT</span>' : '<span>ORANGE GATE // 5 CHECKPOINTS</span>';
+  } else if (raceState === 'countdown') {
+    status.textContent = raceCountdown > 0 ? `START ${Math.max(1, Math.ceil(raceCountdown))}` : 'GO';
+    title.textContent = 'MIDNIGHT SPRINT';
+    copy.textContent = 'Stay on the asphalt. Missed gates do not count.';
+    timeReadout.textContent = '00:00.00';
+    action.innerHTML = '<span class="keycap">W</span><span>LAUNCH</span>';
+  } else if (raceState === 'active') {
+    status.textContent = `CHECKPOINT ${String(raceIndex).padStart(2, '0')} / 05`;
+    title.textContent = 'MIDNIGHT SPRINT';
+    copy.textContent = 'Thread the next orange gate before the clock catches you.';
+    timeReadout.textContent = formatRaceTime(raceTime);
+    action.innerHTML = '<span class="event-live-dot"></span><span>EVENT LIVE</span>';
+  } else {
+    status.textContent = 'FINISHED';
+    title.textContent = 'SPRINT COMPLETE';
+    copy.textContent = `Run time ${formatRaceTime(raceTime)}. Return to the gate for a rematch.`;
+    timeReadout.textContent = formatRaceTime(raceTime);
+    action.innerHTML = raceNear ? '<span class="keycap">E</span><span>REMATCH</span>' : '<span>ROUTE CLEARED</span>';
+  }
+}
+
 const input = { forward: false, back: false, left: false, right: false, nitro: false, handbrake: false };
 let cameraMode = 0;
 let soundOn = true;
@@ -722,6 +879,8 @@ window.addEventListener('keydown', (event) => {
     cameraMode = (cameraMode + 1) % 2;
     showToast(cameraMode === 0 ? 'CHASE CAMERA' : 'HIGH CAMERA', 'Camera angle changed', '');
   }
+  if (event.code === 'KeyE' && !event.repeat) raceAction();
+  if (event.code === 'KeyM' && !event.repeat) document.querySelector('#map-expand').click();
   if (event.code === 'KeyR' && !event.repeat) resetPlayer();
   setInput(event.code, true);
 });
@@ -1015,6 +1174,14 @@ function drawMiniMap() {
     mapCtx.fillStyle = active ? '#ff9d50' : 'rgba(214, 250, 106, .45)'; mapCtx.fill();
     if (active) { mapCtx.strokeStyle = 'rgba(255,157,80,.35)'; mapCtx.lineWidth = 2; mapCtx.stroke(); }
   });
+  const eventPoint = worldToMap(raceRoute[0].x, raceRoute[0].z, size);
+  mapCtx.beginPath();
+  mapCtx.rect(eventPoint.x - 3, eventPoint.y - 3, 6, 6);
+  mapCtx.fillStyle = '#ff5b9c';
+  mapCtx.fill();
+  mapCtx.strokeStyle = 'rgba(255,91,156,.48)';
+  mapCtx.lineWidth = 1;
+  mapCtx.stroke();
   const current = worldToMap(player.position.x, player.position.z, size);
   mapCtx.save();
   mapCtx.translate(current.x, current.y);
@@ -1065,6 +1232,7 @@ function animate(time) {
   sessionSeconds += dt;
   updatePlayer(dt);
   updateTraffic(dt);
+  updateRace(time, dt);
   updateAudio();
   updateBeacons(time, dt);
   updateCamera(dt);
