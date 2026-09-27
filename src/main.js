@@ -394,10 +394,23 @@ function buildLandmarks() {
   city.add(neonDistrict);
 }
 
-function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false) {
+const CAR_PROFILES = {
+  sport: { label: 'MIDNIGHT GT', scale: [1, 1, 1] },
+  hatch: { label: 'METRO HATCH', scale: [.91, .94, .84] },
+  supercar: { label: 'VELOCE R', scale: [.96, .82, 1.02] },
+  suv: { label: 'TRAIL SCOUT', scale: [1.08, 1.22, 1.02] },
+  pickup: { label: 'HARBOR UTILITY', scale: [1.1, 1.07, 1.06] },
+  wagon: { label: 'GRAND TOURER', scale: [1.04, 1.03, 1.1] },
+  classic: { label: 'CINDER CLASSIC', scale: [1.1, 1.02, 1.05] },
+  ev: { label: 'PULSE EV', scale: [1.02, .98, 1] },
+};
+
+function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style = 'sport') {
+  const profile = CAR_PROFILES[style] || CAR_PROFILES.sport;
   const root = new THREE.Group();
-  root.name = playerCar ? 'Blender Midnight GT — Player' : 'Blender Traffic Vehicle';
+  root.name = playerCar ? 'Blender Midnight GT — Player' : `${profile.label} — Fictional Traffic Vehicle`;
   root.userData.wheels = [];
+  root.userData.style = style;
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color, metalness: .75, roughness: .23, clearcoat: 1, clearcoatRoughness: .13 });
   const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x101720, metalness: .65, roughness: .23 });
   const accentMaterial = new THREE.MeshStandardMaterial({ color: accent, metalness: .4, roughness: .22, emissive: accent, emissiveIntensity: playerCar ? .32 : .08 });
@@ -450,17 +463,55 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false) {
     glow.position.y = .12;
     root.add(glow);
   }
+  // Distinct, fictional silhouettes inspired by familiar road-car categories.
+  // No brand badges, logos, or exact licensed trim are used in the traffic fleet.
+  if (style === 'hatch') {
+    addMesh(root, new THREE.BoxGeometry(1.75, .28, .92), bodyMaterial, [0, 1.12, -.95], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.55, .09, .14), accentMaterial, [0, 1.4, -1.7]);
+    addMesh(root, new THREE.BoxGeometry(1.85, .16, .16), darkMaterial, [0, .5, -2.15]);
+  } else if (style === 'supercar') {
+    addMesh(root, new THREE.BoxGeometry(2.0, .09, 1.22), accentMaterial, [0, .48, 2.08], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(.16, .32, 2.5), accentMaterial, [-1.02, .62, .05]);
+    addMesh(root, new THREE.BoxGeometry(.16, .32, 2.5), accentMaterial, [1.02, .62, .05]);
+    addMesh(root, new THREE.BoxGeometry(1.35, .1, .1), darkMaterial, [0, 1.04, -2.12]);
+  } else if (style === 'suv') {
+    addMesh(root, new THREE.BoxGeometry(1.85, .12, 2.25), darkMaterial, [-.68, 1.92, 0], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.85, .12, 2.25), darkMaterial, [.68, 1.92, 0], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(2.2, .18, .22), accentMaterial, [0, .48, -2.18]);
+    addMesh(root, new THREE.BoxGeometry(2.2, .18, .22), accentMaterial, [0, .48, 2.18]);
+  } else if (style === 'pickup') {
+    addMesh(root, new THREE.BoxGeometry(.17, .45, 1.42), bodyMaterial, [-.92, 1.04, -1.2], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(.17, .45, 1.42), bodyMaterial, [.92, 1.04, -1.2], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.95, .12, .12), accentMaterial, [0, 1.27, -1.92]);
+    addMesh(root, new THREE.BoxGeometry(2.18, .18, .18), darkMaterial, [0, .48, -2.2]);
+  } else if (style === 'wagon') {
+    addMesh(root, new THREE.BoxGeometry(1.8, .32, 1.7), bodyMaterial, [0, 1.17, -.65], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.55, .06, 1.45), mats.glass, [0, 1.5, -.65], { rotation: [Math.PI * .5, 0, 0] });
+    addMesh(root, new THREE.BoxGeometry(1.55, .1, .12), accentMaterial, [0, 1.48, -1.55]);
+  } else if (style === 'classic') {
+    addMesh(root, new THREE.BoxGeometry(.7, .18, .5), bodyMaterial, [0, 1.08, 1.12], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(2.35, .16, .18), rimMaterial, [0, .6, 2.2]);
+    addMesh(root, new THREE.BoxGeometry(2.35, .16, .18), rimMaterial, [0, .6, -2.2]);
+    addMesh(root, new THREE.BoxGeometry(.12, .14, 2.2), accentMaterial, [-1.16, .54, 0]);
+    addMesh(root, new THREE.BoxGeometry(.12, .14, 2.2), accentMaterial, [1.16, .54, 0]);
+  } else if (style === 'ev') {
+    addMesh(root, new THREE.BoxGeometry(1.5, .16, 1.75), mats.glass, [0, 1.32, -.18], { rotation: [Math.PI * .5, 0, 0] });
+    addMesh(root, new THREE.BoxGeometry(1.72, .05, 3.2), accentMaterial, [0, .87, -.05]);
+    addMesh(root, new THREE.BoxGeometry(.07, .13, .75), accentMaterial, [1.13, .74, .4]);
+  }
+  root.scale.set(...profile.scale);
   return root;
 }
 
 function createTraffic() {
-  const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f];
-  for (let i = 0; i < 10; i += 1) {
+  const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f, 0x7c6bf2, 0xc44966];
+  const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv'];
+  for (let i = 0; i < styles.length; i += 1) {
     const vertical = i % 2 === 0;
     const axis = roadAxes[(i * 3 + 1) % roadAxes.length];
     const lane = i % 4 < 2 ? -2.05 : 2.05;
-    const car = createCar(colors[i % colors.length], i % 2 ? 0x5ce3d1 : 0xff9d50, false);
-    car.scale.setScalar(.78);
+    const car = createCar(colors[i % colors.length], i % 2 ? 0x5ce3d1 : 0xff9d50, false, styles[i]);
+    car.scale.multiplyScalar(.78);
     car.position.set(vertical ? axis + lane : -104 + randomFrom(i + 2) * 208, .02, vertical ? -104 + randomFrom(i + 7) * 208 : axis + lane);
     const direction = i % 2 === 0 ? 1 : -1;
     const heading = vertical ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
@@ -522,7 +573,7 @@ async function loadBlenderAssets() {
   if (carResult.status === 'fulfilled') {
     const importedCar = carResult.value.scene;
     replaceVehicleVisual(player.mesh, importedCar, 1);
-    traffic.forEach((vehicle) => replaceVehicleVisual(vehicle.mesh, importedCar, .78));
+    // Traffic keeps its authored fictional silhouettes so the streets do not fill with clones.
     replaceVehicleVisual(policeVehicle, importedCar, .82);
   } else {
     console.warn('Blender car unavailable; using procedural fallback.', carResult.reason);
