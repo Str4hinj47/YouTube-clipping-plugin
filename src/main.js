@@ -16,6 +16,12 @@ const randomFrom = (seed) => {
   const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
   return x - Math.floor(x);
 };
+
+// The player car is integrated on a small fixed step so acceleration, grip,
+// collisions, and steering do not change with monitor refresh rate. Render and
+// world-streaming work can still run at the browser frame rate around it.
+const PHYSICS_FIXED_STEP = 1 / 120;
+const MAX_PHYSICS_STEPS = 8;
 const roadAxes = [-66, -22, 22, 66];
 const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
@@ -1694,6 +1700,27 @@ const VEHICLE_CATALOG = [
   { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, vehicleValue: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86 },
   { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, vehicleValue: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56 },
 ];
+
+// Handling profiles add physical personality without changing the existing
+// vehicle catalog or progression IDs. Values are normalized for the game's
+// world scale rather than intended as literal kilograms or real-world units.
+const VEHICLE_PHYSICS_PROFILES = {
+  sport: { mass: 1.5, wheelbase: 2.65, steeringLock: .54, yawResponse: 8.2, lateralGrip: 1.0, suspension: .11, brakeBias: .64 },
+  hatch: { mass: 1.25, wheelbase: 2.5, steeringLock: .58, yawResponse: 8.8, lateralGrip: 1.1, suspension: .13, brakeBias: .62 },
+  ev: { mass: 1.9, wheelbase: 2.7, steeringLock: .53, yawResponse: 8.6, lateralGrip: 1.08, suspension: .12, brakeBias: .65 },
+  classic: { mass: 1.65, wheelbase: 2.75, steeringLock: .49, yawResponse: 6.9, lateralGrip: .82, suspension: .15, brakeBias: .59 },
+  wagon: { mass: 1.7, wheelbase: 2.8, steeringLock: .51, yawResponse: 7.4, lateralGrip: .94, suspension: .15, brakeBias: .62 },
+  suv: { mass: 2.1, wheelbase: 2.9, steeringLock: .49, yawResponse: 6.8, lateralGrip: .88, suspension: .2, brakeBias: .67 },
+  pickup: { mass: 2.2, wheelbase: 3.0, steeringLock: .46, yawResponse: 6.2, lateralGrip: .75, suspension: .2, brakeBias: .68 },
+  supercar: { mass: 1.35, wheelbase: 2.7, steeringLock: .48, yawResponse: 9.2, lateralGrip: 1.16, suspension: .085, brakeBias: .66 },
+  van: { mass: 2.0, wheelbase: 2.95, steeringLock: .47, yawResponse: 6.4, lateralGrip: .78, suspension: .19, brakeBias: .67 },
+  truck: { mass: 4.5, wheelbase: 3.45, steeringLock: .4, yawResponse: 4.7, lateralGrip: .62, suspension: .27, brakeBias: .7 },
+};
+
+function vehiclePhysicsProfile(style = PROGRESSION_CONFIG.starterStyle) {
+  return VEHICLE_PHYSICS_PROFILES[style] || VEHICLE_PHYSICS_PROFILES.sport;
+}
+
 const fleetAssetScenes = {};
 
 // Crash damage is deliberately represented as geometry instead of a single
@@ -1875,6 +1902,7 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   root.name = playerCar ? 'Blender Midnight GT — Player' : `${profile.label} — Fictional Traffic Vehicle`;
   root.userData.wheels = [];
   root.userData.style = style;
+  root.userData.mass = vehiclePhysicsProfile(style).mass;
   root.userData.paintColor = `#${new THREE.Color(color).getHexString()}`;
   root.userData.paintMaterials = [];
   root.userData.indicators = { left: [], right: [] };
@@ -1926,6 +1954,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     addMesh(wheelGroup, new THREE.CylinderGeometry(.09, .09, .325, 10), accentMaterial, [0, 0, 0]);
     wheelGroup.userData.isFront = isFront;
     wheelGroup.userData.baseX = x;
+    wheelGroup.userData.baseY = .46;
+    wheelGroup.userData.baseZ = z;
     root.userData.wheels.push(wheelGroup);
     root.add(wheelGroup);
   }
@@ -2460,7 +2490,10 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   vehicleRoot.userData.loadedBrakeLights = [];
   importedCar.traverse((object) => {
     if (!object.isMesh) return;
-    if (/(wheel|tire|hub)/i.test(object.name)) vehicleRoot.userData.loadedWheels.push(object);
+    if (/(wheel|tire|hub)/i.test(object.name)) {
+      object.userData.physicsBasePosition = object.position.clone();
+      vehicleRoot.userData.loadedWheels.push(object);
+    }
     if (/(brake|tail|rear.*light|light.*rear)/i.test(object.name)) vehicleRoot.userData.loadedBrakeLights.push(object);
   });
   applyPaintToVehicleRoot(vehicleRoot, vehicleRoot.userData.paintColor);
@@ -3009,7 +3042,7 @@ function spawnPlayerAtHome(forceHome = false) {
     player.lastSafePosition.copy(player.position);
     player.heading = home.heading || 0;
   }
-  player.speed = 0;
+  stopPlayerPhysics();
   player.mesh.position.copy(player.position);
   player.mesh.rotation.set(0, player.heading, 0);
   return home;
@@ -3628,6 +3661,20 @@ const player = {
   position: new THREE.Vector3(0, .02, 0),
   speed: 0,
   heading: 0,
+  physics: {
+    velocity: new THREE.Vector3(),
+    steerAngle: 0,
+    yawRate: 0,
+    longitudinalAcceleration: 0,
+    lateralAcceleration: 0,
+    lateralSpeed: 0,
+    slipAngle: 0,
+    wheelSlip: 0,
+    surfaceId: 'asphalt',
+    surfaceLabel: 'ASPHALT',
+    surfaceGrip: 1,
+    surfaceRoughness: .025,
+  },
   distance: 0,
   rep: 1280,
   cash: 420,
@@ -3654,7 +3701,7 @@ const player = {
   trafficViolations: 0,
   lastSignalKey: '',
   stopObservations: {},
-  upgrades: { engine: 0, grip: 0 },
+  upgrades: { engine: 0, grip: 0, brakes: 0 },
   collectedCaches: [],
 };
 player.mesh.position.copy(player.position);
@@ -3723,6 +3770,7 @@ let qualityMode = 'HIGH';
 const upgradeConfig = {
   engine: { costs: [240, 420, 700] },
   grip: { costs: [180, 320, 540] },
+  brakes: { costs: [220, 390, 640] },
 };
 
 function vehicleUnlockRule(style) {
@@ -3858,7 +3906,7 @@ function resetProgressStateToDefaults() {
   player.trafficViolations = 0;
   player.lastSignalKey = '';
   player.stopObservations = {};
-  player.upgrades = { engine: 0, grip: 0 };
+  player.upgrades = { engine: 0, grip: 0, brakes: 0 };
   player.collectedCaches = [];
   phoneMessages = [];
   phoneMessageSequence = 0;
@@ -5293,7 +5341,7 @@ function enterVehicleWater(body) {
   player.waterBody = body;
   player.recoveryCost = vehicleRecoveryCost();
   player.waterSinkTime = 0;
-  player.speed = 0;
+  stopPlayerPhysics();
   player.condition = Math.min(player.condition, 1);
   Object.keys(input).forEach((key) => { input[key] = false; });
   player.mesh.position.copy(player.position);
@@ -5367,7 +5415,7 @@ function applyVehicleDamage(amount, source = 'impact', impact = {}) {
   updateGarageUi();
   if (player.condition <= 8) {
     player.disabledTimer = 2.8;
-    player.speed = 0;
+    stopPlayerPhysics();
     Object.keys(input).forEach((key) => { input[key] = false; });
     showToast('VEHICLE DISABLED', 'Open the Garage and repair the damaged ride', 'REPAIR REQUIRED');
   } else if (amount >= 10) {
@@ -5419,8 +5467,8 @@ function recoverVehicle() {
   player.recoveryCost = 0;
   player.position.copy(player.lastSafePosition || new THREE.Vector3(0, .02, 0));
   player.position.y = getRoadHeightAt(player.position.x, player.position.z);
-  player.speed = 0;
   player.heading = 0;
+  stopPlayerPhysics();
   player.mesh.position.copy(player.position);
   player.mesh.rotation.y = player.heading;
   clearVisibleVehicleDamage(player.mesh);
@@ -5564,6 +5612,7 @@ function applyPlayerVehicleStyle(style, announce = true, force = false) {
   nextMesh.rotation.y = player.heading;
   player.mesh = nextMesh;
   player.selectedStyle = style;
+  stopPlayerPhysics();
   if (fleetAssetScenes[style]) replaceVehicleVisual(nextMesh, fleetAssetScenes[style], 1);
   applyPaintToVehicleRoot(nextMesh, player.paint);
   (wasMenuCar ? menuGarage : actors).add(nextMesh);
@@ -5839,7 +5888,7 @@ function setStarterMenuOpen(open) {
       actors.add(player.mesh);
     }
     player.mesh.visible = false;
-    player.speed = 0;
+    stopPlayerPhysics();
     ensureMenuShowcaseSectors();
     resetMenuShowcase();
     setMenuPage('home');
@@ -6159,10 +6208,12 @@ function updateAudio() {
   }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
   const accelerating = input.forward || gamepadState.forward;
-  const onRoad = isOnRoad(player.position.x, player.position.z);
+  const physics = player.physics;
+  const onRoad = physics.surfaceId !== 'grass';
   const steeringLoad = clamp(Math.abs(drivingPresentation.steering) * speedRatio, 0, 1);
-  const handbrakeLoad = input.handbrake && speedRatio > .16 ? 1 : 0;
-  const offRoadLoad = onRoad ? 0 : .32;
+  const slipLoad = clamp(physics.wheelSlip + Math.abs(physics.slipAngle) * .35, 0, 1);
+  const handbrakeLoad = (input.handbrake || gamepadState.handbrake) && speedRatio > .16 ? 1 : 0;
+  const offRoadLoad = onRoad ? (physics.surfaceId === 'sidewalk' || physics.surfaceId === 'road-shoulder' ? .12 : 0) : .32;
   audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (accelerating ? 15 : 0), now, .045);
   audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
   audioState.engineSub.frequency.setTargetAtTime(24 + speedRatio * 38, now, .08);
@@ -6171,8 +6222,8 @@ function updateAudio() {
   audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
   audioState.subGain.gain.setTargetAtTime(.004 + speedRatio * .018 + (accelerating ? .006 : 0), now, .1);
   audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (onRoad ? .045 : .075), now, .12);
-  audioState.tireNoiseFilter.frequency.setTargetAtTime(850 + steeringLoad * 950 + handbrakeLoad * 650, now, .08);
-  audioState.tireNoiseGain.gain.setTargetAtTime((steeringLoad * .028) + (handbrakeLoad * .065) + offRoadLoad * speedRatio * .022, now, .08);
+  audioState.tireNoiseFilter.frequency.setTargetAtTime(850 + steeringLoad * 950 + slipLoad * 720 + handbrakeLoad * 650, now, .08);
+  audioState.tireNoiseGain.gain.setTargetAtTime((steeringLoad * .022) + (slipLoad * .052) + (handbrakeLoad * .065) + offRoadLoad * speedRatio * .022, now, .08);
   audioState.windNoiseFilter.frequency.setTargetAtTime(460 + speedRatio * 1180, now, .12);
   audioState.windNoiseGain.gain.setTargetAtTime(speedRatio * speedRatio * .052, now, .16);
   const indicatorActive = input.left || input.right || Math.abs(gamepadState.steer) > .2;
@@ -6491,6 +6542,33 @@ function showToast(title, copy, reward) {
   toastTimeout = window.setTimeout(() => toast.classList.remove('visible'), 3100);
 }
 
+const DRIVE_SURFACES = Object.freeze({
+  asphalt: { id: 'asphalt', label: 'ASPHALT', grip: 1, driveTraction: 1, rollingResistance: .32, drag: 1, roughness: .025, drivable: true },
+  mountainAsphalt: { id: 'mountain-asphalt', label: 'MOUNTAIN ASPHALT', grip: .9, driveTraction: .94, rollingResistance: .46, drag: 1.04, roughness: .055, drivable: true },
+  regionalAsphalt: { id: 'regional-asphalt', label: 'HIGHWAY ASPHALT', grip: .96, driveTraction: .98, rollingResistance: .28, drag: .96, roughness: .035, drivable: true },
+  sidewalk: { id: 'sidewalk', label: 'SIDEWALK', grip: .7, driveTraction: .72, rollingResistance: 1.05, drag: 1.08, roughness: .09, drivable: true },
+  shoulder: { id: 'road-shoulder', label: 'ROAD SHOULDER', grip: .61, driveTraction: .66, rollingResistance: 1.28, drag: 1.12, roughness: .13, drivable: true },
+  grass: { id: 'grass', label: 'GRASS', grip: .48, driveTraction: .56, rollingResistance: 2.15, drag: 1.22, roughness: .18, drivable: false },
+});
+
+function drivingSurfaceAt(x, z) {
+  const mountain = nearestMountainRoadPoint(x, z);
+  const villageRadius = Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z);
+  if (mountain.distance < 6.2 || (villageRadius < 38 && mountain.distance < 46)) {
+    return mountain.distance < 4.45 ? DRIVE_SURFACES.mountainAsphalt : DRIVE_SURFACES.shoulder;
+  }
+  const urban = nearestUrbanRoadPoint(x, z);
+  if (urban.distance < 7.2) return urban.distance < 4.85 ? DRIVE_SURFACES.asphalt : DRIVE_SURFACES.sidewalk;
+  const regional = nearestRegionalRoadPoint(x, z);
+  if (regional.distance < 7.5) return regional.distance < 5.75 ? DRIVE_SURFACES.regionalAsphalt : DRIVE_SURFACES.shoulder;
+  const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
+  if (insideCityGrid) {
+    const gridDistance = Math.min(...roadAxes.map((axis) => Math.min(Math.abs(x - axis), Math.abs(z - axis))));
+    if (gridDistance < 5.2) return gridDistance < 4.35 ? DRIVE_SURFACES.asphalt : DRIVE_SURFACES.sidewalk;
+  }
+  return DRIVE_SURFACES.grass;
+}
+
 function isOnRoad(x, z) {
   const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
   return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnUrbanRoad(x, z) || isOnMountainRoad(x, z) || isOnRegionalRoad(x, z);
@@ -6615,6 +6693,9 @@ function resolveStaticCollisions(impactSpeed = 0) {
   let breakable = false;
   let impactType = '';
   let strongestObstacle = null;
+  let strongestPenetration = 0;
+  let collisionNormalX = 0;
+  let collisionNormalZ = 0;
   for (const obstacle of staticObstacles) {
     // Water is a recoverable world state, not a solid bumper. Let the player
     // cross the lake edge far enough for waterBodyAt() to trigger recovery.
@@ -6653,6 +6734,11 @@ function resolveStaticCollisions(impactSpeed = 0) {
     player.position.x += normalX * penetration;
     player.position.z += normalZ * penetration;
     hit = true;
+    if (penetration >= strongestPenetration) {
+      strongestPenetration = penetration;
+      collisionNormalX = normalX;
+      collisionNormalZ = normalZ;
+    }
     if (!strongestObstacle || obstacle.breakable || obstacle.type === 'landmark') strongestObstacle = obstacle;
     impactType = obstacle.type;
     if (obstacle.breakable) {
@@ -6661,7 +6747,7 @@ function resolveStaticCollisions(impactSpeed = 0) {
       if (obstacle.object) obstacle.object.visible = false;
     }
   }
-  return { hit, breakable, impactType, obstacle: strongestObstacle, impactSpeed: Math.abs(impactSpeed) };
+  return { hit, breakable, impactType, obstacle: strongestObstacle, impactSpeed: Math.abs(impactSpeed), normalX: collisionNormalX, normalZ: collisionNormalZ };
 }
 
 function resolveTrafficCollisions(impactSpeed = 0) {
@@ -6675,7 +6761,7 @@ function resolveTrafficCollisions(impactSpeed = 0) {
     player.position.x += (dx / distance) * (radius - distance);
     player.position.z += (dz / distance) * (radius - distance);
     registerTrafficIncident(vehicle, Math.abs(impactSpeed) + vehicle.currentSpeed, true);
-    return { hit: true, trafficHit: true, vehicle, impactSpeed: Math.abs(impactSpeed) + vehicle.currentSpeed };
+    return { hit: true, trafficHit: true, vehicle, impactSpeed: Math.abs(impactSpeed) + vehicle.currentSpeed, normalX: dx / distance, normalZ: dz / distance };
   }
   if (policeState !== 'idle' && policeVehicle.visible) {
     const dx = player.position.x - policeVehicle.position.x;
@@ -6685,10 +6771,10 @@ function resolveTrafficCollisions(impactSpeed = 0) {
       const distance = Math.sqrt(distanceSq) || 1;
       player.position.x += (dx / distance) * (radius - distance);
       player.position.z += (dz / distance) * (radius - distance);
-      return { hit: true, trafficHit: true, policeHit: true, impactSpeed: Math.abs(impactSpeed) + 10 };
+      return { hit: true, trafficHit: true, policeHit: true, impactSpeed: Math.abs(impactSpeed) + 10, normalX: dx / distance, normalZ: dz / distance };
     }
   }
-  return { hit: false, trafficHit: false, policeHit: false, impactSpeed: 0 };
+  return { hit: false, trafficHit: false, policeHit: false, impactSpeed: 0, normalX: 0, normalZ: 0 };
 }
 
 function districtAt(x, z) {
@@ -6719,21 +6805,47 @@ function updatePlayerLighting(steering) {
   player.mesh.userData.headlights.forEach((beam) => { beam.intensity = .72; });
 }
 
+function resetPlayerPhysics(speed = 0) {
+  if (!player.physics) return;
+  const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  player.physics.velocity.copy(forward).multiplyScalar(speed);
+  player.physics.steerAngle = 0;
+  player.physics.yawRate = 0;
+  player.physics.longitudinalAcceleration = 0;
+  player.physics.lateralAcceleration = 0;
+  player.physics.lateralSpeed = 0;
+  player.physics.slipAngle = 0;
+  player.physics.wheelSlip = 0;
+  player.speed = speed;
+}
+
+function stopPlayerPhysics() {
+  resetPlayerPhysics(0);
+  drivingPresentation.visualSpeed = 0;
+  drivingPresentation.bodyRoll = 0;
+  drivingPresentation.bodyPitch = 0;
+  drivingPresentation.suspension = 0;
+}
+
 function updateVehiclePresentation(dt, steering, onRoad, handbraking = false) {
   drivingPresentation.time += dt;
-  drivingPresentation.steering = damp(drivingPresentation.steering, steering, 11, dt);
-  const acceleration = (player.speed - drivingPresentation.visualSpeed) / Math.max(.016, dt);
+  const physics = player.physics;
+  const handling = vehiclePhysicsProfile(vehicleCatalogEntry().style);
+  const suspensionTravel = handling.suspension;
+  const surfaceRoughness = physics.surfaceRoughness || (onRoad ? .025 : .18);
+  drivingPresentation.steering = damp(drivingPresentation.steering, steering, 13, dt);
   drivingPresentation.visualSpeed = damp(drivingPresentation.visualSpeed, player.speed, 13, dt);
   const speedRatio = clamp(Math.abs(player.speed) / Math.max(1, vehicleCatalogEntry().turnSpeed), 0, 1);
-  const load = clamp(acceleration * .0042, -.085, .085);
-  const targetPitch = onRoad ? -load : -load * .45;
-  const targetRoll = clamp(-drivingPresentation.steering * speedRatio * (handbraking ? .14 : .075), -.12, .12);
-  const targetSuspension = onRoad
-    ? Math.sin(drivingPresentation.time * (8.5 + speedRatio * 7)) * speedRatio * .018
-    : Math.sin(drivingPresentation.time * 6.5) * .012;
-  drivingPresentation.bodyPitch = damp(drivingPresentation.bodyPitch, targetPitch, 8, dt);
-  drivingPresentation.bodyRoll = damp(drivingPresentation.bodyRoll, targetRoll, 8, dt);
-  drivingPresentation.suspension = damp(drivingPresentation.suspension, targetSuspension, 11, dt);
+  const longitudinalLoad = clamp(physics.longitudinalAcceleration * .0042, -.11, .11);
+  const lateralLoad = clamp(physics.lateralAcceleration * .0017, -.14, .14);
+  const targetPitch = onRoad ? -longitudinalLoad : -longitudinalLoad * .52;
+  const targetRoll = clamp(-lateralLoad - drivingPresentation.steering * speedRatio * (handbraking ? .08 : .035), -.16, .16);
+  const roadBounce = Math.sin(drivingPresentation.time * (8.5 + speedRatio * 7)) * speedRatio * surfaceRoughness * suspensionTravel * 1.2;
+  const offRoadBounce = Math.sin(drivingPresentation.time * 6.5) * surfaceRoughness * suspensionTravel * .55;
+  const targetSuspension = onRoad ? roadBounce : offRoadBounce;
+  drivingPresentation.bodyPitch = damp(drivingPresentation.bodyPitch, targetPitch, 9, dt);
+  drivingPresentation.bodyRoll = damp(drivingPresentation.bodyRoll, targetRoll, 9, dt);
+  drivingPresentation.suspension = damp(drivingPresentation.suspension, targetSuspension, 12, dt);
   player.mesh.position.copy(player.position);
   player.mesh.position.y += drivingPresentation.suspension;
   player.mesh.rotation.y = player.heading;
@@ -6741,6 +6853,11 @@ function updateVehiclePresentation(dt, steering, onRoad, handbraking = false) {
   player.mesh.rotation.z = drivingPresentation.bodyRoll;
   player.mesh.userData.wheels.forEach((wheel) => {
     if (wheel.userData.isFront) wheel.rotation.y = drivingPresentation.steering * .22;
+    if (Number.isFinite(wheel.userData.baseY)) {
+      const axlePhase = wheel.userData.baseZ > 0 ? .6 : 0;
+      const wheelBounce = Math.sin(drivingPresentation.time * (9 + speedRatio * 5) + axlePhase) * surfaceRoughness * suspensionTravel * .72;
+      wheel.position.y = wheel.userData.baseY + wheelBounce;
+    }
   });
 }
 
@@ -6749,7 +6866,7 @@ function updatePlayer(dt) {
   player.violationCooldown = Math.max(0, player.violationCooldown - dt);
   if (player.waterRecoveryPending) {
     player.waterSinkTime = Math.min(2.4, player.waterSinkTime + dt);
-    player.speed = 0;
+    stopPlayerPhysics();
     player.mesh.position.copy(player.position);
     player.mesh.position.y = player.position.y - Math.min(.92, player.waterSinkTime * .52);
     player.mesh.rotation.y = player.heading;
@@ -6760,91 +6877,202 @@ function updatePlayer(dt) {
   }
   if (player.disabledTimer > 0 || player.condition <= 8) {
     player.disabledTimer = Math.max(0, player.disabledTimer - dt);
-    player.speed = damp(player.speed, 0, 8, dt);
+    player.physics.velocity.multiplyScalar(Math.exp(-8 * dt));
+    const disabledForward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+    player.speed = player.physics.velocity.dot(disabledForward);
     player.mesh.position.copy(player.position);
     updatePlayerLighting(0);
     setBrakeLights(player.mesh, true);
     return;
   }
-  const throttle = input.forward || gamepadState.forward ? 1 : 0;
-  const braking = input.back || gamepadState.back ? 1 : 0;
+
+  const throttle = input.forward || gamepadState.forward;
+  const braking = input.back || gamepadState.back;
   const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
-  const onRoad = isOnRoad(player.position.x, player.position.z);
+  const surface = drivingSurfaceAt(player.position.x, player.position.z);
+  const onRoad = surface.drivable;
   if (onRoad) player.lastSafePosition.copy(player.position);
   const vehicleSpec = vehicleCatalogEntry();
+  const handling = vehiclePhysicsProfile(vehicleSpec.style);
+  const conditionFactor = clamp(.65 + player.condition * .0035, .65, 1);
   const engineLevel = player.upgrades.engine;
+  const gripLevel = clamp((vehicleSpec.grip / 80) * handling.lateralGrip * (1 + player.upgrades.grip * .12) * conditionFactor, .32, 1.55);
+  const brakeLevel = 1 + player.upgrades.brakes * .12;
+  const brakeResponse = vehicleSpec.brakePower * brakeLevel * (.88 + handling.brakeBias * .18) * conditionFactor;
   const engineMultiplier = 1 + engineLevel * .1;
-  const gripMultiplier = 1 + player.upgrades.grip * .1;
-  const handbraking = input.handbrake && Math.abs(player.speed) > 6;
-  const acceleration = (onRoad ? vehicleSpec.acceleration : vehicleSpec.acceleration * vehicleSpec.offRoadTraction) * engineMultiplier;
-  const normalTopSpeed = vehicleSpec.topSpeed + engineLevel * 2;
-
-  if (throttle) player.speed += acceleration * dt;
-  if (braking) player.speed -= (player.speed > 0 ? vehicleSpec.brakePower : vehicleSpec.brakePower * .42) * dt;
-  if (!throttle && !braking) player.speed = damp(player.speed, 0, onRoad ? .78 : 1.25, dt);
-  if (handbraking) player.speed = damp(player.speed, 0, .14, dt);
-  if (!onRoad) player.speed *= Math.pow(clamp(vehicleSpec.offRoadTraction + player.upgrades.grip * .02, .55, .99), dt);
-  player.speed = clamp(player.speed, -12, normalTopSpeed);
-
-  if (Math.abs(player.speed) > .3) {
-    const turnFactor = clamp(Math.abs(player.speed) / vehicleSpec.turnSpeed, .12, 1.28) * (handbraking ? 1.8 : 1) * gripMultiplier;
-    player.heading += steering * vehicleSpec.turnRate * turnFactor * dt * (player.speed >= 0 ? 1 : -1);
-  }
+  const handbrakeInput = input.handbrake || gamepadState.handbrake;
+  const handbraking = handbrakeInput && Math.abs(player.speed) > 5;
+  const physics = player.physics;
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
-  const movement = forward.clone().multiplyScalar(player.speed * dt);
+  const right = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
+  let longitudinal = physics.velocity.dot(forward);
+  let lateral = physics.velocity.dot(right);
+  const previousLongitudinal = longitudinal;
+  const previousLateral = physics.lateralSpeed;
+  const speedAbs = Math.abs(longitudinal);
+  const normalTopSpeed = vehicleSpec.topSpeed + engineLevel * 2;
+  const engineAcceleration = vehicleSpec.acceleration * engineMultiplier * conditionFactor;
+  const tractionLimit = (13.5 + vehicleSpec.grip * .12) * surface.driveTraction * handling.lateralGrip * conditionFactor;
+  let longitudinalAcceleration = 0;
+  let wheelSlip = 0;
+
+  // Longitudinal force: engine output, reverse torque, brake force, rolling
+  // resistance, and aerodynamic drag all contribute instead of directly
+  // teleporting the scalar speed toward a target.
+  const drag = (0.018 * speedAbs + .00135 * speedAbs * speedAbs) * surface.drag;
+  const rolling = speedAbs > .08 ? surface.rollingResistance : 0;
+  longitudinalAcceleration -= Math.sign(longitudinal) * (drag + rolling);
+  if (throttle && !(braking && longitudinal > .3)) {
+    const requestedDrive = engineAcceleration * clamp(1 - speedAbs / Math.max(1, normalTopSpeed) * .72, .08, 1);
+    const appliedDrive = Math.min(requestedDrive * surface.driveTraction, tractionLimit);
+    longitudinalAcceleration += appliedDrive;
+    wheelSlip = Math.max(0, requestedDrive * surface.driveTraction - appliedDrive) / Math.max(1, requestedDrive);
+  }
+  if (braking) {
+    if (longitudinal > .25) {
+      longitudinalAcceleration -= brakeResponse * surface.grip;
+    } else if (!throttle) {
+      longitudinalAcceleration -= engineAcceleration * .46 * surface.driveTraction;
+    }
+  }
+  if (!throttle && !braking && speedAbs > .08) {
+    longitudinalAcceleration -= Math.sign(longitudinal) * (0.72 + speedAbs * .018);
+  }
+  if (handbraking) {
+    longitudinalAcceleration -= Math.sign(longitudinal || 1) * (2.5 + speedAbs * .065);
+    wheelSlip = Math.max(wheelSlip, .48);
+  }
+  longitudinal = clamp(longitudinal + longitudinalAcceleration * dt, -12, normalTopSpeed);
+  if (!throttle && !braking && Math.abs(longitudinal) < .08) longitudinal = 0;
+
+  // Bicycle-model steering supplies a believable yaw target. Handbraking lowers
+  // rear grip and lets the body rotate ahead of the velocity for a controlled slide.
+  const speedFactor = clamp(speedAbs / Math.max(1, vehicleSpec.turnSpeed), .04, 1);
+  const targetSteerAngle = steering * handling.steeringLock * (.32 + speedFactor * .68);
+  physics.steerAngle = damp(physics.steerAngle, targetSteerAngle, 10.5, dt);
+  const effectiveGrip = clamp(gripLevel * surface.grip, .25, 1.5);
+  let desiredYawRate = Math.abs(longitudinal) > .25
+    ? (longitudinal / handling.wheelbase) * Math.tan(physics.steerAngle) * (.68 + effectiveGrip * .24)
+    : 0;
+  if (handbraking && steering) desiredYawRate += steering * Math.sign(longitudinal || 1) * (.24 + speedAbs * .016);
+  desiredYawRate = clamp(desiredYawRate, -2.75, 2.75);
+  physics.yawRate = damp(physics.yawRate, desiredYawRate, handbraking ? 10.5 : handling.yawResponse, dt);
+  player.heading += physics.yawRate * dt;
+
+  // Rotate only part of the velocity with the chassis. High grip follows the
+  // steering line; a handbrake or poor surface preserves lateral momentum.
+  const preTurnVelocity = forward.clone().multiplyScalar(longitudinal).add(right.clone().multiplyScalar(lateral));
+  const follow = clamp(surface.grip * (handbraking ? .3 : .9), .12, .96);
+  const velocityTurn = physics.yawRate * dt * follow;
+  const velocityCos = Math.cos(velocityTurn);
+  const velocitySin = Math.sin(velocityTurn);
+  const turnedVelocity = new THREE.Vector3(
+    preTurnVelocity.x * velocityCos + preTurnVelocity.z * velocitySin,
+    0,
+    -preTurnVelocity.x * velocitySin + preTurnVelocity.z * velocityCos,
+  );
+  const newForward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  const newRight = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
+  longitudinal = turnedVelocity.dot(newForward);
+  lateral = turnedVelocity.dot(newRight);
+  const lateralDamping = (4.1 + effectiveGrip * 8.6) * (handbraking ? .24 : 1) * surface.grip;
+  lateral = damp(lateral, 0, lateralDamping, dt);
+  const maxLateral = Math.max(1.25, Math.abs(longitudinal) * (.18 + (1 - clamp(effectiveGrip, .25, 1)) * .34));
+  if (!handbraking) lateral = clamp(lateral, -maxLateral, maxLateral);
+  physics.velocity.copy(newForward).multiplyScalar(longitudinal).add(newRight.clone().multiplyScalar(lateral));
+  physics.longitudinalAcceleration = (longitudinal - previousLongitudinal) / Math.max(.001, dt);
+  physics.lateralAcceleration = longitudinal * physics.yawRate + (lateral - previousLateral) / Math.max(.001, dt);
+  physics.lateralSpeed = lateral;
+  physics.slipAngle = Math.atan2(lateral, Math.max(.5, Math.abs(longitudinal)));
+  physics.wheelSlip = damp(physics.wheelSlip, clamp(wheelSlip + Math.abs(physics.slipAngle) * .42, 0, 1), 12, dt);
+  physics.surfaceId = surface.id;
+  physics.surfaceLabel = surface.label;
+  physics.surfaceGrip = surface.grip;
+  physics.surfaceRoughness = surface.roughness;
+  player.speed = longitudinal;
+
   const previousPosition = player.position.clone();
-  player.position.add(movement);
+  player.position.addScaledVector(physics.velocity, dt);
   const waterBody = waterBodyAt(player.position.x, player.position.z);
   if (waterBody) {
     enterVehicleWater(waterBody);
     return;
   }
-  player.position.y = isOnRoad(player.position.x, player.position.z) ? getRoadHeightAt(player.position.x, player.position.z) : .02;
-  player.distance += Math.abs(player.speed * dt);
+  const postMoveSurface = drivingSurfaceAt(player.position.x, player.position.z);
+  player.position.y = postMoveSurface.drivable ? getRoadHeightAt(player.position.x, player.position.z) : .02;
+  player.distance += physics.velocity.length() * dt;
   updateTrafficRules(previousPosition, dt, onRoad);
-  const impactSpeed = Math.abs(player.speed);
+  const impactSpeed = Math.max(Math.abs(player.speed), physics.velocity.length());
   const staticCollision = resolveStaticCollisions(impactSpeed);
   const trafficCollision = resolveTrafficCollisions(impactSpeed);
   const trafficHit = trafficCollision.hit;
   if (staticCollision.hit || trafficHit) {
+    const collisionNormal = trafficHit
+      ? new THREE.Vector3(trafficCollision.normalX || 0, 0, trafficCollision.normalZ || 0)
+      : new THREE.Vector3(staticCollision.normalX || 0, 0, staticCollision.normalZ || 0);
+    if (collisionNormal.lengthSq() > .001) {
+      collisionNormal.normalize();
+      const normalSpeed = physics.velocity.dot(collisionNormal);
+      if (normalSpeed < 0) physics.velocity.addScaledVector(collisionNormal, -normalSpeed * (trafficHit ? 1.18 : 1.06));
+    }
     if (collisionCooldown <= 0) {
-      player.speed *= trafficHit ? -.28 : -.22;
-      drivingPresentation.cameraShake = Math.max(drivingPresentation.cameraShake, clamp(impactSpeed / 42, .08, .26));
+      const otherMass = trafficCollision.vehicle?.mesh.userData.mass || 1.5;
+      const massRatio = trafficHit ? clamp(otherMass / Math.max(.1, handling.mass + otherMass), .12, .82) : 1;
+      const velocityRetention = trafficHit ? clamp(.56 - massRatio * .16, .3, .56) : .26;
+      physics.velocity.multiplyScalar(velocityRetention);
+      physics.yawRate *= trafficHit ? .45 : .25;
+      player.speed = physics.velocity.dot(newForward);
+      drivingPresentation.cameraShake = Math.max(drivingPresentation.cameraShake, clamp(impactSpeed / 42, .08, .3));
       playImpact(trafficHit);
       const furnitureHit = staticCollision.breakable && !trafficHit;
       const impactOrigin = trafficCollision.policeHit
         ? policeVehicle.position.clone()
         : trafficCollision.vehicle?.mesh.position.clone()
-          || (staticCollision.obstacle ? new THREE.Vector3(staticCollision.obstacle.x, player.position.y, staticCollision.obstacle.z) : player.position.clone().add(forward));
+          || (staticCollision.obstacle ? new THREE.Vector3(staticCollision.obstacle.x, player.position.y, staticCollision.obstacle.z) : player.position.clone().add(newForward));
       const damage = clamp(impactSpeed * (trafficHit ? 1.35 : furnitureHit ? .58 : .92) + (trafficCollision.policeHit ? 7 : 0), 2, 36);
       applyVehicleDamage(damage, trafficCollision.policeHit ? 'POLICE IMPACT' : furnitureHit ? 'ROAD FURNITURE' : 'COLLISION', { worldPosition: impactOrigin, seed: (player.damageSequence || 0) + 1 });
       showToast(trafficCollision.policeHit ? 'POLICE CONTACT' : trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficCollision.policeHit ? 'The officer is checking the roadside stop' : trafficHit ? 'Vehicle incident logged' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : `-${Math.round(damage)} CONDITION`);
       collisionCooldown = .75;
     } else {
-      player.speed = damp(player.speed, 0, 3.5, dt);
+      physics.velocity.multiplyScalar(Math.exp(-3.5 * dt));
+      player.speed = physics.velocity.dot(newForward);
     }
   }
-  if (player.position.x < -WORLD_LIMIT || player.position.x > WORLD_LIMIT) {
-    player.position.x = clamp(player.position.x, -WORLD_LIMIT, WORLD_LIMIT);
-    player.speed *= -.25;
+  if (player.position.x < -WORLD_LIMIT) {
+    player.position.x = -WORLD_LIMIT;
+    physics.velocity.x = Math.abs(physics.velocity.x) * .25;
+  } else if (player.position.x > WORLD_LIMIT) {
+    player.position.x = WORLD_LIMIT;
+    physics.velocity.x = -Math.abs(physics.velocity.x) * .25;
   }
-  if (player.position.z < -WORLD_LIMIT || player.position.z > WORLD_LIMIT) {
-    player.position.z = clamp(player.position.z, -WORLD_LIMIT, WORLD_LIMIT);
-    player.speed *= -.25;
+  if (player.position.z < -WORLD_LIMIT) {
+    player.position.z = -WORLD_LIMIT;
+    physics.velocity.z = Math.abs(physics.velocity.z) * .25;
+  } else if (player.position.z > WORLD_LIMIT) {
+    player.position.z = WORLD_LIMIT;
+    physics.velocity.z = -Math.abs(physics.velocity.z) * .25;
   }
+  player.speed = physics.velocity.dot(newForward);
   player.mesh.userData.wheels.forEach((wheel) => {
     wheel.rotation.z = Math.PI / 2;
     wheel.children[0].rotation.x -= player.speed * dt * 1.8;
   });
   player.mesh.userData.loadedWheels?.forEach((wheel) => {
     wheel.rotation.x -= player.speed * dt * 1.8;
+    if (wheel.userData.physicsBasePosition) {
+      const importedBounce = Math.sin(drivingPresentation.time * (9 + speedRatio * 5) + (wheel.position.z > 0 ? .6 : 0)) * surfaceRoughness * suspensionTravel * .55;
+      wheel.position.y = wheel.userData.physicsBasePosition.y + importedBounce;
+    }
   });
   updateVehiclePresentation(dt, steering, onRoad, handbraking);
   updatePlayerLighting(steering);
   setBrakeLights(player.mesh, Boolean(braking || handbraking || staticCollision.hit || trafficHit));
 
-  document.querySelector('#surface-state').textContent = onRoad ? (handbraking ? 'HAND BRAKE' : 'ASPHALT') : 'GRASS';
-  document.querySelector('#surface-state').style.color = handbraking ? 'var(--orange)' : '';
+  const surfaceState = document.querySelector('#surface-state');
+  if (surfaceState) {
+    surfaceState.textContent = handbraking ? 'HAND BRAKE' : physics.surfaceLabel;
+    surfaceState.style.color = handbraking ? 'var(--orange)' : physics.surfaceId === 'grass' ? 'var(--orange)' : '';
+  }
 }
 
 function trafficIntersectionAhead(vehicle, maxDistance = 23) {
@@ -7869,6 +8097,7 @@ loadBlenderAssets()
   .finally(() => { assetsReady = true; });
 
 let lastTime = performance.now();
+let physicsAccumulator = 0;
 let hudAccumulator = 0;
 let saveAccumulator = 0;
 function animate(time) {
@@ -7876,8 +8105,16 @@ function animate(time) {
   lastTime = time;
   if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen) sessionSeconds += dt;
   updateGamepad();
-  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen) {
-    updatePlayer(dt);
+  const simulationActive = !starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen;
+  if (simulationActive) {
+    physicsAccumulator = Math.min(physicsAccumulator + dt, PHYSICS_FIXED_STEP * MAX_PHYSICS_STEPS);
+    let physicsSteps = 0;
+    while (physicsAccumulator >= PHYSICS_FIXED_STEP && physicsSteps < MAX_PHYSICS_STEPS) {
+      updatePlayer(PHYSICS_FIXED_STEP);
+      physicsAccumulator -= PHYSICS_FIXED_STEP;
+      physicsSteps += 1;
+    }
+    if (physicsSteps === MAX_PHYSICS_STEPS) physicsAccumulator = 0;
     updateWorldStreaming();
     updateTrafficSignals(time);
     updateTraffic(dt);
@@ -7901,6 +8138,8 @@ function animate(time) {
       saveProgress();
       saveAccumulator = 0;
     }
+  } else {
+    physicsAccumulator = 0;
   }
   updateAudio();
   updateWater(time);
