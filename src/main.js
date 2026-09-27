@@ -96,8 +96,8 @@ const mats = {
 // environment and the procedural fallback share the same driving physics.
 const staticObstacles = [];
 
-function addObstacle(x, z, halfX, halfZ, type = 'building') {
-  staticObstacles.push({ x, z, halfX, halfZ, type });
+function addObstacle(x, z, halfX, halfZ, type = 'building', object = null, breakable = false) {
+  staticObstacles.push({ x, z, halfX, halfZ, type, object, breakable, broken: false });
 }
 
 function addMesh(parent, geometry, material, position = [0, 0, 0], options = {}) {
@@ -418,6 +418,7 @@ function createTrafficLight(x, z, offset = 0) {
   group.userData = { housing, lamps, materials: [red, yellow, green], offset };
   roadFurniture.add(group);
   trafficSignals.push(group);
+  addObstacle(x + poleX, z + poleZ, .7, .7, 'traffic-light', group, true);
 }
 
 function createStopSign(x, z, rotation = 0) {
@@ -429,6 +430,7 @@ function createStopSign(x, z, rotation = 0) {
   label.position.set(0, 1.82, .08);
   group.add(label);
   roadFurniture.add(group);
+  addObstacle(x, z, .72, .72, 'stop-sign', group, true);
 }
 
 function createSpeedSign(x, z, limit = 45, rotation = 0) {
@@ -440,6 +442,7 @@ function createSpeedSign(x, z, limit = 45, rotation = 0) {
   label.position.set(0, 1.9, .08);
   group.add(label);
   roadFurniture.add(group);
+  addObstacle(x, z, .72, .72, 'speed-sign', group, true);
 }
 
 function buildRoadInfrastructure() {
@@ -1518,7 +1521,16 @@ document.querySelector('#reset-save').addEventListener('click', () => resetSaved
 updateGarageUi();
 applyQualityMode();
 
+function resetRoadFurniture() {
+  staticObstacles.forEach((obstacle) => {
+    if (!obstacle.breakable) return;
+    obstacle.broken = false;
+    if (obstacle.object) obstacle.object.visible = true;
+  });
+}
+
 function resetPlayer() {
+  resetRoadFurniture();
   player.position.set(0, .02, 0);
   player.mesh.position.copy(player.position);
   player.speed = 0;
@@ -1543,15 +1555,17 @@ function isOnRoad(x, z) {
 function resolveStaticCollisions() {
   const radius = 1.16;
   let hit = false;
+  let breakable = false;
   for (const obstacle of staticObstacles) {
+    if (obstacle.broken) continue;
     const minX = obstacle.x - obstacle.halfX;
     const maxX = obstacle.x + obstacle.halfX;
     const minZ = obstacle.z - obstacle.halfZ;
     const maxZ = obstacle.z + obstacle.halfZ;
     const closestX = clamp(player.position.x, minX, maxX);
     const closestZ = clamp(player.position.z, minZ, maxZ);
-    let dx = player.position.x - closestX;
-    let dz = player.position.z - closestZ;
+    const dx = player.position.x - closestX;
+    const dz = player.position.z - closestZ;
     const distanceSq = dx * dx + dz * dz;
     if (distanceSq >= radius * radius) continue;
 
@@ -1577,8 +1591,13 @@ function resolveStaticCollisions() {
     player.position.x += normalX * penetration;
     player.position.z += normalZ * penetration;
     hit = true;
+    if (obstacle.breakable) {
+      obstacle.broken = true;
+      breakable = true;
+      if (obstacle.object) obstacle.object.visible = false;
+    }
   }
-  return hit;
+  return { hit, breakable };
 }
 
 function resolveTrafficCollisions() {
@@ -1661,13 +1680,14 @@ function updatePlayer(dt) {
   const movement = forward.clone().multiplyScalar(player.speed * dt);
   player.position.add(movement);
   player.distance += Math.abs(player.speed * dt);
-  const staticHit = resolveStaticCollisions();
+  const staticCollision = resolveStaticCollisions();
   const trafficHit = resolveTrafficCollisions();
-  if (staticHit || trafficHit) {
+  if (staticCollision.hit || trafficHit) {
     if (collisionCooldown <= 0) {
       player.speed *= trafficHit ? -.28 : -.22;
       playImpact(trafficHit);
-      showToast(trafficHit ? 'TRAFFIC CONTACT' : 'BODYWORK CONTACT', trafficHit ? 'Give the lanes a little room' : 'Concrete wins every time', 'SLOW DOWN');
+      const furnitureHit = staticCollision.breakable && !trafficHit;
+      showToast(trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficHit ? 'Give the lanes a little room' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : 'SLOW DOWN');
       collisionCooldown = .75;
     } else {
       player.speed = damp(player.speed, 0, 3.5, dt);
