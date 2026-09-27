@@ -2837,7 +2837,7 @@ function markAllPhoneMessagesRead() {
 }
 
 function setPhoneOpen(open) {
-  if (open && starterMenuOpen) return;
+  if (open && (starterMenuOpen || roadsideStopOpen)) return;
   if (open && garageOpen) setGarageOpen(false);
   if (open && worldMapOpen) setWorldMapOpen(false);
   if (open && gamePaused) setPauseOpen(false);
@@ -3191,14 +3191,15 @@ function completeCargoRun(mission) {
 }
 
 function inspectCargoAtRoadside() {
-  if (!cargoRun.active) return;
+  if (!cargoRun.active) return { active: false, passed: true, exposure: 0 };
+  const exposureBefore = cargoRun.exposure;
   const chance = clamp(CARGO_RUN_CONFIG.baseInspectionChance + (cargoRun.exposure / 100) * .78, CARGO_RUN_CONFIG.baseInspectionChance, CARGO_RUN_CONFIG.maxInspectionChance);
   if (Math.random() < chance) {
     failCargoRun('CARGO BUSTED', `The roadside inspection found the unmarked case at ${Math.round(cargoRun.exposure)}% exposure.`);
-  } else {
-    recordCargoExposure(CARGO_RUN_CONFIG.radarExposure, 'roadside inspection');
-    showToast('INSPECTION CLEARED', 'The case stayed sealed. Keep the rest of the run clean.', `RISK ${Math.round(cargoRun.exposure)}%`);
+    return { active: true, passed: false, exposureBefore, exposure: cargoRun.exposure, chance };
   }
+  recordCargoExposure(CARGO_RUN_CONFIG.radarExposure, 'roadside inspection');
+  return { active: true, passed: true, exposureBefore, exposure: cargoRun.exposure, chance };
 }
 
 function settleCargoFailure(route, dt) {
@@ -3504,6 +3505,9 @@ const speedRadarSites = [];
 let activeRadarSite = null;
 let policeState = 'idle';
 let policeTime = 0;
+let roadsideStopOpen = false;
+let roadsideStopResolved = false;
+let roadsideStopWasSafe = false;
 
 function createSpeedRadarSite(position, heading = 0) {
   const group = new THREE.Group();
@@ -3561,8 +3565,105 @@ function nearestSpeedRadarSite() {
   return nearest;
 }
 
+function showRoadsideStopPanel(stoppedSafely) {
+  roadsideStopOpen = true;
+  roadsideStopResolved = false;
+  roadsideStopWasSafe = stoppedSafely;
+  Object.keys(input).forEach((key) => { input[key] = false; });
+  touchSteer = 0;
+  Object.assign(gamepadState, { forward: false, back: false, handbrake: false, steer: 0 });
+  const overlay = document.querySelector('#roadside-stop-overlay');
+  const copy = document.querySelector('#roadside-stop-copy');
+  const status = document.querySelector('#roadside-stop-status');
+  const reason = document.querySelector('#roadside-stop-reason');
+  const cargo = document.querySelector('#roadside-stop-cargo');
+  const outcome = document.querySelector('#roadside-stop-outcome');
+  const action = document.querySelector('#roadside-stop-action');
+  if (!overlay || !copy || !status || !reason || !cargo || !outcome || !action) return;
+  const mission = cargoRun.route === 'mountain' ? MOUNTAIN_CARGO_MISSION : currentCityDeliveryMission();
+  const limit = getSpeedLimit(player.position.x, player.position.z);
+  status.textContent = stoppedSafely ? 'STOPPED SAFELY' : 'CITATION WITHOUT STOP';
+  copy.textContent = stoppedSafely
+    ? 'You pulled over safely. Cooperate with the roadside check before returning to the route.'
+    : 'The radar unit recorded a citation without a safe stop. Resolve the record before returning to the route.';
+  reason.textContent = `RADAR CHECK // POSTED LIMIT ${limit} KM/H`;
+  cargo.textContent = cargoRun.active ? `ACTIVE CASE // ${mission.title} // RISK ${Math.round(cargoRun.exposure)}%` : 'NO ACTIVE CASE // CITATION ONLY';
+  outcome.hidden = true;
+  outcome.innerHTML = '';
+  action.innerHTML = cargoRun.active
+    ? `${stoppedSafely ? 'COOPERATE' : 'ACKNOWLEDGE'} / INSPECT CARGO <span>ENTER</span>`
+    : 'ACKNOWLEDGE CITATION <span>ENTER</span>';
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function renderRoadsideStopResult(result, cargoWasActive) {
+  const overlay = document.querySelector('#roadside-stop-overlay');
+  const status = document.querySelector('#roadside-stop-status');
+  const copy = document.querySelector('#roadside-stop-copy');
+  const cargo = document.querySelector('#roadside-stop-cargo');
+  const outcome = document.querySelector('#roadside-stop-outcome');
+  const action = document.querySelector('#roadside-stop-action');
+  if (!overlay || !status || !copy || !cargo || !outcome || !action) return;
+  const clean = !cargoWasActive || result.passed;
+  status.textContent = clean ? 'STOP CLOSED // CITATION LOGGED' : 'CASE COMPROMISED';
+  copy.textContent = !cargoWasActive
+    ? (roadsideStopWasSafe ? 'The officer recorded the speed citation. No cargo was declared, and no pursuit was started.' : 'The citation was recorded without a safe roadside stop. No pursuit was started.')
+    : result.passed
+      ? `The case stayed sealed during the roadside inspection. Exposure is now ${Math.round(result.exposure)}%.`
+      : 'The roadside inspection found the unmarked case. The run is compromised and the payout is lost.';
+  cargo.textContent = !cargoWasActive
+    ? 'NO ACTIVE CASE // DRIVE LEGAL'
+    : result.passed
+      ? `INSPECTION CLEAR // RISK ${Math.round(result.exposure)}%`
+      : 'CARGO BUSTED // NO PAYOUT';
+  outcome.hidden = false;
+  outcome.classList.toggle('failed', cargoWasActive && !result.passed);
+  outcome.classList.toggle('cleared', clean);
+  outcome.innerHTML = clean
+    ? '<b>ROAD CONTACT RESOLVED</b><span>Return to the road when ready. The stop does not create a pursuit or heat state.</span>'
+    : '<b>RUN TERMINATED</b><span>The case is written off. Return to the depot and wait for the next available contract.</span>';
+  action.innerHTML = 'RETURN TO ROAD <span>ENTER</span>';
+}
+
+function resolveRoadsideStop() {
+  if (!roadsideStopOpen) return;
+  if (roadsideStopResolved) {
+    roadsideStopOpen = false;
+    roadsideStopResolved = false;
+    roadsideStopWasSafe = false;
+    const overlay = document.querySelector('#roadside-stop-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+    if (soundOn) ensureAudio();
+    return;
+  }
+  const cargoWasActive = cargoRun.active;
+  const result = cargoWasActive ? inspectCargoAtRoadside() : { active: false, passed: true, exposure: cargoRun.exposure };
+  policeState = 'ticket';
+  policeTime = 0;
+  policeSiren.visible = false;
+  if (cargoWasActive && result.passed) {
+    const mission = cargoRun.route === 'mountain' ? MOUNTAIN_CARGO_MISSION : currentCityDeliveryMission();
+    addPhoneMessage({
+      missionId: mission.id,
+      kind: 'inspection',
+      category: 'INSPECTION',
+      sender: 'MARA // OPERATIONS',
+      subject: `STOP CLEARED // ${mission.title}`,
+      body: `The roadside contact cleared the case. Exposure is now ${Math.round(result.exposure)}%. Keep the next stretch calm and finish the handoff.`,
+      status: `CLEARED // RISK ${Math.round(result.exposure)}%`,
+    }, { notify: false });
+  }
+  roadsideStopResolved = true;
+  renderRoadsideStopResult(result, cargoWasActive);
+  if (!cargoWasActive) showToast('SPEED CITATION', roadsideStopWasSafe ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
+}
+
 function beginRadarStop(site) {
-  if (!site || policeState !== 'idle' || garageOpen || gamePaused) return;
+  if (!site || policeState !== 'idle' || garageOpen || gamePaused || roadsideStopOpen) return;
   activeRadarSite = site;
   site.cooldown = 26;
   policeState = 'radar';
@@ -3578,11 +3679,19 @@ function beginRadarStop(site) {
 function endRadarStop() {
   policeState = 'idle';
   policeTime = 0;
+  roadsideStopOpen = false;
+  roadsideStopResolved = false;
+  roadsideStopWasSafe = false;
   activeRadarSite = null;
   policeVehicle.visible = false;
   policeSiren.visible = false;
   policeRed.visible = false;
   policeBlue.visible = false;
+  const overlay = document.querySelector('#roadside-stop-overlay');
+  if (overlay) {
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+  }
 }
 
 function updatePolice(time, dt) {
@@ -3610,14 +3719,10 @@ function updatePolice(time, dt) {
     policeBlue.visible = !policeRed.visible;
     const stoppedSafely = Math.abs(player.speed) < 1.4 && policeVehicle.position.distanceTo(player.position) < 16;
     if (stoppedSafely || policeTime > 12) {
-      policeState = 'ticket';
+      policeState = 'stopped';
       policeTime = 0;
       policeSiren.visible = false;
-      const cargoWasActive = cargoRun.active;
-      inspectCargoAtRoadside();
-      if (!cargoWasActive) {
-        showToast('SPEED CITATION', stoppedSafely ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
-      }
+      showRoadsideStopPanel(stoppedSafely);
     }
   } else if (policeState === 'ticket') {
     policeTime += dt;
@@ -4216,6 +4321,7 @@ function setStarterMenuOpen(open) {
     if (gamePaused) setPauseOpen(false);
     if (worldMapOpen) setWorldMapOpen(false);
     if (phoneOpen) setPhoneOpen(false);
+    if (roadsideStopOpen) endRadarStop();
     Object.keys(input).forEach((key) => { input[key] = false; });
     touchSteer = 0;
     world.visible = true;
@@ -4281,6 +4387,7 @@ function updateMenuShowcase(time, dt) {
 }
 
 function setGarageOpen(open) {
+  if (open && roadsideStopOpen) return;
   if (open && worldMapOpen) setWorldMapOpen(false);
   garageOpen = open;
   const overlay = document.querySelector('#garage-overlay');
@@ -4341,7 +4448,7 @@ function updateRenderBudget(dt) {
 }
 
 function setWorldMapOpen(open) {
-  if (open && (starterMenuOpen || garageOpen || gamePaused)) return;
+  if (open && (starterMenuOpen || garageOpen || gamePaused || roadsideStopOpen)) return;
   worldMapOpen = open;
   worldMapOverlay.classList.toggle('open', open);
   worldMapOverlay.setAttribute('aria-hidden', String(!open));
@@ -4354,7 +4461,7 @@ function setWorldMapOpen(open) {
 }
 
 function setPauseOpen(open) {
-  if (open && starterMenuOpen) return;
+  if (open && (starterMenuOpen || roadsideStopOpen)) return;
   if (open && garageOpen) setGarageOpen(false);
   if (open && worldMapOpen) setWorldMapOpen(false);
   gamePaused = open;
@@ -4476,7 +4583,7 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
-  if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen) {
+  if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen || roadsideStopOpen) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
@@ -4538,6 +4645,13 @@ window.addEventListener('keydown', (event) => {
     }
     if (event.code === 'Escape' && !event.repeat && menuPage !== 'home') setMenuPage('home');
     if (event.code === 'Enter' && !event.repeat && menuPage === 'home') setSaveSelectOpen(true);
+    return;
+  }
+  if (roadsideStopOpen) {
+    if (['Enter', 'Space'].includes(event.code) && !event.repeat) {
+      event.preventDefault();
+      resolveRoadsideStop();
+    }
     return;
   }
   if (event.code === 'Escape' && !event.repeat) {
@@ -4670,6 +4784,7 @@ document.querySelector('#phone-thread-list').addEventListener('click', (event) =
   if (thread) selectPhoneMessage(thread.dataset.phoneId);
 });
 document.querySelector('#phone-mark-all').addEventListener('click', markAllPhoneMessagesRead);
+document.querySelector('#roadside-stop-action').addEventListener('click', resolveRoadsideStop);
 document.querySelector('#map-expand').addEventListener('click', () => setWorldMapOpen(!worldMapOpen));
 document.querySelector('#world-map-close').addEventListener('click', () => setWorldMapOpen(false));
 document.querySelector('#world-map-close-button').addEventListener('click', () => setWorldMapOpen(false));
@@ -6018,9 +6133,9 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen) sessionSeconds += dt;
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen) sessionSeconds += dt;
   updateGamepad();
-  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen) {
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen) {
     updatePlayer(dt);
     updateWorldStreaming();
     updateTrafficSignals(time);
