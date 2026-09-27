@@ -21,7 +21,7 @@ const randomFrom = (seed) => {
 // collisions, and steering do not change with monitor refresh rate. Render and
 // world-streaming work can still run at the browser frame rate around it.
 const PHYSICS_FIXED_STEP = 1 / 120;
-const MAX_PHYSICS_STEPS = 8;
+const MAX_PHYSICS_STEPS = 14;
 const roadAxes = [-66, -22, 22, 66];
 const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
@@ -156,7 +156,7 @@ const MENU_SHOWCASE_SCENES = [
 ];
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -2247,16 +2247,9 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     const beam = new THREE.PointLight(0xa8dcff, playerCar ? .72 : .42, playerCar ? 10 : 9, 2);
     beam.position.set(x, .86, 2.22);
     beam.visible = playerCar;
-    if (playerCar) {
-      // The hero headlights are the only vehicle lights allowed to cast shadows;
-      // traffic keeps the cheaper illumination path so the night scene stays stable.
-      beam.castShadow = true;
-      beam.shadow.mapSize.set(256, 256);
-      beam.shadow.camera.near = .08;
-      beam.shadow.camera.far = 12;
-      beam.shadow.bias = -.002;
-      beam.shadow.normalBias = .02;
-    }
+    // No shadow casting on vehicle lights: a shadowed PointLight re-renders the
+    // whole scene six times per frame, which was the single largest GPU cost.
+    beam.castShadow = false;
     lightingRig.add(beam);
     if (playerCar) root.userData.headlights.push(beam);
     else root.userData.trafficHeadlights.push(beam);
@@ -6340,8 +6333,20 @@ function updateRenderBudget(dt) {
   const averageFrameTime = renderBudgetElapsed / Math.max(1, renderBudgetFrames);
   const basePixelRatio = qualityMode === 'HIGH' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
   let pixelRatio = renderer.getPixelRatio();
-  if (averageFrameTime > .024) pixelRatio = Math.max(1, pixelRatio - .25);
+  if (averageFrameTime > .024) pixelRatio = Math.max(.75, pixelRatio - .25);
   else if (averageFrameTime < .014) pixelRatio = Math.min(basePixelRatio, pixelRatio + .1);
+  // Shadows are the next most expensive thing after resolution: if the frame is
+  // still slow at minimum resolution, switch them off until the frame recovers.
+  if (qualityMode === 'HIGH') {
+    if (averageFrameTime > .04 && pixelRatio <= .76 && renderer.shadowMap.enabled) {
+      renderer.shadowMap.enabled = false;
+      moon.castShadow = false;
+      showToast('AUTO QUALITY', 'Shadows disabled to keep the frame rate up', 'ESC // RENDER QUALITY');
+    } else if (averageFrameTime < .012 && !renderer.shadowMap.enabled) {
+      renderer.shadowMap.enabled = true;
+      moon.castShadow = true;
+    }
+  }
   if (Math.abs(pixelRatio - renderer.getPixelRatio()) > .01) {
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -8836,7 +8841,10 @@ let physicsAccumulator = 0;
 let hudAccumulator = 0;
 let saveAccumulator = 0;
 function animate(time) {
-  const dt = Math.min((time - lastTime) / 1000, .05);
+  const rawDt = Math.min((time - lastTime) / 1000, .25);
+  // Allow up to 100 ms of simulated time per frame so a 10 fps machine still
+  // plays in real time instead of slow motion.
+  const dt = Math.min(rawDt, .1);
   lastTime = time;
   if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen) sessionSeconds += dt;
   updateGamepad();
@@ -8885,7 +8893,7 @@ function animate(time) {
   updateMechanicShopVisuals(time, dt);
   updateVisualPolish(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
-  else updateCamera(dt);
+  else updateCamera(rawDt);
   updateSky(time);
   updateRenderBudget(dt);
   hudAccumulator += dt;
