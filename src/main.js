@@ -151,6 +151,9 @@ world.add(mountainExpansion);
 const mountainRoadForest = new THREE.Group();
 mountainRoadForest.name = 'Mountain pass roadside conifer dressing';
 world.add(mountainRoadForest);
+const mountainRoadLighting = new THREE.Group();
+mountainRoadLighting.name = 'Mountain pass reflective delineator posts';
+world.add(mountainRoadLighting);
 const pinewatchExpansion = new THREE.Group();
 pinewatchExpansion.name = 'Pinewatch small-town expansion details';
 world.add(pinewatchExpansion);
@@ -1674,6 +1677,16 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     const beam = new THREE.PointLight(0xa8dcff, playerCar ? .72 : .42, playerCar ? 10 : 9, 2);
     beam.position.set(x, .86, 2.22);
     beam.visible = playerCar;
+    if (playerCar) {
+      // The hero headlights are the only vehicle lights allowed to cast shadows;
+      // traffic keeps the cheaper illumination path so the night scene stays stable.
+      beam.castShadow = true;
+      beam.shadow.mapSize.set(256, 256);
+      beam.shadow.camera.near = .08;
+      beam.shadow.camera.far = 12;
+      beam.shadow.bias = -.002;
+      beam.shadow.normalBias = .02;
+    }
     lightingRig.add(beam);
     if (playerCar) root.userData.headlights.push(beam);
     else root.userData.trafficHeadlights.push(beam);
@@ -2367,6 +2380,39 @@ function buildMountainRoadForest() {
   }
 }
 
+function createMountainDelineator(x, z, heading, side = 1) {
+  const group = new THREE.Group();
+  group.name = 'Mountain road reflective delineator';
+  group.position.set(x, mountainRoadHeightAt(x, z), z);
+  group.rotation.y = heading;
+  addMesh(group, new THREE.CylinderGeometry(.045, .07, .82, 6), mats.buildingFrame, [0, .41, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.24, .16, .055), polishMats.reflector, [0, .7, .035]);
+  const reflectorMaterial = side > 0 ? polishMats.amberCore : polishMats.cyanCore;
+  addMesh(group, new THREE.BoxGeometry(.13, .05, .035), reflectorMaterial, [0, .71, .075]);
+  mountainRoadLighting.add(group);
+  return group;
+}
+
+function buildMountainRoadLighting() {
+  for (let index = 1; index < mountainRoadPoints.length; index += 1) {
+    const start = mountainRoadPoints[index - 1];
+    const end = mountainRoadPoints[index];
+    const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+    const length = segment.length();
+    if (length < 1) continue;
+    const heading = Math.atan2(segment.x, segment.z);
+    const normal = new THREE.Vector3(segment.z, 0, -segment.x).normalize();
+    for (let distance = 10; distance < length - 4; distance += 18) {
+      const center = start.clone().lerp(end, distance / length);
+      if (Math.hypot(center.x - mountainVillagePosition.x, center.z - mountainVillagePosition.z) < 44) continue;
+      [-1, 1].forEach((side) => {
+        const post = center.clone().addScaledVector(normal, side * 5.55);
+        createMountainDelineator(post.x, post.z, heading, side);
+      });
+    }
+  }
+}
+
 function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1, parent = mountainExpansion) {
   const groundHeight = mountainRoadHeightAt(x, z);
   const group = new THREE.Group();
@@ -2613,6 +2659,7 @@ function buildMountainWorld() {
   }
   addMountainRoadDetails();
   buildMountainRoadForest();
+  buildMountainRoadLighting();
   const village = new THREE.Group();
   village.name = 'Pinewatch mountain village';
   mountainExpansion.add(village);
