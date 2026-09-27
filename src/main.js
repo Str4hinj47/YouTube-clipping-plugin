@@ -85,6 +85,14 @@ const mats = {
   beacon: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x8abf30, emissiveIntensity: 3.5, transparent: true, opacity: .94 }),
 };
 
+// Collision volumes are kept separate from render geometry so the imported GLB
+// environment and the procedural fallback share the same driving physics.
+const staticObstacles = [];
+
+function addObstacle(x, z, halfX, halfZ, type = 'building') {
+  staticObstacles.push({ x, z, halfX, halfZ, type });
+}
+
 function addMesh(parent, geometry, material, position = [0, 0, 0], options = {}) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(...position);
@@ -249,6 +257,7 @@ function createBuilding(x, z, width, depth, height, colorIndex, seed) {
     sign.position.set(0, Math.min(height - 1.2, 13), depth / 2 + .13);
     group.add(sign);
   }
+  addObstacle(x, z, width / 2 + .85, depth / 2 + .85, 'building');
   city.add(group);
   return group;
 }
@@ -340,6 +349,7 @@ function populateStreetLights() {
 function createPulseStation(x, z) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
+  addObstacle(x, z, 6.7, 6.7, 'landmark');
   addMesh(group, new THREE.CylinderGeometry(7, 7, .35, 32), mats.asphaltEdge, [0, .17, 0], { receiveShadow: true });
   addMesh(group, new THREE.CylinderGeometry(5.3, 5.3, .12, 32), mats.grass, [0, .39, 0]);
   for (let i = 0; i < 3; i += 1) {
@@ -361,6 +371,7 @@ function createPulseStation(x, z) {
 function createGasStop(x, z) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
+  addObstacle(x, z, 8.7, 6.4, 'landmark');
   addMesh(group, new THREE.BoxGeometry(17, .25, 12), mats.sidewalk, [0, .12, 0], { receiveShadow: true });
   for (const px of [-5, 0, 5]) {
     addMesh(group, new THREE.BoxGeometry(.35, 2.1, .35), mats.sidewalkDark, [px, 1.17, 0], { castShadow: true });
@@ -570,6 +581,7 @@ let routeStep = 0;
 let missionProgress = 42;
 let sessionSeconds = 0;
 let driftScore = 0;
+let collisionCooldown = 0;
 let toastTimeout;
 
 function setInput(code, value) {
@@ -625,6 +637,62 @@ function isOnRoad(x, z) {
   return roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2);
 }
 
+function resolveStaticCollisions() {
+  const radius = 1.16;
+  let hit = false;
+  for (const obstacle of staticObstacles) {
+    const minX = obstacle.x - obstacle.halfX;
+    const maxX = obstacle.x + obstacle.halfX;
+    const minZ = obstacle.z - obstacle.halfZ;
+    const maxZ = obstacle.z + obstacle.halfZ;
+    const closestX = clamp(player.position.x, minX, maxX);
+    const closestZ = clamp(player.position.z, minZ, maxZ);
+    let dx = player.position.x - closestX;
+    let dz = player.position.z - closestZ;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq >= radius * radius) continue;
+
+    let normalX;
+    let normalZ;
+    let penetration;
+    if (distanceSq < .0001) {
+      const left = Math.abs(player.position.x - minX);
+      const right = Math.abs(maxX - player.position.x);
+      const top = Math.abs(player.position.z - minZ);
+      const bottom = Math.abs(maxZ - player.position.z);
+      const nearest = Math.min(left, right, top, bottom);
+      if (nearest === left) { normalX = -1; normalZ = 0; penetration = radius + left; }
+      else if (nearest === right) { normalX = 1; normalZ = 0; penetration = radius + right; }
+      else if (nearest === top) { normalX = 0; normalZ = -1; penetration = radius + top; }
+      else { normalX = 0; normalZ = 1; penetration = radius + bottom; }
+    } else {
+      const distance = Math.sqrt(distanceSq);
+      normalX = dx / distance;
+      normalZ = dz / distance;
+      penetration = radius - distance;
+    }
+    player.position.x += normalX * penetration;
+    player.position.z += normalZ * penetration;
+    hit = true;
+  }
+  return hit;
+}
+
+function resolveTrafficCollisions() {
+  const radius = 3.0;
+  for (const vehicle of traffic) {
+    const dx = player.position.x - vehicle.mesh.position.x;
+    const dz = player.position.z - vehicle.mesh.position.z;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq >= radius * radius) continue;
+    const distance = Math.sqrt(distanceSq) || 1;
+    player.position.x += (dx / distance) * (radius - distance);
+    player.position.z += (dz / distance) * (radius - distance);
+    return true;
+  }
+  return false;
+}
+
 function districtAt(x, z) {
   if (z < -72) return 'WATERFRONT LOOP';
   if (x > 44 && z < 15) return 'NEON DISTRICT';
@@ -635,6 +703,7 @@ function districtAt(x, z) {
 }
 
 function updatePlayer(dt) {
+  collisionCooldown = Math.max(0, collisionCooldown - dt);
   const throttle = input.forward ? 1 : 0;
   const braking = input.back ? 1 : 0;
   const steering = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -660,6 +729,17 @@ function updatePlayer(dt) {
   const movement = forward.clone().multiplyScalar(player.speed * dt);
   player.position.add(movement);
   player.distance += Math.abs(player.speed * dt);
+  const staticHit = resolveStaticCollisions();
+  const trafficHit = resolveTrafficCollisions();
+  if (staticHit || trafficHit) {
+    if (collisionCooldown <= 0) {
+      player.speed *= trafficHit ? -.28 : -.22;
+      showToast(trafficHit ? 'TRAFFIC CONTACT' : 'BODYWORK CONTACT', trafficHit ? 'Give the lanes a little room' : 'Concrete wins every time', 'SLOW DOWN');
+      collisionCooldown = .75;
+    } else {
+      player.speed = damp(player.speed, 0, 3.5, dt);
+    }
+  }
   if (player.position.x < -WORLD_LIMIT || player.position.x > WORLD_LIMIT) {
     player.position.x = clamp(player.position.x, -WORLD_LIMIT, WORLD_LIMIT);
     player.speed *= -.25;
