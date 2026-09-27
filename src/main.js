@@ -22,6 +22,14 @@ const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66],
 // Only the busiest, most urban junctions have traffic cameras. Remote villages,
 // mountain roads, and empty regional junctions do not generate automatic fines.
 const trafficCameraIntersections = [[-66, -66], [22, -66], [-22, 22], [66, 66], [22, 22], [-66, 22]];
+const urbanRoadRoutes = [
+  [[-108, -84], [-74, -71], [-38, -80], [0, -68], [35, -79], [72, -68], [108, -83]],
+  [[-108, -18], [-73, -8], [-42, -24], [-4, -8], [31, -19], [72, -4], [108, -16]],
+  [[-105, 55], [-72, 43], [-35, 58], [3, 47], [40, 63], [74, 47], [108, 57]],
+  [[-84, -108], [-75, -72], [-84, -36], [-68, 0], [-78, 36], [-60, 78], [-44, 108]],
+  [[12, -108], [24, -74], [12, -38], [28, -4], [14, 32], [32, 72], [22, 108]],
+  [[-108, 100], [-74, 86], [-43, 98], [-5, 83], [31, 98], [68, 84], [108, 101]],
+];
 const CITY_LIMIT = 116;
 const WORLD_LIMIT = 5000;
 const WORLD_SECTOR_SIZE = 500;
@@ -99,6 +107,9 @@ scene.add(menuGarage);
 const city = new THREE.Group();
 city.name = 'Procedural Fallback Environment';
 world.add(city);
+const cityEnhancements = new THREE.Group();
+cityEnhancements.name = 'Aurora Bay authored-environment expansion details';
+world.add(cityEnhancements);
 const actors = new THREE.Group();
 actors.name = 'Player and Traffic';
 world.add(actors);
@@ -108,6 +119,9 @@ world.add(fallbackBase);
 const mountainExpansion = new THREE.Group();
 mountainExpansion.name = 'Blender-authored mountain pass and village extension';
 world.add(mountainExpansion);
+const pinewatchExpansion = new THREE.Group();
+pinewatchExpansion.name = 'Pinewatch small-town expansion details';
+world.add(pinewatchExpansion);
 const regionalRoadGroup = new THREE.Group();
 regionalRoadGroup.name = 'Streamed 10km regional highway network';
 world.add(regionalRoadGroup);
@@ -393,6 +407,38 @@ function buildRoads() {
       }
     }
   }
+  addUrbanRoadNetwork();
+}
+
+function addUrbanRoadNetwork() {
+  urbanRoadRoutes.forEach((route, routeIndex) => {
+    const points = route.map(([x, z]) => new THREE.Vector3(x, .02, z));
+    addMountainPathRibbon(points, 12.8, mats.asphaltEdge, 0, cityEnhancements);
+    addMountainPathRibbon(points, 10.4, mats.asphalt, .035, cityEnhancements);
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+      const length = segment.length();
+      const heading = Math.atan2(segment.x, segment.z);
+      const tangent = segment.normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      for (let distance = 5; distance < length - 2; distance += 12) {
+        const center = start.clone().lerp(end, distance / length);
+        center.y = .12;
+        addMesh(cityEnhancements, new THREE.BoxGeometry(.13, .03, 5.2), mats.lane, center, { rotation: [0, heading, 0] });
+      }
+      [-1, 1].forEach((side) => {
+        const edge = start.clone().lerp(end, .5).addScaledVector(normal, 5.25);
+        edge.y = .12;
+        addMesh(cityEnhancements, new THREE.BoxGeometry(.08, .03, length), mats.laneYellow, edge, { rotation: [0, heading, 0] });
+      });
+    }
+    if (routeIndex % 2 === 0) {
+      const midpoint = route[Math.floor(route.length / 2)];
+      addMesh(cityEnhancements, new THREE.BoxGeometry(2.2, .08, 5.8), mats.sidewalk, [midpoint[0], .12, midpoint[1]], { rotation: [0, Math.PI / 2, 0] });
+    }
+  });
 }
 
 function createWindow(parent, x, y, z, width, depth, material, rotation = [0, 0, 0]) {
@@ -407,6 +453,29 @@ function createBuilding(x, z, width, depth, height, colorIndex, seed) {
   const bodyMat = new THREE.MeshStandardMaterial({ color: palette[colorIndex % palette.length], roughness: .88, metalness: .08 });
   addMesh(group, new THREE.BoxGeometry(width, height, depth), bodyMat, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
   addMesh(group, new THREE.BoxGeometry(width + .16, .11, depth + .16), mats.sidewalkDark, [0, height + .07, 0], { castShadow: true });
+  const architectureStyle = Math.abs(Math.floor(seed)) % 6;
+  const trimMaterial = [mats.beacon, mats.lamp, mats.windowCyan, mats.windowAmber, mats.windowPurple, mats.windowBlue][architectureStyle];
+  if (architectureStyle === 0) {
+    addMesh(group, new THREE.BoxGeometry(width * .18, height + 1.1, depth * .2), trimMaterial, [-width * .28, (height + 1.1) / 2, depth * .28], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .46, .16, depth * .36), mats.sidewalkDark, [width * .19, height + .35, -depth * .2], { castShadow: true });
+  } else if (architectureStyle === 1) {
+    addMesh(group, new THREE.BoxGeometry(width * .82, .16, depth * .3), trimMaterial, [0, height * .72, depth / 2 + .12], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .32, .2, depth * .82), mats.sidewalkDark, [-width * .27, height + .28, 0], { castShadow: true });
+  } else if (architectureStyle === 2) {
+    for (let floor = 1; floor < Math.max(2, Math.floor(height / 3.2)); floor += 2) {
+      addMesh(group, new THREE.BoxGeometry(width * .78, .12, .7), trimMaterial, [0, floor * 3.1, depth / 2 + .18], { castShadow: true });
+    }
+  } else if (architectureStyle === 3) {
+    for (const side of [-1, 1]) {
+      addMesh(group, new THREE.BoxGeometry(.24, height + .4, depth + .26), trimMaterial, [side * (width / 2 - .35), height / 2, 0], { castShadow: true });
+    }
+  } else if (architectureStyle === 4) {
+    addMesh(group, new THREE.CylinderGeometry(Math.min(width, depth) * .13, Math.min(width, depth) * .18, 1.3, 10), trimMaterial, [width * .2, height + .7, -depth * .18], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .5, .12, depth * .42), mats.sidewalkDark, [-width * .2, height + .28, depth * .16], { castShadow: true });
+  } else {
+    addMesh(group, new THREE.BoxGeometry(width * .12, height * .86, .18), trimMaterial, [width / 2 + .09, height * .47, depth * .22], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .12, height * .58, .18), trimMaterial, [-width / 2 - .09, height * .39, -depth * .24], { castShadow: true });
+  }
   const windowMats = [mats.windowCyan, mats.windowPurple, mats.windowAmber, mats.windowBlue];
   const chosenWindow = windowMats[colorIndex % windowMats.length];
   const floors = Math.max(2, Math.floor(height / 3.1));
@@ -443,7 +512,38 @@ function createBuilding(x, z, width, depth, height, colorIndex, seed) {
   return group;
 }
 
-function createTree(x, z, scale = 1, seed = 1) {
+function createBuildingAccent(x, z, width, depth, height, style = 0, seed = 1) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.name = `Aurora Bay unique building treatment ${seed}`;
+  const materials = [mats.beacon, mats.windowCyan, mats.windowAmber, mats.windowPurple, mats.windowBlue, mats.lamp];
+  const trim = materials[style % materials.length];
+  if (style % 6 === 0) {
+    addMesh(group, new THREE.BoxGeometry(.24, height + .5, depth + .3), trim, [-width / 2 + .3, (height + .5) / 2, 0], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.24, height * .72, depth + .3), mats.sidewalkDark, [width / 2 - .3, height * .38, 0], { castShadow: true });
+  } else if (style % 6 === 1) {
+    for (let floor = 1; floor < Math.max(2, Math.floor(height / 3)); floor += 2) {
+      addMesh(group, new THREE.BoxGeometry(width * .72, .1, .72), trim, [0, floor * 3.05, depth / 2 + .2], { castShadow: true });
+    }
+  } else if (style % 6 === 2) {
+    addMesh(group, new THREE.CylinderGeometry(Math.min(width, depth) * .15, Math.min(width, depth) * .2, 1.4, 10), trim, [width * .2, height + .7, -depth * .18], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .46, .12, depth * .4), mats.sidewalkDark, [-width * .2, height + .3, depth * .15], { castShadow: true });
+  } else if (style % 6 === 3) {
+    addMesh(group, new THREE.BoxGeometry(width * .84, .14, .42), trim, [0, height * .66, depth / 2 + .2], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .34, .18, depth * .82), mats.sidewalkDark, [-width * .27, height + .25, 0], { castShadow: true });
+  } else if (style % 6 === 4) {
+    const crown = addMesh(group, new THREE.BoxGeometry(width * .58, .28, depth * .5), trim, [width * .16, height + .42, -depth * .08], { castShadow: true });
+    crown.rotation.y = (seed % 3 - 1) * .12;
+    addMesh(group, new THREE.BoxGeometry(.18, height * .82, depth + .24), trim, [width / 2 - .35, height * .42, 0], { castShadow: true });
+  } else {
+    addMesh(group, new THREE.BoxGeometry(width * .2, .12, depth * .9), trim, [-width * .28, height * .74, 0], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .42, .1, depth * .24), mats.sidewalkDark, [width * .18, height + .46, depth * .14], { castShadow: true });
+  }
+  cityEnhancements.add(group);
+  return group;
+}
+
+function createTree(x, z, scale = 1, seed = 1, parent = city) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
   group.scale.setScalar(scale);
@@ -452,7 +552,127 @@ function createTree(x, z, scale = 1, seed = 1) {
   addMesh(group, new THREE.IcosahedronGeometry(1.18, 1), leafMaterial, [0, 2.0, 0], { castShadow: true });
   addMesh(group, new THREE.IcosahedronGeometry(.75, 1), leafMaterial, [.55, 2.55, .08], { castShadow: true });
   addMesh(group, new THREE.IcosahedronGeometry(.66, 1), leafMaterial, [-.53, 2.48, -.1], { castShadow: true });
-  city.add(group);
+  parent.add(group);
+  return group;
+}
+
+const CITY_STORE_NAMES = ['NORTHSTAR MARKET', 'BLUE HOUR CAFE', 'HARBOR HARDWARE', 'LANTERN BOOKS', 'TIDEWAY PHARMACY', 'SUNSET BAKERY', 'MOTION CYCLES', 'ORBIT ELECTRONICS', 'PINE & SALT', 'CRESCENT GROCER'];
+const PARKED_CAR_STYLES = ['hatch', 'wagon', 'suv', 'classic', 'ev', 'pickup', 'sport'];
+const PARKED_CAR_COLORS = [0xc44759, 0x477ba4, 0xd7a75a, 0x5f8f78, 0x7e6b9d, 0xc9d0c4, 0x303943, 0xa85b4f];
+
+const PARKED_CAR_PROFILES = {
+  hatch: [.9, .94, .86],
+  wagon: [1.03, 1.02, 1.08],
+  suv: [1.08, 1.18, 1.02],
+  classic: [1.1, 1.03, 1.05],
+  ev: [1.01, .98, 1],
+  pickup: [1.1, 1.05, 1.08],
+  sport: [.98, .9, 1.02],
+};
+const parkedWheelMaterial = new THREE.MeshStandardMaterial({ color: 0x080d12, metalness: .18, roughness: .82 });
+const parkedTrimMaterial = new THREE.MeshStandardMaterial({ color: 0x101720, metalness: .58, roughness: .3 });
+
+function createParkedVehicle(x, z, heading = 0, style = 'hatch', color = 0x477ba4, y = .04, seed = 1) {
+  const profile = PARKED_CAR_PROFILES[style] || PARKED_CAR_PROFILES.hatch;
+  const car = new THREE.Group();
+  car.name = `${style.toUpperCase()} parked vehicle`;
+  car.position.set(x, y, z);
+  car.rotation.y = heading;
+  car.scale.set(profile[0] * .72, profile[1] * .72, profile[2] * .72);
+  const body = new THREE.MeshStandardMaterial({ color, metalness: .62, roughness: .28 });
+  const accent = new THREE.MeshStandardMaterial({ color: seed % 2 ? 0x5ce3d1 : 0xff9d50, metalness: .35, roughness: .3 });
+  addMesh(car, new THREE.BoxGeometry(2.25, .5, 4.2), body, [0, .58, 0], { castShadow: true, receiveShadow: true });
+  addMesh(car, new THREE.BoxGeometry(1.85, .62, 1.85), parkedTrimMaterial, [0, .92, -.05], { castShadow: true });
+  addMesh(car, new THREE.BoxGeometry(1.62, .06, 1.62), mats.glass, [0, 1.25, -.05], { castShadow: true });
+  addMesh(car, new THREE.BoxGeometry(1.8, .11, .12), accent, [0, .48, 2.09], { castShadow: true });
+  addMesh(car, new THREE.BoxGeometry(1.8, .1, .12), accent, [0, .47, -2.09], { castShadow: true });
+  for (const [wheelX, wheelZ] of [[-1.12, 1.3], [1.12, 1.3], [-1.12, -1.3], [1.12, -1.3]]) {
+    addMesh(car, new THREE.CylinderGeometry(.36, .36, .2, 8), parkedWheelMaterial, [wheelX, .42, wheelZ], { rotation: [0, 0, Math.PI / 2], castShadow: true });
+  }
+  car.userData.parked = true;
+  actors.add(car);
+  parkedVehicles.push({ mesh: car, x, z, heading, style });
+  addObstacle(x, z, 1.3, 2.45, 'parked-vehicle', car);
+  return car;
+}
+
+function createStorefront(x, z, width, depth, height, name, colorIndex = 0, rotation = 0, seed = 1) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
+  group.name = `Aurora Bay storefront ${name}`;
+  const facadeColors = [0x384b59, 0x5a3e4a, 0x31535a, 0x514d3b, 0x3f405c, 0x4c5549];
+  const facade = new THREE.MeshStandardMaterial({ color: facadeColors[colorIndex % facadeColors.length], roughness: .78, metalness: .12 });
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), facade, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width + .3, .14, depth + .3), mats.sidewalkDark, [0, height + .08, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width + .2, .16, .82), mats.beacon, [0, height * .64, depth / 2 + .16], { castShadow: true });
+  const windowMaterial = [mats.windowCyan, mats.windowAmber, mats.windowPurple, mats.windowBlue][colorIndex % 4];
+  const windowCount = Math.max(2, Math.floor(width / 3.3));
+  for (let index = 0; index < windowCount; index += 1) {
+    const px = -width / 2 + 1.45 + index * ((width - 2.9) / Math.max(1, windowCount - 1));
+    addMesh(group, new THREE.BoxGeometry(1.05, 1.2, .06), windowMaterial, [px, height * .35, depth / 2 + .18], { castShadow: true });
+  }
+  addMesh(group, new THREE.BoxGeometry(1.1, height * .42, .1), mats.sidewalkDark, [width * .27, height * .25, depth / 2 + .2], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .92, .12, .62), mats.lamp, [0, height * .69, depth / 2 + .24], { castShadow: true });
+  const sign = makeLabel(name, ['#5ce3d1', '#ff9d50', '#d6fa6a', '#ff5b9c'][colorIndex % 4], .46);
+  sign.position.set(0, height * .7, depth / 2 + .3);
+  group.add(sign);
+  if (seed % 2 === 0) {
+    addMesh(group, new THREE.BoxGeometry(width * .2, .1, depth * .3), mats.sidewalkDark, [-width * .28, height + .35, 0], { castShadow: true });
+  } else {
+    addMesh(group, new THREE.CylinderGeometry(.24, .24, 1.2, 8), mats.lamp, [width * .28, height + .55, -depth * .2], { castShadow: true });
+  }
+  addObstacle(x, z, width / 2 + .75, depth / 2 + .75, 'storefront');
+  cityEnhancements.add(group);
+  return group;
+}
+
+function createParkingLot(x, z, width, depth, rotation = 0, seed = 1, label = 'PARKING') {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = rotation;
+  group.name = `Aurora Bay ${label.toLowerCase()} lot`;
+  addMesh(group, new THREE.BoxGeometry(width, .07, depth), mats.asphaltEdge, [0, -.02, 0], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width - .8, .035, depth - .8), mats.asphalt, [0, .025, 0], { receiveShadow: true });
+  const spaces = Math.max(3, Math.floor((width - 2) / 4.2));
+  for (let index = 0; index <= spaces; index += 1) {
+    const px = -width / 2 + 1 + index * ((width - 2) / spaces);
+    addMesh(group, new THREE.BoxGeometry(.075, .035, depth * .43), mats.lane, [px, .08, -depth * .27]);
+    addMesh(group, new THREE.BoxGeometry(.075, .035, depth * .43), mats.lane, [px, .08, depth * .27]);
+    if (index === spaces) continue;
+    const centerX = -width / 2 + 1.8 + index * ((width - 2) / spaces);
+    [-1, 1].forEach((side, sideIndex) => {
+      const occupied = (index + sideIndex + seed) % 4 !== 0 && randomFrom(seed * 5 + index * 11 + sideIndex * 19) > .17;
+      if (!occupied) return;
+      const localPosition = new THREE.Vector3(centerX, 0, side * depth * .27).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+      const style = PARKED_CAR_STYLES[(seed + index + sideIndex) % PARKED_CAR_STYLES.length];
+      const color = PARKED_CAR_COLORS[(seed * 3 + index + sideIndex) % PARKED_CAR_COLORS.length];
+      createParkedVehicle(x + localPosition.x, z + localPosition.z, rotation + (side < 0 ? 0 : Math.PI), style, color, .04, seed + index * 3 + sideIndex);
+    });
+  }
+  const parkingLabel = makeLabel(label, '#a9bbc0', .3);
+  parkingLabel.position.set(0, .16, -depth * .46);
+  group.add(parkingLabel);
+  cityEnhancements.add(group);
+  return group;
+}
+
+function createTreeMedian(x, z, length, width, rotation = 0, seed = 1) {
+  const group = new THREE.Group();
+  group.position.set(x, .02, z);
+  group.rotation.y = rotation;
+  group.name = 'Landscaped raised traffic median';
+  addMesh(group, new THREE.BoxGeometry(width, .2, length), mats.asphaltEdge, [0, .02, 0], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(Math.max(.7, width - .28), .18, length - .3), mats.grass, [0, .14, 0], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.12, .16, length), mats.sidewalk, [-width / 2 + .12, .2, 0]);
+  addMesh(group, new THREE.BoxGeometry(.12, .16, length), mats.sidewalk, [width / 2 - .12, .2, 0]);
+  const treeCount = Math.max(2, Math.floor(length / 9));
+  for (let index = 0; index < treeCount; index += 1) {
+    const localZ = -length / 2 + 4 + index * ((length - 8) / Math.max(1, treeCount - 1));
+    createTree(0, localZ, .62 + randomFrom(seed + index) * .18, seed + index * 7, group);
+  }
+  addObstacle(x, z, Math.max(1, width), length / 2, 'landscaped-median');
+  cityEnhancements.add(group);
   return group;
 }
 
@@ -492,12 +712,43 @@ function populateCity() {
       seed += 13;
     }
   }
+  // Keep the authored GLB visible while adding a distinct facade treatment to every
+  // base-city block, so the imported environment is not reduced to repeated cubes.
+  let authoredBlockIndex = 5;
+  for (const x of blocks) {
+    for (const z of blocks) {
+      if (z < -77) continue;
+      const width = 13 + (authoredBlockIndex % 3) * 3;
+      const depth = 12 + (authoredBlockIndex % 2) * 4;
+      const height = 9 + (authoredBlockIndex % 5) * 3;
+      createBuildingAccent(x, z, width, depth, height, authoredBlockIndex, 800 + authoredBlockIndex);
+      authoredBlockIndex += 1;
+    }
+  }
+  // A low-rise shopfront strip gives the southern approach an identifiable main street.
+  [
+    [-103, -81, 13, 7, 4.8], [-84, -81, 14, 7, 5.2], [-45, -81, 15, 7, 4.6], [-3, -81, 15, 7, 5.4],
+    [40, -81, 14, 7, 4.9], [83, -81, 15, 7, 5.5], [103, -63, 13, 7, 4.5],
+  ].forEach(([x, z, width, depth, height], index) => {
+    createStorefront(x, z, width, depth, height, CITY_STORE_NAMES[index], index, index % 3 === 0 ? .03 : 0, 500 + index);
+  });
+  // Mixed-occupancy lots make the city blocks read as working places rather than empty geometry.
+  [
+    [-88, -62, 22, 12, 0], [-40, -63, 20, 11, .08], [5, -54, 24, 13, 0], [88, -53, 24, 13, -.06],
+    [-91, 4, 22, 12, Math.PI / 2], [47, 4, 22, 12, Math.PI / 2], [-42, 53, 22, 12, .04], [89, 53, 25, 13, 0],
+    [-4, 91, 24, 12, Math.PI / 2],
+  ].forEach(([x, z, width, depth, rotation], index) => createParkingLot(x, z, width, depth, rotation, 620 + index, index % 2 ? 'PUBLIC PARKING' : 'SHOPPING PARKING'));
+  // Selected boulevard stretches are divided by raised, tree-filled platforms.
+  createTreeMedian(-66, -5, 34, 2.1, 0, 710);
+  createTreeMedian(22, 60, 32, 2.1, 0, 720);
+  createTreeMedian(8, -66, 30, 2.1, Math.PI / 2, 730);
+  createTreeMedian(-58, 22, 28, 2.1, Math.PI / 2, 740);
   // Waterfront park and a few palms on the approach.
   addMesh(city, new THREE.BoxGeometry(70, .05, 11), mats.grass, [-48, -.04, -91], { receiveShadow: true });
   for (let i = 0; i < 12; i += 1) createTree(-78 + randomFrom(i * 8) * 55, -93 + randomFrom(i * 5) * 4, .8 + randomFrom(i + 3) * .3, i + 240);
 }
 
-function createStreetLight(x, z, horizontal = false, seed = 1) {
+function createStreetLight(x, z, horizontal = false, seed = 1, parent = city) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
   const pole = addMesh(group, new THREE.CylinderGeometry(.07, .105, 4.7, 7), mats.sidewalkDark, [0, 2.35, 0], { castShadow: true });
@@ -509,7 +760,7 @@ function createStreetLight(x, z, horizontal = false, seed = 1) {
     light.position.copy(lamp.position);
     group.add(light);
   }
-  city.add(group);
+  parent.add(group);
 }
 
 function populateStreetLights() {
@@ -525,6 +776,17 @@ function populateStreetLights() {
       if (x % 44 === 0) createStreetLight(x - 5.8, z - 7.8, true, seed++);
     }
   }
+  urbanRoadRoutes.forEach((route, routeIndex) => {
+    for (let index = 1; index < route.length - 1; index += 2) {
+      const previous = route[index - 1];
+      const next = route[index + 1];
+      const tangent = new THREE.Vector3(next[0] - previous[0], 0, next[1] - previous[1]).normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      const point = route[index];
+      createStreetLight(point[0] + normal.x * 7.3, point[1] + normal.z * 7.3, false, seed++ + routeIndex, cityEnhancements);
+      if (routeIndex % 2 === 0) createStreetLight(point[0] - normal.x * 7.3, point[1] - normal.z * 7.3, false, seed++ + routeIndex, cityEnhancements);
+    }
+  });
 }
 
 function createPulseStation(x, z) {
@@ -907,7 +1169,7 @@ function respawnTrafficVehicle(vehicle) {
 
 function createTraffic() {
   const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f, 0x7c6bf2, 0xc44966];
-  const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv'];
+  const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv', 'wagon', 'ev', 'pickup', 'classic', 'sport', 'hatch', 'suv', 'wagon', 'ev', 'pickup', 'sport', 'classic'];
   for (let i = 0; i < styles.length; i += 1) {
     const vertical = i % 2 === 0;
     const axis = roadAxes[(i * 3 + 1) % roadAxes.length];
@@ -1035,6 +1297,7 @@ function createRegionalTraffic() {
 }
 
 const traffic = [];
+const parkedVehicles = [];
 const mountainTraffic = [];
 const regionalTraffic = [];
 const gltfLoader = new GLTFLoader();
@@ -1368,7 +1631,7 @@ function createMountainRock(x, z, radius, height, material = mats.mountainRock, 
   return rock;
 }
 
-function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1) {
+function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1, parent = mountainExpansion) {
   const groundHeight = mountainRoadHeightAt(x, z);
   const group = new THREE.Group();
   group.position.set(x, groundHeight, z);
@@ -1378,9 +1641,120 @@ function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1)
   addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .72, height * .56, 4), mats.cabinRoof, [0, height + height * .23, 0], { rotation: [0, Math.PI / 4, 0], castShadow: true });
   const warmWindow = addMesh(group, new THREE.BoxGeometry(width * .26, height * .2, .045), mats.villageLight, [0, height * .52, depth / 2 + .025]);
   if (randomFrom(seed) > .35) addMesh(group, new THREE.BoxGeometry(.7, .08, .08), mats.villageLight, [0, height * .27, depth / 2 + .04]);
+  if (seed % 3 === 0) {
+    addMesh(group, new THREE.BoxGeometry(width * .68, .16, .9), mats.sidewalkDark, [0, .16, depth / 2 + .45], { castShadow: true });
+    [-width * .27, width * .27].forEach((px) => addMesh(group, new THREE.CylinderGeometry(.06, .08, 1.0, 6), mats.guardrail, [px, .58, depth / 2 + .68], { castShadow: true }));
+  } else if (seed % 3 === 1) {
+    addMesh(group, new THREE.BoxGeometry(.28, height * .7, .28), mats.cabinRoof, [width * .3, height * .82, -depth * .25], { castShadow: true });
+  } else {
+    addMesh(group, new THREE.BoxGeometry(width * .24, height * .42, .055), mats.sidewalkDark, [-width * .28, height * .25, depth / 2 + .04], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .42, .1, .18), mats.villageLight, [width * .2, height + .5, -depth * .1], { castShadow: true });
+  }
   addObstacle(x, z, width / 2 + .7, depth / 2 + .7, 'mountain-village-building');
-  mountainExpansion.add(group);
+  parent.add(group);
   return { group, warmWindow };
+}
+
+function createPinewatchStore(x, z, width, depth, height, name, rotation = 0, seed = 1) {
+  const groundHeight = mountainRoadHeightAt(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, groundHeight, z);
+  group.rotation.y = rotation;
+  group.name = `Pinewatch store ${name}`;
+  const facade = new THREE.MeshStandardMaterial({ color: [0x66514a, 0x3f5a58, 0x5b493d, 0x4a5262][seed % 4], roughness: .9 });
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), facade, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .72, .95, 4), mats.cabinRoof, [0, height + .46, 0], { rotation: [0, Math.PI / 4, 0], castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .9, .12, .48), mats.villageLight, [0, height * .67, depth / 2 + .12], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .2, height * .42, .07), mats.sidewalkDark, [width * .27, height * .25, depth / 2 + .15], { castShadow: true });
+  for (let index = 0; index < 3; index += 1) {
+    addMesh(group, new THREE.BoxGeometry(width * .16, height * .23, .06), index === 1 ? mats.villageLight : mats.windowAmber, [(-.3 + index * .3) * width, height * .38, depth / 2 + .16]);
+  }
+  const sign = makeLabel(name, seed % 2 ? '#ff9d50' : '#d6fa6a', .39);
+  sign.position.set(0, height * .76, depth / 2 + .2);
+  group.add(sign);
+  addObstacle(x, z, width / 2 + .6, depth / 2 + .6, 'pinewatch-store');
+  pinewatchExpansion.add(group);
+  return group;
+}
+
+function createPinewatchParkingLot(x, z, width, depth, rotation = 0, seed = 1) {
+  const groundHeight = mountainRoadHeightAt(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, groundHeight, z);
+  group.rotation.y = rotation;
+  group.name = 'Pinewatch gravel parking area';
+  addMesh(group, new THREE.BoxGeometry(width, .07, depth), mats.mountainShoulder, [0, .02, 0], { receiveShadow: true });
+  const spaces = Math.max(2, Math.floor((width - 1.4) / 4.1));
+  for (let index = 0; index <= spaces; index += 1) {
+    const px = -width / 2 + .7 + index * ((width - 1.4) / spaces);
+    addMesh(group, new THREE.BoxGeometry(.07, .035, depth * .45), mats.laneYellow, [px, .08, 0]);
+    if (index === spaces) continue;
+    if ((index + seed) % 3 === 0) continue;
+    const localPosition = new THREE.Vector3(px + (width - 1.4) / spaces / 2, 0, 0).applyAxisAngle(Y_AXIS, rotation);
+    createParkedVehicle(x + localPosition.x, z + localPosition.z, rotation + (index % 2 ? Math.PI : 0), PARKED_CAR_STYLES[(seed + index) % PARKED_CAR_STYLES.length], PARKED_CAR_COLORS[(seed + index * 2) % PARKED_CAR_COLORS.length], groundHeight + .04, seed + index);
+  }
+  pinewatchExpansion.add(group);
+  return group;
+}
+
+function createPinewatchStreetLight(x, z, seed = 1) {
+  const groundHeight = mountainRoadHeightAt(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, groundHeight, z);
+  addMesh(group, new THREE.CylinderGeometry(.06, .09, 3.4, 7), mats.guardrail, [0, 1.7, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.9, .08, .08), mats.guardrail, [.38, 3.34, 0], { castShadow: true });
+  addMesh(group, new THREE.SphereGeometry(.13, 8, 8), mats.villageLight, [.78, 3.25, 0]);
+  if (seed % 2 === 0) {
+    const light = new THREE.PointLight(0xffb27d, 1.1, 10, 2);
+    light.position.set(.78, 3.2, 0);
+    group.add(light);
+  }
+  pinewatchExpansion.add(group);
+}
+
+function createPinewatchTrafficLight(x, z, offset = 0) {
+  const groundHeight = mountainRoadHeightAt(x, z);
+  const group = new THREE.Group();
+  group.position.set(x, groundHeight, z);
+  const pole = addMesh(group, new THREE.CylinderGeometry(.07, .1, 3.8, 8), mats.guardrail, [4.9, 1.9, 4.9], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.08, .08, 3.2), mats.guardrail, [4.9, 3.72, 3.5], { castShadow: true });
+  const makeHead = (xOffset, zOffset) => {
+    addMesh(group, new THREE.BoxGeometry(.34, 1.05, .3), mats.sidewalkDark, [4.9 + xOffset, 3.05, 1.15 + zOffset], { castShadow: true });
+    const materials = [
+      new THREE.MeshStandardMaterial({ color: 0x4a1018, emissive: 0x110206, transparent: true, opacity: .3 }),
+      new THREE.MeshStandardMaterial({ color: 0x5b3b0d, emissive: 0x1c1002, transparent: true, opacity: .3 }),
+      new THREE.MeshStandardMaterial({ color: 0x123c2c, emissive: 0x04150e, transparent: true, opacity: .3 }),
+    ];
+    const lamps = materials.map((material, index) => addMesh(group, new THREE.SphereGeometry(.13, 8, 8), material, [4.9 + xOffset, 3.38 - index * .36, 1.0 + zOffset]));
+    return { lamps, materials };
+  };
+  const heads = [makeHead(0, 0), makeHead(-.7, .65)];
+  group.userData.heads = heads;
+  group.userData.lamps = heads[0].lamps;
+  group.userData.materials = heads[0].materials;
+  group.userData.offset = offset;
+  group.userData.state = 2;
+  trafficSignals.push(group);
+  pinewatchExpansion.add(group);
+  return group;
+}
+
+function addPinewatchRoad(points) {
+  const route = points.map(([x, z]) => new THREE.Vector3(x, mountainRoadHeightAt(x, z), z));
+  addMountainPathRibbon(route, 9.8, mats.mountainShoulder, 0, pinewatchExpansion);
+  addMountainPathRibbon(route, 8.1, mats.mountainRoad, .04, pinewatchExpansion);
+  for (let index = 1; index < route.length; index += 1) {
+    const start = route[index - 1];
+    const end = route[index];
+    const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+    const length = segment.length();
+    const heading = Math.atan2(segment.x, segment.z);
+    for (let distance = 4; distance < length - 2; distance += 8) {
+      const center = start.clone().lerp(end, distance / length);
+      center.y += .1;
+      addMesh(pinewatchExpansion, new THREE.BoxGeometry(.12, .03, 3.5), mats.laneYellow, center, { rotation: [0, heading, 0] });
+    }
+  }
 }
 
 function buildMountainWorld() {
@@ -1403,16 +1777,36 @@ function buildMountainWorld() {
   const village = new THREE.Group();
   village.name = 'Pinewatch mountain village';
   mountainExpansion.add(village);
+  // Two short streets branch off the pass so Pinewatch reads as a small town,
+  // not a handful of cabins scattered beside the highway.
+  addPinewatchRoad([[111, 79], [128, 73], [145, 72], [162, 79]]);
+  addPinewatchRoad([[145, 72], [145, 60], [136, 49], [121, 45]]);
+  addPinewatchRoad([[162, 79], [169, 68], [166, 56]]);
   [
     [136, 68, 7.2, 5.2, 4.8, -.25], [151, 65, 6.4, 5.0, 4.3, .5], [145, 53, 7.8, 5.4, 4.7, 1.1],
     [126, 55, 6.0, 4.6, 4.0, -.7], [159, 77, 5.8, 4.4, 4.1, .1], [119, 73, 5.5, 4.2, 3.8, .8],
-  ].forEach((cabin, index) => createMountainCabin(...cabin, index + 200));
+    [111, 83, 6.3, 4.8, 4.2, -.45], [169, 75, 6.8, 4.6, 4.5, .8], [157, 47, 6.1, 4.5, 4.0, -.2],
+    [116, 45, 5.7, 4.2, 3.7, .35],
+  ].forEach((cabin, index) => createMountainCabin(...cabin, index + 200, index >= 6 ? pinewatchExpansion : mountainExpansion));
+  createPinewatchStore(107, 67, 8.8, 5.8, 4.4, 'PINEWATCH MERCANTILE', 0.12, 1);
+  createPinewatchStore(151, 43, 8.2, 5.4, 4.1, 'FIRESIDE CAFE', -.18, 2);
+  createPinewatchStore(172, 57, 7.4, 5.2, 4.0, 'TRAIL SUPPLY', .42, 3);
+  createPinewatchParkingLot(110, 58, 14, 9, .1, 11);
+  createPinewatchParkingLot(156, 55, 13, 8, -.12, 14);
+  [
+    [106, 73, .08, 'hatch', 0xc44759], [113, 61, Math.PI, 'wagon', 0x477ba4], [123, 47, .55, 'suv', 0x5f8f78],
+    [148, 39, Math.PI, 'classic', 0xc9d0c4], [164, 58, .4, 'pickup', 0xa85b4f], [170, 72, Math.PI, 'ev', 0x7e6b9d],
+  ].forEach(([x, z, heading, style, color], index) => createParkedVehicle(x, z, heading, style, color, mountainRoadHeightAt(x, z) + .04, 900 + index));
+  [[116, 77], [139, 75], [160, 72], [158, 51], [128, 48], [108, 59]].forEach(([x, z], index) => createPinewatchStreetLight(x, z, index));
+  createPinewatchTrafficLight(136, 68, 1.5);
+  createPinewatchTrafficLight(161, 77, 7.5);
+  createPinewatchTrafficLight(145, 60, 13.5);
   addMesh(village, new THREE.CylinderGeometry(1.25, 1.4, .25, 16), mats.sidewalkDark, [143, mountainRoadHeightAt(143, 65) + .15, 65]);
   addMesh(village, new THREE.CylinderGeometry(.12, .12, 4.8, 8), mats.guardrail, [143, mountainRoadHeightAt(143, 65) + 2.5, 65]);
   addMesh(village, new THREE.ConeGeometry(1.8, 1.1, 8), mats.cabinRoof, [143, mountainRoadHeightAt(143, 65) + 5.2, 65]);
   const villageLabel = makeLabel('PINEWATCH VILLAGE', '#d6fa6a', .64);
   villageLabel.position.set(mountainVillagePosition.x, mountainVillagePosition.y + 7.8, mountainVillagePosition.z);
-  mountainExpansion.add(villageLabel);
+  pinewatchExpansion.add(villageLabel);
   const summitLabel = makeLabel('MOUNTAIN PASS', '#ff9d50', .56);
   summitLabel.position.set(162, 20, 119);
   mountainExpansion.add(summitLabel);
@@ -1449,6 +1843,29 @@ function nearestRegionalRoadPoint(x, z) {
 
 function isOnRegionalRoad(x, z) {
   return nearestRegionalRoadPoint(x, z).distance < 7.5;
+}
+
+function nearestUrbanRoadPoint(x, z) {
+  let nearest = { distance: Infinity, height: .02 };
+  urbanRoadRoutes.forEach((route) => {
+    for (let index = 1; index < route.length; index += 1) {
+      const [startX, startZ] = route[index - 1];
+      const [endX, endZ] = route[index];
+      const dx = endX - startX;
+      const dz = endZ - startZ;
+      const lengthSq = dx * dx + dz * dz || 1;
+      const amount = clamp(((x - startX) * dx + (z - startZ) * dz) / lengthSq, 0, 1);
+      const pointX = startX + dx * amount;
+      const pointZ = startZ + dz * amount;
+      const distance = Math.hypot(x - pointX, z - pointZ);
+      if (distance < nearest.distance) nearest = { distance, height: .02 };
+    }
+  });
+  return nearest;
+}
+
+function isOnUrbanRoad(x, z) {
+  return nearestUrbanRoadPoint(x, z).distance < 7.2;
 }
 
 function addRegionalRoadNetwork() {
@@ -2893,11 +3310,13 @@ function showToast(title, copy, reward) {
 
 function isOnRoad(x, z) {
   const insideCityGrid = Math.abs(x) <= CITY_LIMIT && Math.abs(z) <= CITY_LIMIT;
-  return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnMountainRoad(x, z) || isOnRegionalRoad(x, z);
+  return (insideCityGrid && roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2)) || isOnUrbanRoad(x, z) || isOnMountainRoad(x, z) || isOnRegionalRoad(x, z);
 }
 
 function getRoadHeightAt(x, z) {
   if (isOnMountainRoad(x, z)) return mountainRoadHeightAt(x, z) + .06;
+  const urbanRoad = nearestUrbanRoadPoint(x, z);
+  if (urbanRoad.distance < 7.2) return urbanRoad.height + .06;
   const regionalRoad = nearestRegionalRoadPoint(x, z);
   if (regionalRoad.distance < 7.5) return regionalRoad.height + .06;
   return .02;
@@ -2905,6 +3324,8 @@ function getRoadHeightAt(x, z) {
 
 function getSpeedLimit(x, z) {
   if (isOnMountainRoad(x, z)) return 35;
+  const urbanRoad = nearestUrbanRoadPoint(x, z);
+  if (urbanRoad.distance < 7.2) return 35;
   const regionalRoad = nearestRegionalRoadPoint(x, z);
   if (regionalRoad.distance < 7.5 && regionalRoad.route) return regionalRoad.route.speedLimit;
   return z < -72 ? 35 : 45;
