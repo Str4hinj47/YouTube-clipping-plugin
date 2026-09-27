@@ -5,6 +5,9 @@ const canvas = document.querySelector('#game-canvas');
 const app = document.querySelector('#app');
 const miniMap = document.querySelector('#mini-map');
 const mapCtx = miniMap.getContext('2d');
+const worldMap = document.querySelector('#world-map');
+const worldMapCtx = worldMap.getContext('2d');
+const worldMapOverlay = document.querySelector('#world-map-overlay');
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -1003,6 +1006,7 @@ let raceBest = 102.8;
 let raceNear = false;
 let garageOpen = false;
 let gamePaused = false;
+let worldMapOpen = false;
 let starterMenuOpen = true;
 let menuPage = 'home';
 let garageCarouselIndex = 0;
@@ -1668,6 +1672,7 @@ function setStarterMenuOpen(open) {
   if (open) {
     if (garageOpen) setGarageOpen(false);
     if (gamePaused) setPauseOpen(false);
+    if (worldMapOpen) setWorldMapOpen(false);
     Object.keys(input).forEach((key) => { input[key] = false; });
     touchSteer = 0;
     world.visible = false;
@@ -1720,6 +1725,7 @@ function updateMenuShowcase(time, dt) {
 }
 
 function setGarageOpen(open) {
+  if (open && worldMapOpen) setWorldMapOpen(false);
   garageOpen = open;
   const overlay = document.querySelector('#garage-overlay');
   overlay.classList.toggle('open', open);
@@ -1759,9 +1765,23 @@ function applyQualityMode() {
   if (menuQuality) menuQuality.textContent = qualityMode;
 }
 
+function setWorldMapOpen(open) {
+  if (open && (starterMenuOpen || garageOpen || gamePaused)) return;
+  worldMapOpen = open;
+  worldMapOverlay.classList.toggle('open', open);
+  worldMapOverlay.setAttribute('aria-hidden', String(!open));
+  document.querySelector('#map-expand').textContent = open ? '× CLOSE' : '⌗ FULL';
+  if (open) {
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    touchSteer = 0;
+    drawWorldMap();
+  }
+}
+
 function setPauseOpen(open) {
   if (open && starterMenuOpen) return;
   if (open && garageOpen) setGarageOpen(false);
+  if (open && worldMapOpen) setWorldMapOpen(false);
   gamePaused = open;
   const overlay = document.querySelector('#pause-overlay');
   overlay.classList.toggle('open', open);
@@ -1893,7 +1913,7 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
-  if (starterMenuOpen || garageOpen || gamePaused) {
+  if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
@@ -1959,11 +1979,18 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (event.code === 'Escape' && !event.repeat) {
-    if (garageOpen) setGarageOpen(false);
+    if (worldMapOpen) setWorldMapOpen(false);
+    else if (garageOpen) setGarageOpen(false);
     else if (gamePaused) setPauseOpen(false);
     else setPauseOpen(true);
     return;
   }
+  if (event.code === 'KeyM' && !event.repeat) {
+    if (worldMapOpen) setWorldMapOpen(false);
+    else if (!garageOpen && !gamePaused) setWorldMapOpen(true);
+    return;
+  }
+  if (worldMapOpen) return;
   if (event.code === 'KeyP' && !event.repeat) {
     setPauseOpen(!gamePaused);
     return;
@@ -1981,7 +2008,6 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyE' && !event.repeat) raceAction();
   if (event.code === 'KeyV' && !event.repeat) deliveryAction();
   if (event.code === 'KeyX' && !event.repeat) startPoliceChase();
-  if (event.code === 'KeyM' && !event.repeat) document.querySelector('#map-expand').click();
   if (event.code === 'KeyR' && !event.repeat) resetPlayer();
   setInput(event.code, true);
 });
@@ -2072,10 +2098,11 @@ function toggleSound() {
 }
 
 document.querySelector('#sound-toggle').addEventListener('click', toggleSound);
-document.querySelector('#map-expand').addEventListener('click', () => {
-  const panel = document.querySelector('.map-panel');
-  panel.classList.toggle('expanded');
-  showToast(panel.classList.contains('expanded') ? 'MAP FOCUS' : 'MAP COLLAPSED', 'Keep your eyes on the road', '');
+document.querySelector('#map-expand').addEventListener('click', () => setWorldMapOpen(!worldMapOpen));
+document.querySelector('#world-map-close').addEventListener('click', () => setWorldMapOpen(false));
+document.querySelector('#world-map-close-button').addEventListener('click', () => setWorldMapOpen(false));
+document.querySelector('#world-map-overlay').addEventListener('click', (event) => {
+  if (event.target.id === 'world-map-overlay') setWorldMapOpen(false);
 });
 document.querySelector('#garage-open').addEventListener('click', () => setGarageOpen(true));
 document.querySelector('#garage-close').addEventListener('click', () => setGarageOpen(false));
@@ -2906,6 +2933,187 @@ function drawMiniMap() {
   mapCtx.strokeRect(.5, .5, size - 1, size - 1);
 }
 
+function drawWorldMap() {
+  if (!worldMapCtx) return;
+  const width = worldMap.width;
+  const height = worldMap.height;
+  const mapSize = Math.min(width, height);
+  const offsetX = (width - mapSize) / 2;
+  const ctx = worldMapCtx;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#08151e';
+  ctx.fillRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(offsetX, 0);
+  const coastY = worldToMap(0, -98, mapSize).y;
+  ctx.fillStyle = 'rgba(11, 67, 79, .55)';
+  ctx.fillRect(0, coastY, mapSize, mapSize - coastY);
+  ctx.strokeStyle = 'rgba(86, 169, 164, .22)';
+  ctx.lineWidth = 1;
+  for (let x = -20; x < mapSize + 20; x += 24) {
+    ctx.beginPath();
+    ctx.moveTo(x, coastY + 12);
+    ctx.lineTo(x + 35, mapSize);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(61, 134, 94, .30)';
+  const park = worldToMap(0, 44, mapSize);
+  ctx.fillRect(park.x - 38, park.y - 30, 76, 60);
+  ctx.fillStyle = 'rgba(92, 154, 124, .16)';
+  ctx.fillRect(worldToMap(-44, 0, mapSize).x - 12, worldToMap(-44, 0, mapSize).y - 26, 24, 52);
+  ctx.fillStyle = 'rgba(115, 163, 157, .36)';
+  ctx.fillRect(0, coastY - 3, mapSize, 5);
+  ctx.strokeStyle = '#1e333e';
+  ctx.lineWidth = 12;
+  roadAxes.forEach((axis) => {
+    const vertical = worldToMap(axis, 0, mapSize);
+    const horizontal = worldToMap(0, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+  });
+  ctx.strokeStyle = '#526b72';
+  ctx.lineWidth = 7;
+  roadAxes.forEach((axis) => {
+    const vertical = worldToMap(axis, 0, mapSize);
+    const horizontal = worldToMap(0, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+  });
+  ctx.strokeStyle = 'rgba(213, 233, 213, .38)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([7, 9]);
+  roadAxes.forEach((axis) => {
+    const vertical = worldToMap(axis, 0, mapSize);
+    const horizontal = worldToMap(0, axis, mapSize);
+    ctx.beginPath(); ctx.moveTo(vertical.x, 0); ctx.lineTo(vertical.x, mapSize); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, horizontal.y); ctx.lineTo(mapSize, horizontal.y); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  const drawRoute = (points, color, widthLine = 2, dash = [7, 6]) => {
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = widthLine;
+    ctx.setLineDash(dash);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const mapped = worldToMap(point.x, point.z, mapSize);
+      if (index === 0) ctx.moveTo(mapped.x, mapped.y);
+      else ctx.lineTo(mapped.x, mapped.y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  };
+  if (routeStep < beaconPositions.length) drawRoute([player.position, ...beaconPositions.slice(routeStep)], 'rgba(255, 157, 80, .72)', 3, [10, 7]);
+  if (raceState !== 'idle') drawRoute(raceRoute.slice(Math.max(0, raceIndex - 1)), 'rgba(255, 157, 80, .48)', 2, [5, 5]);
+  if (deliveryState === 'active') drawRoute([player.position, deliveryTarget], 'rgba(92, 227, 209, .78)', 3, [9, 6]);
+
+  const drawText = (text, x, y, color = '#91a7a2', align = 'left') => {
+    ctx.font = '500 10px DM Mono, monospace';
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+  };
+  drawText('NORTHSTAR AVE', worldToMap(66, 66, mapSize).x + 9, worldToMap(66, 66, mapSize).y - 12, '#b6c5b3');
+  drawText('OCTANE ROW', worldToMap(-66, 22, mapSize).x + 9, worldToMap(-66, 22, mapSize).y - 12, '#b6c5b3');
+  drawText('MIDTOWN EAST', worldToMap(66, -22, mapSize).x + 9, worldToMap(66, -22, mapSize).y - 12, '#b6c5b3');
+  drawText('WATERFRONT', mapSize - 10, coastY + 22, '#5ca6aa', 'right');
+
+  beaconPositions.forEach((position, index) => {
+    const point = worldToMap(position.x, position.z, mapSize);
+    const active = index === routeStep;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, active ? 8 : 5, 0, Math.PI * 2);
+    ctx.fillStyle = active ? '#ff9d50' : 'rgba(214, 250, 106, .72)';
+    ctx.shadowColor = active ? '#ff9d50' : '#d6fa6a';
+    ctx.shadowBlur = active ? 14 : 7;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (active) drawText(beaconNames[index], point.x + 12, point.y - 10, '#ffbd80');
+  });
+  const eventPoint = worldToMap(raceRoute[0].x, raceRoute[0].z, mapSize);
+  ctx.fillStyle = '#ff5b9c';
+  ctx.shadowColor = '#ff5b9c';
+  ctx.shadowBlur = 10;
+  ctx.fillRect(eventPoint.x - 6, eventPoint.y - 6, 12, 12);
+  ctx.shadowBlur = 0;
+  drawText('SPRINT GATE', eventPoint.x + 11, eventPoint.y + 13, '#ff91bd');
+
+  collectiblePositions.forEach((position, index) => {
+    if (player.collectedCaches.includes(index)) return;
+    const point = worldToMap(position.x, position.z, mapSize);
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#5ce3d1';
+    ctx.shadowColor = '#5ce3d1';
+    ctx.shadowBlur = 8;
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.restore();
+  });
+  const depotPoint = worldToMap(deliveryStart.x, deliveryStart.z, mapSize);
+  ctx.fillStyle = '#5ce3d1';
+  ctx.fillRect(depotPoint.x - 5, depotPoint.y - 5, 10, 10);
+  drawText('DEPOT', depotPoint.x + 10, depotPoint.y + 12, '#79eee1');
+  if (deliveryState === 'active') {
+    const dropPoint = worldToMap(deliveryTarget.x, deliveryTarget.z, mapSize);
+    ctx.fillStyle = '#ff9d50';
+    ctx.fillRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
+    drawText('DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
+  }
+
+  traffic.forEach((vehicle) => {
+    if (vehicle.health >= 100 && vehicle.disabledTimer <= 0) return;
+    const point = worldToMap(vehicle.mesh.position.x, vehicle.mesh.position.z, mapSize);
+    ctx.fillStyle = vehicle.disabledTimer > 0 ? '#ff5b9c' : '#ff9d50';
+    ctx.strokeStyle = 'rgba(255, 157, 80, .45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(point.x, point.y, vehicle.disabledTimer > 0 ? 6 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  });
+  if (policeState === 'active' && policeVehicle.visible) {
+    const patrolPoint = worldToMap(policeVehicle.position.x, policeVehicle.position.z, mapSize);
+    ctx.fillStyle = '#ff5b9c';
+    ctx.beginPath(); ctx.arc(patrolPoint.x, patrolPoint.y, 7, 0, Math.PI * 2); ctx.fill();
+    drawText('PATROL', patrolPoint.x + 11, patrolPoint.y - 10, '#ff91bd');
+  }
+  const current = worldToMap(player.position.x, player.position.z, mapSize);
+  ctx.save();
+  ctx.translate(current.x, current.y);
+  ctx.rotate(-player.heading);
+  ctx.fillStyle = '#d6fa6a';
+  ctx.shadowColor = '#d6fa6a';
+  ctx.shadowBlur = 18;
+  ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(9, 10); ctx.lineTo(0, 5); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(214, 250, 106, .26)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, mapSize - 2, mapSize - 2);
+  ctx.restore();
+
+  const routeTitle = document.querySelector('#world-map-route');
+  const routeCopy = document.querySelector('#world-map-route-copy');
+  const status = document.querySelector('#world-map-status');
+  if (deliveryState === 'active') {
+    routeTitle.textContent = 'COURIER DROP';
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP POINT`;
+  } else if (raceState !== 'idle') {
+    routeTitle.textContent = 'MIDNIGHT SPRINT';
+    routeCopy.textContent = `${Math.max(0, raceRoute.length - raceIndex + 1)} CHECKPOINTS REMAINING`;
+  } else if (routeStep < beaconPositions.length) {
+    routeTitle.textContent = beaconNames[routeStep];
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(beaconPositions[routeStep]))} M TO ACTIVE BEACON`;
+  } else {
+    routeTitle.textContent = 'FREE ROAM';
+    routeCopy.textContent = 'All streets open. Choose your next line.';
+  }
+  status.textContent = policeState === 'active' ? `PATROL ACTIVE // HEAT ${String(wantedLevel).padStart(2, '0')}` : `LIVE NAVIGATION // HEAT ${String(wantedLevel).padStart(2, '0')}`;
+  document.querySelector('#world-map-location').textContent = districtAt(player.position.x, player.position.z);
+  document.querySelector('#world-map-coordinates').textContent = `X ${Math.round(player.position.x).toString().padStart(3, '0')} // Z ${Math.round(player.position.z).toString().padStart(3, '0')}`;
+}
+
 function updateHud(dt) {
   const speed = Math.round(Math.abs(player.speed) * 3.1);
   document.querySelector('#speed-value').textContent = String(speed).padStart(3, '0');
@@ -2923,7 +3131,10 @@ function updateHud(dt) {
   const engine = clamp(91 + Math.round(Math.abs(player.speed) / 4) - (driftScore > 1 ? 2 : 0), 0, 99);
   document.querySelector('.vehicle-bars .bar span').style.width = `${engine}%`;
   document.querySelector('.vehicle-bars .bar-label b').textContent = `${engine}%`;
-  if (dt > 0) drawMiniMap();
+  if (dt > 0) {
+    drawMiniMap();
+    if (worldMapOpen) drawWorldMap();
+  }
 }
 
 function resize() {
@@ -2946,9 +3157,9 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  if (!starterMenuOpen && !garageOpen && !gamePaused) sessionSeconds += dt;
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen) sessionSeconds += dt;
   updateGamepad();
-  if (!starterMenuOpen && !garageOpen && !gamePaused) {
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen) {
     updatePlayer(dt);
     updateTrafficSignals(time);
     updateTraffic(dt);
