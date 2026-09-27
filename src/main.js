@@ -1407,6 +1407,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   root.userData.paintMaterials = [];
   root.userData.indicators = { left: [], right: [] };
   root.userData.headlights = [];
+  root.userData.headlightMeshes = [];
+  root.userData.trafficHeadlights = [];
   root.userData.brakeLights = [];
   root.userData.loadedBrakeLights = [];
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color, metalness: .75, roughness: .23, clearcoat: 1, clearcoatRoughness: .13 });
@@ -1436,7 +1438,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   addMesh(root, new THREE.BoxGeometry(.11, .2, 3.65), accentMaterial, [1.1, .47, 0], { castShadow: true });
   addMesh(root, new THREE.BoxGeometry(1.76, .12, .14), accentMaterial, [0, .48, -2.16], { castShadow: true });
   for (const x of [-.71, .71]) {
-    addMesh(root, new THREE.BoxGeometry(.28, .15, .08), headMaterial, [x, .78, 2.16]);
+    const head = addMesh(root, new THREE.BoxGeometry(.28, .15, .08), headMaterial.clone(), [x, .78, 2.16]);
+    root.userData.headlightMeshes.push(head);
     const tail = addMesh(root, new THREE.BoxGeometry(.3, .14, .08), tailMaterial.clone(), [x, .76, -2.16]);
     root.userData.brakeLights.push(tail);
   }
@@ -1506,13 +1509,13 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     const rearIndicator = addMesh(lightingRig, new THREE.BoxGeometry(.17, .1, .06), mats.indicator.clone(), [x, .77, -2.18]);
     root.userData.indicators[side].push(frontIndicator, rearIndicator);
   }
-  if (playerCar) {
-    for (const x of [-.7, .7]) {
-      const beam = new THREE.PointLight(0xa8dcff, .72, 10, 2);
-      beam.position.set(x, .86, 2.22);
-      lightingRig.add(beam);
-      root.userData.headlights.push(beam);
-    }
+  for (const x of [-.7, .7]) {
+    const beam = new THREE.PointLight(0xa8dcff, playerCar ? .72 : .42, playerCar ? 10 : 9, 2);
+    beam.position.set(x, .86, 2.22);
+    beam.visible = playerCar;
+    lightingRig.add(beam);
+    if (playerCar) root.userData.headlights.push(beam);
+    else root.userData.trafficHeadlights.push(beam);
   }
   root.add(lightingRig);
   root.userData.lightingRig = lightingRig;
@@ -1735,6 +1738,7 @@ const traffic = [];
 const parkedVehicles = [];
 const mountainTraffic = [];
 const regionalTraffic = [];
+let trafficLightingElapsed = 0;
 const gltfLoader = new GLTFLoader();
 const AUTHORED_REGION_ASSETS = [
   { type: 'highlands', url: './assets/regions/northstar_outpost.glb' },
@@ -6214,6 +6218,32 @@ function trafficTargetSpeed(vehicle, dt) {
   return vehicle.cruiseSpeed;
 }
 
+function updateTrafficLighting(dt) {
+  trafficLightingElapsed += dt;
+  if (trafficLightingElapsed < .12) return;
+  trafficLightingElapsed = 0;
+  const vehicles = [...traffic, ...mountainTraffic, ...regionalTraffic];
+  vehicles.forEach((vehicle) => {
+    vehicle.mesh.userData.trafficHeadlights?.forEach((light) => { light.visible = false; });
+  });
+  const candidates = vehicles
+    .map((vehicle) => ({ vehicle, distanceSq: vehicle.mesh.position.distanceToSquared(player.position) }))
+    .filter(({ vehicle, distanceSq }) => vehicle.mesh.visible && vehicle.mesh.userData.trafficHeadlights?.length && distanceSq < 140 * 140)
+    .sort((a, b) => a.distanceSq - b.distanceSq)
+    .slice(0, 12);
+  candidates.forEach(({ vehicle, distanceSq }) => {
+    const falloff = 1 - Math.sqrt(distanceSq) / 140;
+    vehicle.mesh.userData.trafficHeadlights.forEach((light) => {
+      light.visible = true;
+      light.intensity = .2 + falloff * .24;
+      light.distance = 7.5 + falloff * 3.5;
+    });
+    vehicle.mesh.userData.headlightMeshes?.forEach((lamp) => {
+      if (lamp.material?.emissiveIntensity !== undefined) lamp.material.emissiveIntensity = 3.4 + falloff * 1.5;
+    });
+  });
+}
+
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
     vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
@@ -6859,6 +6889,7 @@ function animate(time) {
     updateTraffic(dt);
     updateMountainTraffic(dt);
     updateRegionalTraffic(dt);
+    updateTrafficLighting(dt);
     resolveTrafficVehicleCollisions();
     resolveMountainTrafficCollisions();
     resolveRegionalTrafficCollisions();
