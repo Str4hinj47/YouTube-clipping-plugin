@@ -1028,7 +1028,7 @@ function createTree(x, z, scale = 1, seed = 1, parent = city) {
 }
 
 const CITY_STORE_NAMES = ['NORTHSTAR MARKET', 'BLUE HOUR CAFE', 'HARBOR HARDWARE', 'LANTERN BOOKS', 'TIDEWAY PHARMACY', 'SUNSET BAKERY', 'MOTION CYCLES', 'ORBIT ELECTRONICS', 'PINE & SALT', 'CRESCENT GROCER'];
-const PARKED_CAR_STYLES = ['hatch', 'wagon', 'suv', 'classic', 'ev', 'pickup', 'sport'];
+const PARKED_CAR_STYLES = ['hatch', 'wagon', 'suv', 'classic', 'ev', 'pickup', 'van', 'truck', 'sport'];
 const PARKED_CAR_COLORS = [0xc44759, 0x477ba4, 0xd7a75a, 0x5f8f78, 0x7e6b9d, 0xc9d0c4, 0x303943, 0xa85b4f];
 
 const PARKED_CAR_PROFILES = {
@@ -1038,6 +1038,8 @@ const PARKED_CAR_PROFILES = {
   classic: [1.1, 1.03, 1.05],
   ev: [1.01, .98, 1],
   pickup: [1.1, 1.05, 1.08],
+  van: [1.12, 1.18, 1.17],
+  truck: [1.18, 1.2, 1.28],
   sport: [.98, .9, 1.02],
 };
 const parkedWheelMaterial = new THREE.MeshStandardMaterial({ color: 0x080d12, metalness: .18, roughness: .82 });
@@ -1050,13 +1052,29 @@ function createParkedVehicle(x, z, heading = 0, style = 'hatch', color = 0x477ba
   car.position.set(x, y, z);
   car.rotation.y = heading;
   car.scale.set(profile[0] * .72, profile[1] * .72, profile[2] * .72);
-  const body = new THREE.MeshStandardMaterial({ color, metalness: .62, roughness: .28 });
-  const accent = new THREE.MeshStandardMaterial({ color: seed % 2 ? 0x5ce3d1 : 0xff9d50, metalness: .35, roughness: .3 });
+  const body = new THREE.MeshPhysicalMaterial({ color, metalness: .68, roughness: .24, clearcoat: .62, clearcoatRoughness: .16 });
+  const accent = new THREE.MeshPhysicalMaterial({ color: seed % 2 ? 0x5ce3d1 : 0xff9d50, metalness: .42, roughness: .25, clearcoat: .34, clearcoatRoughness: .18 });
   addMesh(car, new THREE.BoxGeometry(2.25, .5, 4.2), body, [0, .58, 0], { castShadow: true, receiveShadow: true });
   addMesh(car, new THREE.BoxGeometry(1.85, .62, 1.85), parkedTrimMaterial, [0, .92, -.05], { castShadow: true });
   addMesh(car, new THREE.BoxGeometry(1.62, .06, 1.62), mats.glass, [0, 1.25, -.05], { castShadow: true });
+  if (style === 'van') {
+    addMesh(car, new THREE.BoxGeometry(1.92, 1.18, 2.3), body, [0, 1.35, -.4], { castShadow: true });
+    addMesh(car, new THREE.BoxGeometry(1.58, .48, .05), mats.glass, [0, 1.43, .78]);
+    addMesh(car, new THREE.BoxGeometry(.08, .52, 1.8), accent, [-.98, 1.28, -.38]);
+    addMesh(car, new THREE.BoxGeometry(.08, .52, 1.8), accent, [.98, 1.28, -.38]);
+  } else if (style === 'truck') {
+    addMesh(car, new THREE.BoxGeometry(2.02, 1.48, 2.35), body, [0, 1.5, -.48], { castShadow: true, receiveShadow: true });
+    addMesh(car, new THREE.BoxGeometry(1.68, .48, .05), mats.glass, [0, 1.3, .78]);
+    addMesh(car, new THREE.BoxGeometry(2.08, .09, 2.1), accent, [0, .82, -.48]);
+  }
   addMesh(car, new THREE.BoxGeometry(1.8, .11, .12), accent, [0, .48, 2.09], { castShadow: true });
   addMesh(car, new THREE.BoxGeometry(1.8, .1, .12), accent, [0, .47, -2.09], { castShadow: true });
+  const parkedHead = new THREE.MeshStandardMaterial({ color: 0xf3fbff, emissive: 0xa8dcff, emissiveIntensity: 2.8 });
+  const parkedTail = new THREE.MeshStandardMaterial({ color: 0xff465e, emissive: 0xff1835, emissiveIntensity: 2.3 });
+  [-.68, .68].forEach((lampX) => {
+    addMesh(car, new THREE.BoxGeometry(.25, .11, .045), parkedHead, [lampX, .76, 2.14]);
+    addMesh(car, new THREE.BoxGeometry(.25, .1, .045), parkedTail, [lampX, .74, -2.14]);
+  });
   for (const [wheelX, wheelZ] of [[-1.12, 1.3], [1.12, 1.3], [-1.12, -1.3], [1.12, -1.3]]) {
     addMesh(car, new THREE.CylinderGeometry(.36, .36, .2, 8), parkedWheelMaterial, [wheelX, .42, wheelZ], { rotation: [0, 0, Math.PI / 2], castShadow: true });
   }
@@ -1425,6 +1443,8 @@ const CAR_PROFILES = {
   supercar: { label: 'VELOCE R', className: 'SUPER COUPE', scale: [.96, .82, 1.02] },
   suv: { label: 'TRAIL SCOUT', className: 'ADVENTURE SUV', scale: [1.08, 1.22, 1.02] },
   pickup: { label: 'HARBOR UTILITY', className: 'UTILITY PICKUP', scale: [1.1, 1.07, 1.06] },
+  van: { label: 'NIGHTLINE VAN', className: 'CARGO VAN', scale: [1.12, 1.2, 1.18] },
+  truck: { label: 'FREIGHTER', className: 'BOX TRUCK', scale: [1.16, 1.2, 1.28] },
   wagon: { label: 'GRAND TOURER', className: 'TOURING WAGON', scale: [1.04, 1.03, 1.1] },
   classic: { label: 'CINDER CLASSIC', className: 'GRAND TOURER', scale: [1.1, 1.02, 1.05] },
   ev: { label: 'PULSE EV', className: 'ELECTRIC SPORT', scale: [1.02, .98, 1] },
@@ -1691,6 +1711,21 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     root.userData.wheels.push(wheelGroup);
     root.add(wheelGroup);
   }
+  const detailRig = new THREE.Group();
+  detailRig.name = 'unbranded vehicle detail pass';
+  root.userData.detailRig = detailRig;
+  const plateMaterial = new THREE.MeshPhysicalMaterial({ color: 0xd7e4df, metalness: .42, roughness: .3, emissive: 0x1d292c, emissiveIntensity: .16 });
+  const plateFront = addMesh(detailRig, new THREE.BoxGeometry(.58, .13, .035), plateMaterial, [0, .7, 2.19]);
+  const plateRear = addMesh(detailRig, new THREE.BoxGeometry(.58, .13, .035), plateMaterial.clone(), [0, .7, -2.19]);
+  plateFront.userData.vehicleDetail = 'plate';
+  plateRear.userData.vehicleDetail = 'plate';
+  for (const x of [-1, 1]) {
+    addMesh(detailRig, new THREE.BoxGeometry(.14, .1, .28), darkMaterial, [x * 1.16, .91, 1.06], { rotation: [0, 0, x * .12] });
+    addMesh(detailRig, new THREE.BoxGeometry(.06, .035, .18), accentMaterial, [x * 1.145, .87, .24]);
+  }
+  addMesh(detailRig, new THREE.BoxGeometry(1.72, .045, .035), accentMaterial, [0, .73, 2.205]);
+  addMesh(detailRig, new THREE.BoxGeometry(1.72, .04, .035), accentMaterial, [0, .73, -2.205]);
+  root.add(detailRig);
   if (playerCar) {
     addMesh(root, new THREE.BoxGeometry(1.7, .09, .13), accentMaterial, [0, 1.2, -2.03], { castShadow: true });
     addMesh(root, new THREE.BoxGeometry(.08, .25, .08), darkMaterial, [-.73, 1.09, -2.03]);
@@ -1721,6 +1756,20 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     addMesh(root, new THREE.BoxGeometry(.17, .45, 1.42), bodyMaterial, [.92, 1.04, -1.2], { castShadow: true });
     addMesh(root, new THREE.BoxGeometry(1.95, .12, .12), accentMaterial, [0, 1.27, -1.92]);
     addMesh(root, new THREE.BoxGeometry(2.18, .18, .18), darkMaterial, [0, .48, -2.2]);
+  } else if (style === 'van') {
+    addMesh(root, new THREE.BoxGeometry(2.03, 1.08, 2.48), bodyMaterial, [0, 1.33, -.46], { castShadow: true, receiveShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.72, .46, .06), mats.glass, [0, 1.41, .8], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(.08, .55, 2.0), accentMaterial, [-1.05, 1.25, -.4]);
+    addMesh(root, new THREE.BoxGeometry(.08, .55, 2.0), accentMaterial, [1.05, 1.25, -.4]);
+    addMesh(root, new THREE.BoxGeometry(1.58, .07, 2.15), darkMaterial, [0, 1.95, -.4], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(.1, .1, 1.65), accentMaterial, [0, 2.03, -.4]);
+  } else if (style === 'truck') {
+    addMesh(root, new THREE.BoxGeometry(2.15, 1.48, 2.48), bodyMaterial, [0, 1.55, -.5], { castShadow: true, receiveShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.76, .5, .06), mats.glass, [0, 1.35, .82], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(2.2, .09, 2.22), accentMaterial, [0, .88, -.5]);
+    addMesh(root, new THREE.BoxGeometry(1.72, .07, 2.1), darkMaterial, [0, 2.35, -.5], { castShadow: true });
+    addMesh(root, new THREE.BoxGeometry(1.6, .08, .08), accentMaterial, [0, 1.15, -1.78]);
+    addMesh(root, new THREE.BoxGeometry(1.9, .14, .16), darkMaterial, [0, .5, -2.2]);
   } else if (style === 'wagon') {
     addMesh(root, new THREE.BoxGeometry(1.8, .32, 1.7), bodyMaterial, [0, 1.17, -.65], { castShadow: true });
     addMesh(root, new THREE.BoxGeometry(1.55, .06, 1.45), mats.glass, [0, 1.5, -.65], { rotation: [Math.PI * .5, 0, 0] });
@@ -1851,7 +1900,7 @@ function respawnTrafficVehicle(vehicle) {
 
 function createTraffic() {
   const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f, 0x7c6bf2, 0xc44966];
-  const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv', 'wagon', 'ev', 'pickup', 'classic', 'sport', 'hatch', 'suv', 'wagon', 'ev', 'pickup', 'sport', 'classic'];
+  const styles = ['hatch', 'supercar', 'pickup', 'van', 'suv', 'wagon', 'truck', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'van', 'suv', 'wagon', 'classic', 'ev', 'truck', 'supercar', 'sport', 'hatch', 'suv', 'truck', 'wagon', 'ev', 'pickup', 'van', 'sport', 'classic', 'truck'];
   for (let i = 0; i < styles.length; i += 1) {
     const vertical = i % 2 === 0;
     const axis = roadAxes[(i * 3 + 1) % roadAxes.length];
@@ -1864,7 +1913,8 @@ function createTraffic() {
     const heading = trafficHeading(vertical, direction);
     car.rotation.y = heading;
     actors.add(car);
-    const cruiseSpeed = 7 + randomFrom(i + 40) * 7;
+    const cargoSpeedFactor = styles[i] === 'truck' ? .72 : styles[i] === 'van' ? .86 : 1;
+    const cruiseSpeed = (7 + randomFrom(i + 40) * 7) * cargoSpeedFactor;
     traffic.push({ mesh: car, vertical, axis, laneSide, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0, routeSeed: i * 19.7 + 3, turnCount: 0, turnDecisionKey: '', turnDecision: 0, turning: null, laneChanging: null, passTimer: 0, health: 100, disabledTimer: 0, hazardTimer: 0, incidentCooldown: 0 });
   }
 }
@@ -1894,18 +1944,20 @@ function respawnMountainTrafficVehicle(vehicle) {
 
 function createMountainTraffic() {
   const colors = [0xb95459, 0xd89057, 0x577e9f, 0x74669c, 0x8a9b83, 0x4f8e85, 0xb2bd68, 0x886bc1];
-  const styles = ['hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'supercar', 'hatch', 'suv'];
+  const styles = ['hatch', 'suv', 'pickup', 'van', 'wagon', 'truck', 'classic', 'ev', 'sport', 'suv'];
   styles.forEach((style, index) => {
     const car = createCar(colors[index % colors.length], index % 2 ? 0xd6fa6a : 0xff9d50, false, style);
     car.scale.multiplyScalar(.76);
     actors.add(car);
+    const cargoSpeedFactor = style === 'truck' ? .74 : style === 'van' ? .88 : 1;
+    const cruiseSpeed = (7.5 + randomFrom(index + 430) * 4.5) * cargoSpeedFactor;
     const vehicle = {
       mesh: car,
       progress: .08 + (index % 5) * .17,
       direction: index % 2 === 0 ? 1 : -1,
       laneSide: 1,
-      cruiseSpeed: 7.5 + randomFrom(index + 430) * 4.5,
-      currentSpeed: 8.5,
+      cruiseSpeed,
+      currentSpeed: cruiseSpeed,
       health: 100,
       disabledTimer: 0,
       hazardTimer: 0,
@@ -1948,19 +2000,21 @@ function respawnRegionalTrafficVehicle(vehicle) {
 
 function createRegionalTraffic() {
   const colors = [0xa94d59, 0x9b7652, 0x577d96, 0x6d6b9b, 0x547c73, 0x918d57, 0x844f78, 0x6c8d99];
-  const styles = ['hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'supercar', 'hatch', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport', 'hatch'];
+  const styles = ['hatch', 'suv', 'pickup', 'van', 'wagon', 'truck', 'classic', 'ev', 'sport', 'supercar', 'hatch', 'truck', 'pickup', 'van', 'classic', 'ev'];
   styles.forEach((style, index) => {
     const car = createCar(colors[index % colors.length], index % 2 ? 0x5ce3d1 : 0xff9d50, false, style);
     car.scale.multiplyScalar(.74);
     actors.add(car);
+    const cargoSpeedFactor = style === 'truck' ? .78 : style === 'van' ? .9 : 1;
+    const cruiseSpeed = (12 + randomFrom(index + 760) * 6) * cargoSpeedFactor;
     const vehicle = {
       mesh: car,
       routeIndex: index % regionalRoutes.length,
       progress: .04 + (index % 8) * .11,
       direction: index % 2 === 0 ? 1 : -1,
       laneSide: 1,
-      cruiseSpeed: 12 + randomFrom(index + 760) * 6,
-      currentSpeed: 13,
+      cruiseSpeed,
+      currentSpeed: cruiseSpeed,
       health: 100,
       disabledTimer: 0,
       hazardTimer: 0,
@@ -2046,11 +2100,13 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
   const preservedLighting = vehicleRoot.userData.lightingRig;
   const preservedDamage = vehicleRoot.userData.damageRig;
+  const preservedDetail = vehicleRoot.userData.detailRig;
   const previousLoaded = vehicleRoot.userData.loadedModel;
   if (previousLoaded) vehicleRoot.remove(previousLoaded);
-  vehicleRoot.children.forEach((child) => { if (child !== preservedLighting && child !== preservedDamage) child.visible = false; });
+  vehicleRoot.children.forEach((child) => { if (child !== preservedLighting && child !== preservedDamage && child !== preservedDetail) child.visible = false; });
   if (preservedLighting) preservedLighting.visible = true;
   if (preservedDamage) preservedDamage.visible = true;
+  if (preservedDetail) preservedDetail.visible = true;
   const importedCar = prepareImportedModel(sourceScene.clone(true));
   importedCar.traverse((object) => {
     if (!object.isMesh || !object.material) return;
