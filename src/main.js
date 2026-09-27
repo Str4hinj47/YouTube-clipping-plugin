@@ -3546,6 +3546,7 @@ function createMechanicShop(shop) {
   addMesh(group, new THREE.BoxGeometry(.14, 2.35, .1), mats.event, [width * .31, 1.18, depth / 2 + .105]);
   addMesh(group, new THREE.BoxGeometry(1.9, .14, .08), mats.lamp, [0, height + .38, depth / 2 + .12]);
   const sign = makeLabel('MECHANIC SHOP', '#ffbd80', .44);
+  sign.material.userData.mechanicShopOwned = true;
   sign.position.set(0, height + .72, depth / 2 + .16);
   group.add(sign);
   const light = new THREE.PointLight(0xff9561, 1.25, 13, 2);
@@ -3555,6 +3556,7 @@ function createMechanicShop(shop) {
   dayNightLights.push(light);
   group.add(light);
   const ringMaterial = mats.event.clone();
+  ringMaterial.userData.mechanicShopOwned = true;
   const ring = addMesh(group, new THREE.TorusGeometry(1.65, .08, 8, 32), ringMaterial, [0, .16, serviceOffset], { rotation: [Math.PI / 2, 0, 0] });
   const interactionPoint = new THREE.Vector3(0, .02, serviceOffset).applyAxisAngle(Y_AXIS, shop.heading);
   interactionPoint.add(new THREE.Vector3(shop.x, groundY, shop.z));
@@ -3564,8 +3566,30 @@ function createMechanicShop(shop) {
   mechanicShops.push({ ...shop, group, ring, sign, light, groundY, interactionPoint, obstacle, pulse: randomFrom(shop.x * 13.17 + shop.z * 7.31 + 91) * Math.PI * 2 });
 }
 
-function buildMechanicShops() {
+function clearMechanicShops() {
+  mechanicShops.forEach((shop) => {
+    const obstacleIndex = staticObstacles.indexOf(shop.obstacle);
+    if (obstacleIndex >= 0) staticObstacles.splice(obstacleIndex, 1);
+    const lightIndex = dayNightLights.indexOf(shop.light);
+    if (lightIndex >= 0) dayNightLights.splice(lightIndex, 1);
+    shop.group.traverse((object) => {
+      // Three.js shares one geometry across every Sprite label. Shop meshes are
+      // unique, but the sign sprite must not dispose that global shared buffer.
+      if (!object.isSprite) object.geometry?.dispose?.();
+      const material = object.material;
+      if (material?.userData?.mechanicShopOwned) {
+        material.map?.dispose?.();
+        material.dispose?.();
+      }
+    });
+  });
+  mechanicShopGroup.clear();
   mechanicShops.length = 0;
+  nearbyMechanicShop = null;
+}
+
+function buildMechanicShops() {
+  clearMechanicShops();
   MECHANIC_SHOP_LOCATIONS.forEach((shop) => createMechanicShop(shop));
 }
 
@@ -3917,6 +3941,7 @@ function ensureMenuShowcaseSectors() {
 }
 
 function buildWorld() {
+  if (worldBuilt) return;
   buildSky();
   buildGroundAndWater();
   buildRoads();
