@@ -57,6 +57,10 @@ LEAF = material("Faceted leaf", (.07, .3, .22), .0, .94)
 BUILDING = material("Building concrete", (.12, .2, .25), .08, .86)
 WINDOW = material("Emissive windows", (.14, .65, .66), .15, .24, (.04, .38, .4), 4.0)
 WATER = material("Aurora water", (.015, .14, .18), .45, .24, (.0, .05, .07), .8)
+SIGN_RED = material("Road sign red", (.55, .03, .05), .15, .34, (.24, .005, .01), 1.3)
+SIGN_WHITE = material("Road sign white", (.88, .9, .88), .12, .38)
+SIGN_GREEN = material("Traffic signal green", (.03, .48, .22), .08, .28, (.01, .2, .07), 2.5)
+SIGN_AMBER = material("Traffic signal amber", (.85, .4, .05), .08, .3, (.5, .12, .01), 2.2)
 
 
 def cube(name, location, scale, mat, bevel=0.0, parent=None):
@@ -227,6 +231,48 @@ def make_streetlight(name, location):
     return root
 
 
+def make_traffic_signal(name, location):
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+    root.location = location
+    cylinder("signal pole", (0, 2.3, 0), .08, 4.6, SIDEWALK, 8, root)
+    cube("signal arm", (0, 4.5, -.9), (.1, .1, 3.2), SIDEWALK, .02, root)
+    cube("three lamp signal housing", (0, 3.8, -2.5), (.42, 1.3, .34), SIDEWALK, .03, root)
+    for y, mat in ((4.18, SIGN_RED), (3.82, SIGN_AMBER), (3.46, SIGN_GREEN)):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=12, ring_count=6, radius=.105, location=(0, y, -2.7))
+        lamp = bpy.context.object
+        lamp.name = "signal lamp"
+        lamp.data.materials.append(mat)
+        lamp.parent = root
+    return root
+
+
+def make_stop_sign(name, location):
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+    root.location = location
+    cylinder("stop sign pole", (0, .9, 0), .055, 1.8, SIDEWALK, 8, root)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=.56, depth=.07, location=(0, 1.85, 0), rotation=(math.pi / 2, 0, 0))
+    sign = bpy.context.object
+    sign.name = "unbranded stop sign"
+    sign.data.materials.append(SIGN_RED)
+    sign.parent = root
+    return root
+
+
+def make_speed_sign(name, location):
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+    root.location = location
+    cylinder("speed sign pole", (0, .95, 0), .05, 1.9, SIDEWALK, 8, root)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=.53, depth=.06, location=(0, 1.9, 0), rotation=(math.pi / 2, 0, 0))
+    sign = bpy.context.object
+    sign.name = "unbranded speed limit sign"
+    sign.data.materials.append(SIGN_WHITE)
+    sign.parent = root
+    return root
+
+
 def make_environment():
     root = bpy.data.objects.new("AURORA BAY / Blender environment", None)
     bpy.context.collection.objects.link(root)
@@ -248,6 +294,12 @@ def make_environment():
         make_tree(f"faceted tree {index:02d}", (x, 0, z), .8 + (index % 3) * .12)
     for index, (x, z) in enumerate(((-73, -60), (-73, -16), (-73, 28), (-29, -60), (-29, 28), (15, -60), (59, -16), (59, 28))):
         make_streetlight(f"lamp {index:02d}", (x, 0, z))
+    for index, (x, z) in enumerate(((-66, -66), (22, -66), (66, -22), (-22, 22), (66, 66), (-66, 66))):
+        make_traffic_signal(f"traffic signal {index:02d}", (x + 5.6, 0, z + 5.6))
+    for index, (x, z) in enumerate(((-66, -22), (-22, -66), (22, 22), (22, 66), (-66, 22), (66, 22))):
+        make_stop_sign(f"stop sign {index:02d}", (x + (5.8 if index % 2 else -5.8), 0, z + (-5.8 if index % 2 else 5.8)))
+    for index, (x, z) in enumerate(((-66, -44), (-22, 44), (22, -44), (66, 44), (44, 66), (-44, -66))):
+        make_speed_sign(f"speed sign {index:02d}", (x, 0, z))
     # Pulse Station landmark, designed as an emissive beacon with readable rings.
     station = bpy.data.objects.new("PULSE STATION landmark", None)
     bpy.context.collection.objects.link(station)

@@ -61,6 +61,10 @@ world.add(actors);
 const fallbackBase = new THREE.Group();
 fallbackBase.name = 'Procedural Fallback Ground and Water';
 world.add(fallbackBase);
+const roadFurniture = new THREE.Group();
+roadFurniture.name = 'Traffic signals and road signs';
+world.add(roadFurniture);
+const trafficSignals = [];
 
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
@@ -85,6 +89,7 @@ const mats = {
   beacon: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x8abf30, emissiveIntensity: 3.5, transparent: true, opacity: .94 }),
   event: new THREE.MeshStandardMaterial({ color: 0xff9d50, emissive: 0xa64618, emissiveIntensity: 3.3, transparent: true, opacity: .94 }),
   cache: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x198f91, emissiveIntensity: 3.8, transparent: true, opacity: .95 }),
+  indicator: new THREE.MeshStandardMaterial({ color: 0xffa13a, emissive: 0xe26012, emissiveIntensity: 1.2, transparent: true, opacity: .18 }),
 };
 
 // Collision volumes are kept separate from render geometry so the imported GLB
@@ -394,6 +399,71 @@ function buildLandmarks() {
   city.add(neonDistrict);
 }
 
+function createTrafficLight(x, z, offset = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  const poleX = 5.6;
+  const poleZ = 5.6;
+  const pole = addMesh(group, new THREE.CylinderGeometry(.08, .12, 4.6, 8), mats.sidewalkDark, [poleX, 2.3, poleZ], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.1, .1, 4.0), mats.sidewalkDark, [poleX, 4.5, poleZ - 1.75], { castShadow: true });
+  const housing = addMesh(group, new THREE.BoxGeometry(.42, 1.3, .34), mats.sidewalkDark, [poleX, 3.8, poleZ - 3.45], { castShadow: true });
+  const red = new THREE.MeshStandardMaterial({ color: 0x48121b, emissive: 0x100207, emissiveIntensity: .3, transparent: true, opacity: .35 });
+  const yellow = new THREE.MeshStandardMaterial({ color: 0x4e3910, emissive: 0x1b1103, emissiveIntensity: .3, transparent: true, opacity: .35 });
+  const green = new THREE.MeshStandardMaterial({ color: 0x123b2f, emissive: 0x04150e, emissiveIntensity: .3, transparent: true, opacity: .35 });
+  const lamps = [
+    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), red, [poleX, 4.18, poleZ - 3.64]),
+    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), yellow, [poleX, 3.82, poleZ - 3.64]),
+    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), green, [poleX, 3.46, poleZ - 3.64]),
+  ];
+  group.userData = { housing, lamps, materials: [red, yellow, green], offset };
+  roadFurniture.add(group);
+  trafficSignals.push(group);
+}
+
+function createStopSign(x, z, rotation = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  addMesh(group, new THREE.CylinderGeometry(.055, .075, 1.75, 8), mats.sidewalkDark, [0, .88, 0]);
+  addMesh(group, new THREE.CylinderGeometry(.56, .56, .07, 8), new THREE.MeshStandardMaterial({ color: 0x8c2430, emissive: 0x2b070d, emissiveIntensity: .8 }), [0, 1.82, 0], { rotation: [Math.PI / 2, 0, rotation] });
+  const label = makeLabel('STOP', '#ffb7a9', .36);
+  label.position.set(0, 1.82, .08);
+  group.add(label);
+  roadFurniture.add(group);
+}
+
+function createSpeedSign(x, z, limit = 45, rotation = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  addMesh(group, new THREE.CylinderGeometry(.05, .07, 1.9, 8), mats.sidewalkDark, [0, .95, 0]);
+  addMesh(group, new THREE.CylinderGeometry(.53, .53, .06, 24), new THREE.MeshStandardMaterial({ color: 0xe9eef0, roughness: .48 }), [0, 1.9, 0], { rotation: [Math.PI / 2, 0, rotation] });
+  const label = makeLabel(String(limit), '#ff9d50', .36);
+  label.position.set(0, 1.9, .08);
+  group.add(label);
+  roadFurniture.add(group);
+}
+
+function buildRoadInfrastructure() {
+  const signalIntersections = [[-66, -66], [22, -66], [66, -22], [-22, 22], [66, 66], [-66, 66]];
+  signalIntersections.forEach(([x, z], index) => createTrafficLight(x, z, index * 1.7));
+  const stopIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
+  stopIntersections.forEach(([x, z], index) => createStopSign(x + (index % 2 ? 5.8 : -5.8), z + (index % 2 ? -5.8 : 5.8), index % 2 ? Math.PI / 2 : 0));
+  [[-66, -44], [-22, 44], [22, -44], [66, 44], [44, 66], [-44, -66]].forEach(([x, z], index) => createSpeedSign(x, z, index % 2 ? 35 : 45, index % 2 ? Math.PI / 2 : 0));
+}
+
+function updateTrafficSignals(time) {
+  // The groups are registered separately from the imported city GLB and easy to pause.
+  trafficSignals.forEach((group) => {
+    if (!group.userData.lamps) return;
+    const phase = (time * .001 + group.userData.offset) % 12;
+    const state = phase < 5.8 ? 2 : phase < 7.0 ? 1 : 0;
+    group.userData.materials.forEach((material, index) => {
+      const active = index === state;
+      material.opacity = active ? .98 : .24;
+      material.emissiveIntensity = active ? 5.5 : .25;
+    });
+  });
+}
+
 const CAR_PROFILES = {
   sport: { label: 'MIDNIGHT GT', scale: [1, 1, 1] },
   hatch: { label: 'METRO HATCH', scale: [.91, .94, .84] },
@@ -411,6 +481,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   root.name = playerCar ? 'Blender Midnight GT — Player' : `${profile.label} — Fictional Traffic Vehicle`;
   root.userData.wheels = [];
   root.userData.style = style;
+  root.userData.indicators = { left: [], right: [] };
+  root.userData.headlights = [];
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color, metalness: .75, roughness: .23, clearcoat: 1, clearcoatRoughness: .13 });
   const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x101720, metalness: .65, roughness: .23 });
   const accentMaterial = new THREE.MeshStandardMaterial({ color: accent, metalness: .4, roughness: .22, emissive: accent, emissiveIntensity: playerCar ? .32 : .08 });
@@ -499,6 +571,23 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
     addMesh(root, new THREE.BoxGeometry(1.72, .05, 3.2), accentMaterial, [0, .87, -.05]);
     addMesh(root, new THREE.BoxGeometry(.07, .13, .75), accentMaterial, [1.13, .74, .4]);
   }
+  const lightingRig = new THREE.Group();
+  lightingRig.name = 'headlights and turn signals';
+  for (const [side, x] of [['left', -.78], ['right', .78]]) {
+    const frontIndicator = addMesh(lightingRig, new THREE.BoxGeometry(.16, .1, .06), mats.indicator.clone(), [x, .79, 2.18]);
+    const rearIndicator = addMesh(lightingRig, new THREE.BoxGeometry(.17, .1, .06), mats.indicator.clone(), [x, .77, -2.18]);
+    root.userData.indicators[side].push(frontIndicator, rearIndicator);
+  }
+  if (playerCar) {
+    for (const x of [-.7, .7]) {
+      const beam = new THREE.PointLight(0xa8dcff, .72, 10, 2);
+      beam.position.set(x, .86, 2.22);
+      lightingRig.add(beam);
+      root.userData.headlights.push(beam);
+    }
+  }
+  root.add(lightingRig);
+  root.userData.lightingRig = lightingRig;
   root.scale.set(...profile.scale);
   return root;
 }
@@ -539,7 +628,9 @@ function prepareImportedModel(root) {
 function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   // Keep the physics wrapper and replace only its visible geometry with the
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
-  vehicleRoot.children.forEach((child) => { child.visible = false; });
+  const preservedLighting = vehicleRoot.userData.lightingRig;
+  vehicleRoot.children.forEach((child) => { if (child !== preservedLighting) child.visible = false; });
+  if (preservedLighting) preservedLighting.visible = true;
   const importedCar = prepareImportedModel(sourceScene.clone(true));
   vehicleRoot.scale.setScalar(scale);
   importedCar.scale.setScalar(1);
@@ -600,6 +691,7 @@ function buildWorld() {
   populateCity();
   populateStreetLights();
   buildLandmarks();
+  buildRoadInfrastructure();
   createTraffic();
 }
 
@@ -1524,6 +1616,20 @@ function districtAt(x, z) {
   return 'SOUTH MARKET';
 }
 
+function updatePlayerLighting(steering) {
+  const blinking = Math.sin(performance.now() * .011) > 0;
+  const leftOn = steering < -.18 && blinking;
+  const rightOn = steering > .18 && blinking;
+  ['left', 'right'].forEach((side) => {
+    const active = side === 'left' ? leftOn : rightOn;
+    player.mesh.userData.indicators[side].forEach((lamp) => {
+      lamp.material.opacity = active ? .98 : .15;
+      lamp.material.emissiveIntensity = active ? 5.5 : .55;
+    });
+  });
+  player.mesh.userData.headlights.forEach((beam) => { beam.intensity = .72; });
+}
+
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
   const throttle = input.forward || gamepadState.forward ? 1 : 0;
@@ -1587,6 +1693,7 @@ function updatePlayer(dt) {
   player.mesh.userData.loadedWheels?.forEach((wheel) => {
     wheel.rotation.x -= player.speed * dt * 1.8;
   });
+  updatePlayerLighting(steering);
 
   if (handbraking && Math.abs(player.speed) > 10 && Math.abs(steering) > 0) {
     driftScore += Math.abs(player.speed) * Math.abs(steering) * dt * 2.4;
@@ -1751,6 +1858,7 @@ function updateHud(dt) {
   document.querySelector('#nitro-percent').textContent = `${Math.round(nitroPercent)}%`;
   document.querySelector('#nitro-fill').style.width = `${nitroPercent}%`;
   document.querySelector('#district-name').textContent = districtAt(player.position.x, player.position.z);
+  document.querySelector('#speed-limit').textContent = player.position.z < -72 ? '35' : '45';
   const minutes = Math.floor(sessionSeconds / 60).toString().padStart(2, '0');
   const seconds = Math.floor(sessionSeconds % 60).toString().padStart(2, '0');
   document.querySelector('#session-clock').textContent = `${minutes}:${seconds}`;
@@ -1788,6 +1896,7 @@ function animate(time) {
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
     updatePolice(time, dt);
+    updateTrafficSignals(time);
     updateRace(time, dt);
     updateBeacons(time, dt);
   }

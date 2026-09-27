@@ -94,7 +94,7 @@ button { font: inherit; color: inherit; }
 .weather-readout span:first-child { font: 17px var(--mono); color: #e9eee9; grid-row: span 2; }
 .weather-readout small { grid-column: 2; margin: 0; font-size: 8px; }
 .weather-icon { color: var(--orange); font-size: 14px; }
-.heat-readout, .cache-readout { display: grid; gap: 4px; text-align: right; }.heat-readout small, .cache-readout small { color: #7b8792; font: 8px var(--mono); letter-spacing: .1em; }.heat-readout strong { color: #7c8792; font: 14px var(--mono); font-weight: 400; }.heat-readout.hot strong { color: var(--pink); text-shadow: 0 0 10px rgba(255,91,156,.7); }.cache-readout strong { color: var(--cyan); font: 11px var(--mono); font-weight: 400; }
+.heat-readout, .cache-readout, .speed-limit-readout { display: grid; gap: 4px; text-align: right; }.heat-readout small, .cache-readout small, .speed-limit-readout small { color: #7b8792; font: 8px var(--mono); letter-spacing: .1em; }.heat-readout strong { color: #7c8792; font: 14px var(--mono); font-weight: 400; }.heat-readout.hot strong { color: var(--pink); text-shadow: 0 0 10px rgba(255,91,156,.7); }.cache-readout strong { color: var(--cyan); font: 11px var(--mono); font-weight: 400; }.speed-limit-readout strong { color: var(--orange); font: 13px var(--mono); font-weight: 400; }.speed-limit-readout strong::after { content: " KM/H"; color: #77858d; font-size: 8px; }
 
 .map-panel { left: 38px; bottom: 38px; width: 220px; padding: 13px 13px 11px; border-radius: 12px; }
 .map-heading { display: flex; justify-content: space-between; align-items: center; color: #dbe1e6; font: 10px var(--mono); letter-spacing: .13em; margin: 0 2px 8px; }
