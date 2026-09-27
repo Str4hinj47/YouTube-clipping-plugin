@@ -541,7 +541,8 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
   vehicleRoot.children.forEach((child) => { child.visible = false; });
   const importedCar = prepareImportedModel(sourceScene.clone(true));
-  importedCar.scale.setScalar(scale);
+  vehicleRoot.scale.setScalar(scale);
+  importedCar.scale.setScalar(1);
   vehicleRoot.add(importedCar);
   vehicleRoot.userData.loadedModel = importedCar;
   vehicleRoot.userData.loadedWheels = [];
@@ -557,10 +558,13 @@ function loadOneAsset(url) {
 }
 
 async function loadBlenderAssets() {
-  const [environmentResult, carResult] = await Promise.allSettled([
+  const fleetStyles = ['hatch', 'supercar', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport'];
+  const results = await Promise.allSettled([
     loadOneAsset('./assets/aurora_bay_environment.glb'),
     loadOneAsset('./assets/midnight_gt.glb'),
+    ...fleetStyles.map((style) => loadOneAsset(`./assets/fleet/${style}.glb`)),
   ]);
+  const [environmentResult, carResult] = results;
   if (environmentResult.status === 'fulfilled') {
     const importedEnvironment = prepareImportedModel(environmentResult.value.scene);
     importedEnvironment.name = 'Aurora Bay Environment — Blender GLB';
@@ -573,11 +577,20 @@ async function loadBlenderAssets() {
   if (carResult.status === 'fulfilled') {
     const importedCar = carResult.value.scene;
     replaceVehicleVisual(player.mesh, importedCar, 1);
-    // Traffic keeps its authored fictional silhouettes so the streets do not fill with clones.
     replaceVehicleVisual(policeVehicle, importedCar, .82);
   } else {
-    console.warn('Blender car unavailable; using procedural fallback.', carResult.reason);
+    console.warn('Blender hero car unavailable; using procedural fallback.', carResult.reason);
   }
+  fleetStyles.forEach((style, index) => {
+    const result = results[index + 2];
+    if (result.status === 'fulfilled') {
+      traffic.filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
+        replaceVehicleVisual(vehicle.mesh, result.value.scene, .78);
+      });
+    } else {
+      console.warn(`Fleet asset unavailable for ${style}; using procedural fallback.`, result.reason);
+    }
+  });
 }
 
 function buildWorld() {

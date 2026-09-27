@@ -1,7 +1,7 @@
 """Create the low-poly car and environment source assets for Neonline.
 
 Run from the repository root with Blender 4.x:
-    blender -b --python blender/create_assets.py -- --out public/assets
+    blender -b --python blender/create_assets.py -- --out assets
 
 This intentionally keeps the scene dependency-free: all geometry is made from
 Blender primitives, which makes the art direction easy to iterate on in-editor.
@@ -85,12 +85,12 @@ def cylinder(name, location, radius, depth, mat, vertices=12, parent=None):
     return obj
 
 
-def make_car():
-    root = bpy.data.objects.new("MIDNIGHT GT / Blender vehicle", None)
+def make_car(body_mat=PAINT, trim_mat=LIME, name="MIDNIGHT GT / Blender vehicle"):
+    root = bpy.data.objects.new(name, None)
     bpy.context.collection.objects.link(root)
-    cube("lower aerodynamic body", (0, .62, 0), (2.25, .48, 4.35), PAINT, .12, root)
-    cube("long bonnet", (0, .86, 1.35), (2.08, .24, 1.4), PAINT, .08, root)
-    cube("rear deck", (0, .84, -1.48), (2.05, .23, 1.05), PAINT, .06, root)
+    cube("lower aerodynamic body", (0, .62, 0), (2.25, .48, 4.35), body_mat, .12, root)
+    cube("long bonnet", (0, .86, 1.35), (2.08, .24, 1.4), body_mat, .08, root)
+    cube("rear deck", (0, .84, -1.48), (2.05, .23, 1.05), body_mat, .06, root)
     # Trapezoid cabin mesh, with the same hard-surface silhouette as the in-browser preview.
     vertices = [(-.86, .87, -.9), (.86, .87, -.9), (-.72, 1.74, -.34), (.72, 1.74, -.34),
                 (-.72, 1.74, .72), (.72, 1.74, .72), (-.86, .87, .9), (.86, .87, .9)]
@@ -101,9 +101,9 @@ def make_car():
     cabin = bpy.data.objects.new("smoked glass cabin", mesh)
     bpy.context.collection.objects.link(cabin)
     cabin.parent = root
-    cube("left side skirt", (-1.1, .47, 0), (.11, .2, 3.65), LIME, .025, root)
-    cube("right side skirt", (1.1, .47, 0), (.11, .2, 3.65), LIME, .025, root)
-    cube("rear diffuser", (0, .48, -2.16), (1.76, .12, .14), LIME, .02, root)
+    cube("left side skirt", (-1.1, .47, 0), (.11, .2, 3.65), trim_mat, .025, root)
+    cube("right side skirt", (1.1, .47, 0), (.11, .2, 3.65), trim_mat, .025, root)
+    cube("rear diffuser", (0, .48, -2.16), (1.76, .12, .14), trim_mat, .02, root)
     for x in (-.71, .71):
         cube("white LED headlight", (x, .78, 2.16), (.28, .15, .08), HEADLIGHT, .02, root)
         cube("red tail light", (x, .76, -2.16), (.3, .14, .08), TAIL, .02, root)
@@ -119,10 +119,75 @@ def make_car():
             rim.name = "machined wheel hub"
             rim.data.materials.append(RIM)
             rim.parent = root
-    cube("rear wing", (0, 1.2, -2.03), (1.7, .09, .13), LIME, .02, root)
+    cube("rear wing", (0, 1.2, -2.03), (1.7, .09, .13), trim_mat, .02, root)
     cube("wing left support", (-.73, 1.09, -2.03), (.08, .25, .08), RUBBER, .01, root)
     cube("wing right support", (.73, 1.09, -2.03), (.08, .25, .08), RUBBER, .01, root)
     return root
+
+
+FLEET_PROFILES = [
+    ("hatch", "Metro Hatch", (.10, .42, .56), (.91, .94, .84)),
+    ("supercar", "Veloce R", (.62, .08, .14), (.96, .82, 1.02)),
+    ("suv", "Trail Scout", (.24, .28, .30), (1.08, 1.22, 1.02)),
+    ("pickup", "Harbor Utility", (.12, .28, .44), (1.10, 1.07, 1.06)),
+    ("wagon", "Grand Tourer", (.42, .18, .12), (1.04, 1.03, 1.10)),
+    ("classic", "Cinder Classic", (.55, .12, .06), (1.10, 1.02, 1.05)),
+    ("ev", "Pulse EV", (.32, .48, .44), (1.02, .98, 1.00)),
+]
+
+
+def make_car_variant(style, display_name, color, scale):
+    body = material(f"{display_name} paint", color, .82, .2)
+    trim = material(f"{display_name} trim", (.68, 1.0, .18), .36, .2, (.35, .95, .08), 1.8)
+    root = make_car(body, trim, f"{display_name} / logo-free Blender vehicle")
+    # Fine body seams and aero details are deliberately generic, without badges or logos.
+    for x in (-1.08, 1.08):
+        cube("precise door shut line", (x, .78, -.2), (.025, .02, 1.4), RUBBER, .005, root)
+        cube("flush door handle", (x, .98, .22), (.035, .035, .28), RIM, .005, root)
+    if style == "hatch":
+        cube("upright hatch glass", (0, 1.25, -1.18), (1.5, .06, .72), GLASS, .02, root)
+        cube("compact roof spoiler", (0, 1.52, -1.77), (1.58, .1, .18), trim, .02, root)
+        cube("hatch lower bumper", (0, .55, -2.12), (1.95, .18, .2), RUBBER, .02, root)
+    elif style == "supercar":
+        cube("carbon front splitter", (0, .49, 2.2), (2.1, .08, .3), RUBBER, .02, root)
+        cube("left aero fin", (-1.0, .62, .45), (.12, .28, 2.6), trim, .02, root)
+        cube("right aero fin", (1.0, .62, .45), (.12, .28, 2.6), trim, .02, root)
+        cube("low rear lip", (0, 1.02, -2.1), (1.5, .08, .12), trim, .015, root)
+    elif style == "suv":
+        cube("left roof rail", (-.72, 1.95, 0), (.1, .1, 2.9), RIM, .02, root)
+        cube("right roof rail", (.72, 1.95, 0), (.1, .1, 2.9), RIM, .02, root)
+        cube("front bull bar", (0, .63, 2.18), (2.15, .22, .16), RUBBER, .03, root)
+        cylinder("rear spare tire", (0, 1.0, -2.22), .48, .18, RUBBER, 16, root)
+    elif style == "pickup":
+        cube("pickup bed left wall", (-.92, 1.02, -1.2), (.16, .48, 1.55), body, .03, root)
+        cube("pickup bed right wall", (.92, 1.02, -1.2), (.16, .48, 1.55), body, .03, root)
+        cube("pickup bed floor", (0, .82, -1.2), (1.75, .08, 1.55), RUBBER, .02, root)
+        cube("pickup tailgate", (0, 1.02, -1.98), (1.9, .5, .14), body, .03, root)
+    elif style == "wagon":
+        cube("wagon long cargo roof", (0, 1.27, -.62), (1.75, .34, 1.75), body, .05, root)
+        cube("wagon panoramic roof", (0, 1.47, -.55), (1.5, .045, 1.2), GLASS, .02, root)
+        cube("wagon roof rail left", (-.71, 1.68, -.52), (.06, .06, 1.65), RIM, .01, root)
+        cube("wagon roof rail right", (.71, 1.68, -.52), (.06, .06, 1.65), RIM, .01, root)
+    elif style == "classic":
+        cube("classic hood scoop", (0, 1.08, 1.2), (.72, .2, .52), body, .05, root)
+        cube("classic chrome front bumper", (0, .62, 2.2), (2.34, .15, .16), RIM, .025, root)
+        cube("classic chrome rear bumper", (0, .62, -2.2), (2.34, .15, .16), RIM, .025, root)
+        cylinder("left side exhaust", (-1.12, .48, -.1), .07, 2.0, RIM, 8, root)
+        cylinder("right side exhaust", (1.12, .48, -.1), .07, 2.0, RIM, 8, root)
+    elif style == "ev":
+        cube("EV panoramic roof", (0, 1.38, -.1), (1.58, .06, 2.0), GLASS, .02, root)
+        cube("EV front light bar", (0, .82, 2.17), (1.45, .08, .06), trim, .02, root)
+        cube("EV flush front panel", (0, .76, 1.82), (1.55, .12, .12), body, .02, root)
+    root.scale = scale
+    return root
+
+
+def export_fleet(output):
+    fleet_dir = os.path.join(output, "fleet")
+    os.makedirs(fleet_dir, exist_ok=True)
+    for style, display_name, color, scale in FLEET_PROFILES:
+        variant = make_car_variant(style, display_name, color, scale)
+        export_collection(variant, os.path.join(fleet_dir, f"{style}.glb"))
 
 
 def make_building(name, location, width, depth, height, material_slot=BUILDING):
@@ -215,7 +280,8 @@ def main():
     environment = make_environment()
     export_collection(car, os.path.join(out, "midnight_gt.glb"))
     export_collection(environment, os.path.join(out, "aurora_bay_environment.glb"))
-    print(f"Created Blender assets in {out}")
+    export_fleet(out)
+    print(f"Created Blender assets, including {len(FLEET_PROFILES)} logo-free fleet variants, in {out}")
 
 
 if __name__ == "__main__":

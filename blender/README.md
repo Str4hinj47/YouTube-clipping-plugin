@@ -3,6 +3,7 @@
 The game scene is built around a low-poly Blender art direction: hard-surface cars, faceted trees, modular buildings, emissive glass, and cyan/lime night lighting. `create_assets.py` is the source file for the two authored GLB bundles used by the prototype:
 
 - `midnight_gt.glb` — the player coupe, wheels, lights, spoiler, and underglow.
+- `fleet/*.glb` — seven fictional, logo-free road-car variants with distinct hard-surface silhouettes and detail packages.
 - `aurora_bay_environment.glb` — a reusable block of roads, buildings, trees, lights, and the Pulse Station landmark.
 
 Run it with Blender 4.x:
