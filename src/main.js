@@ -2240,18 +2240,26 @@ function buildHomeProperties() {
     }
     createHomeProperty(home, index);
   });
-  spawnPlayerAtHome();
+  spawnPlayerAtHome(true);
 }
 
 function selectedHomeEntry() {
   return HOME_CATALOG.find((home) => home.id === player.selectedHome) || HOME_CATALOG[0];
 }
 
-function spawnPlayerAtHome() {
+function spawnPlayerAtHome(forceHome = false) {
   const home = selectedHomeEntry();
-  player.position.set(home.spawn[0], home.spawn[1], home.spawn[2]);
-  player.lastSafePosition.copy(player.position);
-  player.heading = home.heading || 0;
+  const hasResume = !forceHome && Array.isArray(player.resumePosition) && player.resumePosition.length >= 3;
+  if (hasResume) {
+    player.position.set(...player.resumePosition.slice(0, 3));
+    player.heading = Number.isFinite(player.resumeHeading) ? player.resumeHeading : (home.heading || 0);
+    player.resumePosition = null;
+  } else {
+    player.resumePosition = null;
+    player.position.set(home.spawn[0], home.spawn[1], home.spawn[2]);
+    player.lastSafePosition.copy(player.position);
+    player.heading = home.heading || 0;
+  }
   player.speed = 0;
   player.mesh.position.copy(player.position);
   player.mesh.rotation.set(0, player.heading, 0);
@@ -2733,6 +2741,8 @@ const player = {
   waterSinkTime: 0,
   recoveryCost: 0,
   lastSafePosition: new THREE.Vector3(132, 18.58, 91.2),
+  resumePosition: null,
+  resumeHeading: 0,
   ownedHomes: ['pinewatch-shack'],
   selectedHome: 'pinewatch-shack',
   speedingTime: 0,
@@ -2800,6 +2810,7 @@ let phoneSelectedMessageId = '';
 let phoneNotificationTimer = null;
 let roadsideStopHistory = [];
 let roadsideStopSequence = 0;
+let pendingSavedRun = null;
 let menuShowcaseIndex = 0;
 let menuShowcaseElapsed = 0;
 let menuShowcaseTransition = 1;
@@ -2934,6 +2945,8 @@ function resetProgressStateToDefaults() {
   player.waterSinkTime = 0;
   player.recoveryCost = 0;
   player.lastSafePosition.set(starter.spawn[0], starter.spawn[1], starter.spawn[2]);
+  player.resumePosition = null;
+  player.resumeHeading = starter.heading || 0;
   player.ownedHomes = ['pinewatch-shack'];
   player.selectedHome = 'pinewatch-shack';
   player.speedingTime = 0;
@@ -2948,6 +2961,7 @@ function resetProgressStateToDefaults() {
   phoneSelectedMessageId = '';
   roadsideStopHistory = [];
   roadsideStopSequence = 0;
+  pendingSavedRun = null;
 }
 
 function saveProgress() {
@@ -2963,12 +2977,39 @@ function saveProgress() {
       paint: player.paint,
       condition: player.condition,
       damageRecords: player.damageRecords,
+      position: [player.position.x, player.position.y, player.position.z],
+      heading: player.heading,
+      lastSafePosition: [player.lastSafePosition.x, player.lastSafePosition.y, player.lastSafePosition.z],
       upgrades: player.upgrades,
       cacheIds: player.collectedCaches,
       waterRecoveryPending: player.waterRecoveryPending,
       waterBody: player.waterBody,
       phoneMessages,
       roadsideStopHistory,
+      run: {
+        active: cargoRun.active,
+        route: cargoRun.route,
+        missionId: cargoRun.missionId,
+        elapsed: cargoRun.elapsed,
+        deadline: cargoRun.deadline,
+        exposure: cargoRun.exposure,
+        baseCash: cargoRun.baseCash,
+        baseRep: cargoRun.baseRep,
+        bonusRate: cargoRun.bonusRate,
+        outcome: cargoRun.outcome,
+        outcomeTitle: cargoRun.outcomeTitle,
+        outcomeCopy: cargoRun.outcomeCopy,
+        outcomeTimer: cargoRun.outcomeTimer,
+        deadlineWarningSent: cargoRun.deadlineWarningSent,
+        lastPayout: cargoRun.lastPayout,
+        lastEarlyBonus: cargoRun.lastEarlyBonus,
+        lastExposurePenalty: cargoRun.lastExposurePenalty,
+        cityMissionIndex: cityDeliveryMissionIndex,
+        pickupIndex: cargoPickupIndex,
+        dropoffIndex: cargoDropoffIndex,
+        deliveryState,
+        mountainDeliveryState,
+      },
       updatedAt: Date.now(),
       saveSlot: activeSaveSlot,
     };
@@ -3000,6 +3041,13 @@ function loadProgress(slot = latestSaveSlot()) {
     if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
     if (typeof saved.paint === 'string' && /^#[0-9a-f]{6}$/i.test(saved.paint)) player.paint = saved.paint;
     if (Number.isFinite(saved.condition)) player.condition = clamp(saved.condition, 1, 100);
+    if (Array.isArray(saved.position) && saved.position.length >= 3 && saved.position.every((value) => Number.isFinite(Number(value)))) {
+      player.resumePosition = saved.position.slice(0, 3).map((value) => Number(value));
+      player.resumeHeading = Number.isFinite(Number(saved.heading)) ? Number(saved.heading) : 0;
+    }
+    if (Array.isArray(saved.lastSafePosition) && saved.lastSafePosition.length >= 3 && saved.lastSafePosition.every((value) => Number.isFinite(Number(value)))) {
+      player.lastSafePosition.set(...saved.lastSafePosition.slice(0, 3).map((value) => Number(value)));
+    }
     if (Array.isArray(saved.damageRecords)) {
       player.damageRecords = saved.damageRecords
         .filter((record) => record && Array.isArray(record.localPosition) && record.localPosition.length >= 3)
@@ -3055,6 +3103,32 @@ function loadProgress(slot = latestSaveSlot()) {
           cargoMission: typeof entry.cargoMission === 'string' ? entry.cargoMission : '',
         }));
       roadsideStopSequence = roadsideStopHistory.reduce((highest, entry) => Math.max(highest, Number(String(entry.id).replace(/\D/g, '')) || 0), 0);
+    }
+    if (saved.run && typeof saved.run === 'object') {
+      pendingSavedRun = {
+        active: Boolean(saved.run.active),
+        route: saved.run.route === 'mountain' ? 'mountain' : saved.run.route === 'city' ? 'city' : '',
+        missionId: typeof saved.run.missionId === 'string' ? saved.run.missionId : '',
+        elapsed: Math.max(0, Number(saved.run.elapsed) || 0),
+        deadline: Math.max(0, Number(saved.run.deadline) || 0),
+        exposure: clamp(Number(saved.run.exposure) || 0, 0, 100),
+        baseCash: Math.max(0, Number(saved.run.baseCash) || 0),
+        baseRep: Math.max(0, Number(saved.run.baseRep) || 0),
+        bonusRate: Math.max(0, Number(saved.run.bonusRate) || 0),
+        outcome: typeof saved.run.outcome === 'string' ? saved.run.outcome : '',
+        outcomeTitle: typeof saved.run.outcomeTitle === 'string' ? saved.run.outcomeTitle : '',
+        outcomeCopy: typeof saved.run.outcomeCopy === 'string' ? saved.run.outcomeCopy : '',
+        outcomeTimer: Math.max(0, Number(saved.run.outcomeTimer) || 0),
+        deadlineWarningSent: Boolean(saved.run.deadlineWarningSent),
+        lastPayout: Math.max(0, Number(saved.run.lastPayout) || 0),
+        lastEarlyBonus: Math.max(0, Number(saved.run.lastEarlyBonus) || 0),
+        lastExposurePenalty: Math.max(0, Number(saved.run.lastExposurePenalty) || 0),
+        cityMissionIndex: Math.max(0, Math.floor(Number(saved.run.cityMissionIndex) || 0)),
+        pickupIndex: Math.max(0, Math.floor(Number(saved.run.pickupIndex) || 0)),
+        dropoffIndex: Math.max(0, Math.floor(Number(saved.run.dropoffIndex) || 0)),
+        deliveryState: ['idle', 'active', 'finished', 'failed'].includes(saved.run.deliveryState) ? saved.run.deliveryState : 'idle',
+        mountainDeliveryState: ['idle', 'active', 'finished', 'failed'].includes(saved.run.mountainDeliveryState) ? saved.run.mountainDeliveryState : 'idle',
+      };
     }
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
@@ -3699,6 +3773,42 @@ let mountainDeliveryStartMarker = null;
 let mountainDeliveryTargetMarker = null;
 let mountainDeliveryStartRing = null;
 let mountainDeliveryTargetRing = null;
+
+function applyPendingSavedRun() {
+  if (!pendingSavedRun) return;
+  const savedRun = pendingSavedRun;
+  pendingSavedRun = null;
+  setCityDeliveryMission(savedRun.cityMissionIndex);
+  cargoPickupIndex = clamp(savedRun.pickupIndex, 0, CARGO_PICKUP_SPOTS.length - 1);
+  cargoDropoffIndex = clamp(savedRun.dropoffIndex, 0, CARGO_DROPOFF_SPOTS.length - 1);
+  const pickup = currentCargoPickupSpot();
+  const dropoff = currentCargoDropoffSpot();
+  deliveryStart.set(pickup.position[0], pickup.position[1], pickup.position[2]);
+  deliveryTarget.set(dropoff.position[0], dropoff.position[1], dropoff.position[2]);
+  Object.assign(cargoRun, {
+    active: savedRun.active,
+    route: savedRun.route,
+    missionId: savedRun.missionId,
+    elapsed: savedRun.elapsed,
+    deadline: savedRun.deadline,
+    exposure: savedRun.exposure,
+    baseCash: savedRun.baseCash,
+    baseRep: savedRun.baseRep,
+    bonusRate: savedRun.bonusRate,
+    outcome: savedRun.outcome,
+    outcomeTitle: savedRun.outcomeTitle,
+    outcomeCopy: savedRun.outcomeCopy,
+    outcomeTimer: savedRun.outcomeTimer,
+    deadlineWarningSent: savedRun.deadlineWarningSent,
+    lastPayout: savedRun.lastPayout,
+    lastEarlyBonus: savedRun.lastEarlyBonus,
+    lastExposurePenalty: savedRun.lastExposurePenalty,
+  });
+  deliveryState = savedRun.deliveryState;
+  mountainDeliveryState = savedRun.mountainDeliveryState;
+}
+
+applyPendingSavedRun();
 
 function addMountainDeliveryMarkers() {
   mountainDeliveryStartMarker = new THREE.Group();
@@ -4637,8 +4747,8 @@ function selectHome(id) {
     return;
   }
   player.selectedHome = id;
+  spawnPlayerAtHome(true);
   saveProgress();
-  spawnPlayerAtHome();
   updateHomeUi();
   updateGarageUi();
   showToast('HOME SELECTED', `${home.name} is now your spawn point`, home.location);
@@ -4662,8 +4772,8 @@ function purchaseHome(id) {
   player.cash -= home.price;
   player.ownedHomes.push(id);
   player.selectedHome = id;
+  spawnPlayerAtHome(true);
   saveProgress();
-  spawnPlayerAtHome();
   updateGarageUi();
   showToast('PROPERTY ACQUIRED', `${home.name} is now owned and selected`, `$${home.price.toLocaleString('en-US')}`);
 }
@@ -4749,6 +4859,7 @@ function activateSaveSlot(slot, newRun = false) {
   clearCargoRun();
   mountainDeliveryTime = 0;
   setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
+  applyPendingSavedRun();
   spawnPlayerAtHome();
   if (player.selectedStyle !== player.mesh.userData?.style) applyPlayerVehicleStyle(player.selectedStyle, false, true);
   else applyPaintToVehicleRoot(player.mesh, player.paint);
@@ -4843,12 +4954,7 @@ function setStarterMenuOpen(open) {
       actors.add(player.mesh);
     }
     player.mesh.visible = true;
-    spawnPlayerAtHome();
     endRadarStop();
-    deliveryState = 'idle';
-    mountainDeliveryState = 'idle';
-    clearCargoRun();
-    mountainDeliveryTime = 0;
     player.mesh.position.copy(player.position);
     player.mesh.rotation.y = player.heading;
     lastStreamSectorKey = '';
@@ -4986,7 +5092,7 @@ function resetSavedProgress() {
   clearVisibleVehicleDamage(player.mesh);
   applyPlayerVehicleStyle(PROGRESSION_CONFIG.starterStyle, false, true);
   applyPlayerPaint(player.paint, false);
-  spawnPlayerAtHome();
+  spawnPlayerAtHome(true);
   resetCollectibles();
   renderSaveSlots();
   updateStartMenuUi();
@@ -5467,7 +5573,7 @@ function resetPlayer() {
   const cargoAbandoned = cargoRun.active;
   if (cargoAbandoned) failCargoRun('CARGO ABANDONED', 'Resetting the vehicle forfeited the unmarked case.', 'NO PAYOUT');
   resetRoadFurniture();
-  const home = spawnPlayerAtHome();
+  const home = spawnPlayerAtHome(true);
   if (!cargoAbandoned) showToast('VEHICLE RESET', `Back at ${home.name}`, '');
 }
 
@@ -6720,6 +6826,9 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('beforeunload', () => {
+  if (!starterMenuOpen) saveProgress();
+});
 
 buildWorld();
 worldBuilt = true;
@@ -6737,6 +6846,7 @@ loadBlenderAssets()
 
 let lastTime = performance.now();
 let hudAccumulator = 0;
+let saveAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
@@ -6757,7 +6867,12 @@ function animate(time) {
     updateCargoPickupVisuals(time, dt);
     updateMountainDelivery(time, dt);
     updatePolice(time, dt);
-      updateBeacons(time, dt);
+    updateBeacons(time, dt);
+    saveAccumulator += dt;
+    if (saveAccumulator >= 8) {
+      saveProgress();
+      saveAccumulator = 0;
+    }
   }
   updateAudio();
   updateWater(time);

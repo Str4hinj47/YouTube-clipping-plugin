@@ -26,7 +26,7 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **Touch** — use the mobile PHONE button beside the pause control to open the same inbox
 - **R** — reset vehicle
 - **Gamepad / touch controls** — supported on compatible devices
-- **Local saves** — Play exposes three local save slots; Continue loads the most recently updated profile. Each slot also persists its fictional cartel phone inbox, read/unread state, and mission contacts.
+- **Local saves** — Play exposes three local save slots; Continue loads the most recently updated profile without opening slot selection. Each slot persists the resume position and heading, vehicle condition/damage, selected home and car, active cargo case/deadline/exposure, fictional cartel phone inbox, read/unread state, roadside history, and mission contacts. The game also checkpoints the active run periodically while driving.
 
 ## Road consequences
 
