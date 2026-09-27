@@ -66,7 +66,7 @@ renderer.toneMappingExposure = 1.12;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x091522);
 scene.fog = new THREE.FogExp2(0x0c1a24, 0.0072);
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 420);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, WORLD_LIMIT + 4000);
 camera.position.set(0, 6, -12);
 
 const ambient = new THREE.HemisphereLight(0x93b3c0, 0x122019, 1.65);
@@ -111,10 +111,74 @@ world.add(regionalRoadGroup);
 const streamedWorld = new THREE.Group();
 streamedWorld.name = 'Streamed rural world sectors';
 world.add(streamedWorld);
+const islandBoundary = new THREE.Group();
+islandBoundary.name = 'Outer island coastline and ocean';
+world.add(islandBoundary);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
 const trafficSignals = [];
+
+function createWaterMaterial(surfaceColor, deepColor, opacity = .94) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uSurfaceColor: { value: new THREE.Color(surfaceColor) },
+      uDeepColor: { value: new THREE.Color(deepColor) },
+      uOpacity: { value: opacity },
+      uSunDirection: { value: new THREE.Vector3(-.34, .78, .48).normalize() },
+    },
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      void main() {
+        vec3 transformed = position;
+        float waveA = sin(position.x * .075 + uTime * .72) * .075;
+        float waveB = sin(position.y * .11 - uTime * .54 + position.x * .025) * .052;
+        float waveC = sin((position.x + position.y) * .19 + uTime * .38) * .018;
+        transformed.z += waveA + waveB + waveC;
+        vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        vUv = uv;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uSurfaceColor;
+      uniform vec3 uDeepColor;
+      uniform float uOpacity;
+      uniform vec3 uSunDirection;
+      varying vec2 vUv;
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      void main() {
+        vec3 normal = normalize(vWorldNormal);
+        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+        float facing = max(dot(normal, viewDirection), 0.0);
+        float fresnel = pow(1.0 - facing, 3.0);
+        float ripples = sin(vWorldPosition.x * .13 + uTime * .7) * .5 + .5;
+        ripples += sin(vWorldPosition.z * .17 - uTime * .48) * .5 + .5;
+        ripples *= .5;
+        vec3 waterColor = mix(uDeepColor, uSurfaceColor, .42 + ripples * .2 + fresnel * .22);
+        vec3 halfDirection = normalize(viewDirection + normalize(uSunDirection));
+        float sunGlint = pow(max(dot(normal, halfDirection), 0.0), 92.0) * (.35 + fresnel * 1.4);
+        float edgeFoam = smoothstep(.015, .13, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
+        vec3 foamColor = vec3(.48, .82, .82);
+        waterColor += foamColor * (1.0 - edgeFoam) * .16;
+        waterColor += vec3(.68, .9, 1.0) * sunGlint;
+        gl_FragColor = vec4(waterColor, uOpacity);
+      }
+    `,
+    transparent: true,
+    opacity,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+  });
+}
 
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
@@ -133,7 +197,9 @@ const mats = {
   treeTrunk: new THREE.MeshStandardMaterial({ color: 0x3a2d2a, roughness: 1 }),
   treeLeaf: new THREE.MeshStandardMaterial({ color: 0x276354, roughness: .92, flatShading: true }),
   treeLeafDark: new THREE.MeshStandardMaterial({ color: 0x173f3b, roughness: .94, flatShading: true }),
-  water: new THREE.MeshStandardMaterial({ color: 0x0b3946, roughness: .28, metalness: .42, emissive: 0x031a24, emissiveIntensity: .55 }),
+  water: createWaterMaterial(0x197f91, 0x042c42, .93),
+  ocean: createWaterMaterial(0x126176, 0x031d35, .96),
+  shoreline: new THREE.MeshStandardMaterial({ color: 0x6d6754, roughness: .96, metalness: .02 }),
   waterLine: new THREE.MeshBasicMaterial({ color: 0x35a8ae, transparent: true, opacity: .33 }),
   mountainGround: new THREE.MeshStandardMaterial({ color: 0x1b2929, roughness: 1 }),
   forestGround: new THREE.MeshStandardMaterial({ color: 0x18342b, roughness: 1 }),
@@ -205,9 +271,13 @@ function makeLabel(text, color = '#d6fa6a', scale = 1) {
   return sprite;
 }
 
+let skyStars = null;
+let skyMoon = null;
+const skyMoonOffset = new THREE.Vector3(-75, 68, -145);
+
 function buildSky() {
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(210, 32, 16),
+    new THREE.SphereGeometry(WORLD_LIMIT + 2600, 48, 24),
     new THREE.MeshBasicMaterial({ color: 0x102b3b, side: THREE.BackSide, fog: false })
   );
   world.add(sky);
@@ -225,15 +295,44 @@ function buildSky() {
   }
   starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
   const stars = new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0x9bbbc7, size: .48, transparent: true, opacity: .62, sizeAttenuation: true }));
+  skyStars = stars;
   world.add(stars);
   // A soft distant moon keeps the skyline readable without a texture dependency.
   const moonDisk = addMesh(world, new THREE.CircleGeometry(13, 32), new THREE.MeshBasicMaterial({ color: 0x90a9b1, transparent: true, opacity: .12, side: THREE.DoubleSide }), [-75, 68, -145]);
+  skyMoon = moonDisk;
   moonDisk.lookAt(camera.position);
 }
 
+function updateSky() {
+  if (skyStars) skyStars.position.copy(camera.position);
+  if (skyMoon) {
+    skyMoon.position.copy(camera.position).add(skyMoonOffset);
+    skyMoon.lookAt(camera.position);
+  }
+}
+
 function buildGroundAndWater() {
+  const islandEdge = WORLD_LIMIT;
+  const oceanEdge = WORLD_LIMIT + 2200;
+  const oceanY = -.08;
   addMesh(fallbackBase, new THREE.PlaneGeometry(270, 270), mats.ground, [0, -.16, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
-  addMesh(fallbackBase, new THREE.PlaneGeometry(300, 44), mats.water, [0, -.08, -121], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  // Four optimized water strips form a continuous ocean ring without putting a
+  // giant transparent plane over the streamed landmass.
+  addMesh(islandBoundary, new THREE.PlaneGeometry(oceanEdge * 2, oceanEdge - islandEdge, 64, 12), mats.ocean, [0, oceanY, (oceanEdge + islandEdge) / 2], { rotation: [-Math.PI / 2, 0, 0] });
+  addMesh(islandBoundary, new THREE.PlaneGeometry(oceanEdge * 2, oceanEdge - islandEdge, 64, 12), mats.ocean, [0, oceanY, -(oceanEdge + islandEdge) / 2], { rotation: [-Math.PI / 2, 0, 0] });
+  addMesh(islandBoundary, new THREE.PlaneGeometry(oceanEdge - islandEdge, islandEdge * 2, 12, 64), mats.ocean, [(oceanEdge + islandEdge) / 2, oceanY, 0], { rotation: [-Math.PI / 2, 0, 0] });
+  addMesh(islandBoundary, new THREE.PlaneGeometry(oceanEdge - islandEdge, islandEdge * 2, 12, 64), mats.ocean, [-(oceanEdge + islandEdge) / 2, oceanY, 0], { rotation: [-Math.PI / 2, 0, 0] });
+  const shoreWidth = 28;
+  const shoreY = -.2;
+  addMesh(islandBoundary, new THREE.BoxGeometry(islandEdge * 2, .12, shoreWidth), mats.shoreline, [0, shoreY, islandEdge - shoreWidth / 2], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(islandEdge * 2, .12, shoreWidth), mats.shoreline, [0, shoreY, -islandEdge + shoreWidth / 2], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(shoreWidth, .12, islandEdge * 2), mats.shoreline, [islandEdge - shoreWidth / 2, shoreY, 0], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(shoreWidth, .12, islandEdge * 2), mats.shoreline, [-islandEdge + shoreWidth / 2, shoreY, 0], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(islandEdge * 2, .035, .08), mats.waterLine, [0, -.02, islandEdge], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(islandEdge * 2, .035, .08), mats.waterLine, [0, -.02, -islandEdge], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(.08, .035, islandEdge * 2), mats.waterLine, [islandEdge, -.02, 0], { receiveShadow: true });
+  addMesh(islandBoundary, new THREE.BoxGeometry(.08, .035, islandEdge * 2), mats.waterLine, [-islandEdge, -.02, 0], { receiveShadow: true });
+  addMesh(fallbackBase, new THREE.PlaneGeometry(300, 44, 48, 12), mats.water, [0, -.08, -121], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
   for (let z = -139; z < -101; z += 4) {
     addMesh(fallbackBase, new THREE.BoxGeometry(280, .025, .045), mats.waterLine, [0, .01, z]);
   }
@@ -244,6 +343,12 @@ function buildGroundAndWater() {
     addMesh(city, new THREE.BoxGeometry(.08, 1.05, .08), mats.sidewalkDark, [x, .72, -99.4]);
     addMesh(city, new THREE.BoxGeometry(2.8, .06, .05), mats.lamp, [x, 1.2, -99.4]);
   }
+}
+
+function updateWater(time) {
+  const waterTime = time * .001;
+  mats.water.uniforms.uTime.value = waterTime;
+  mats.ocean.uniforms.uTime.value = waterTime * .72;
 }
 
 function buildRoads() {
@@ -1425,6 +1530,17 @@ function createWorldSector(sectorX, sectorZ) {
   group.position.set(centerX, 0, centerZ);
   const sector = { key, group, centerX, centerZ, region, obstacles: [] };
   addMesh(group, new THREE.PlaneGeometry(WORLD_SECTOR_SIZE, WORLD_SECTOR_SIZE), sectorGroundMaterial(region.type), [0, -.28, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  const lakeCore = region.type === 'lake'
+    && Math.abs(centerX - region.x) < WORLD_SECTOR_SIZE / 2
+    && Math.abs(centerZ - region.z) < WORLD_SECTOR_SIZE / 2;
+  if (lakeCore) {
+    const lakeWidth = 360;
+    const lakeDepth = 270;
+    addMesh(group, new THREE.PlaneGeometry(lakeWidth, lakeDepth, 72, 54), mats.water, [region.x - centerX, -.07, region.z - centerZ], { rotation: [-Math.PI / 2, 0, 0] });
+    const waterObstacle = addObstacle(region.x, region.z, lakeWidth / 2 + 2, lakeDepth / 2 + 2, 'lake-water');
+    waterObstacle.sectorKey = sector.key;
+    sector.obstacles.push(waterObstacle);
+  }
   const seed = Math.abs(sectorX * 92821 + sectorZ * 68917) + 31;
   const propCount = region.type === 'forest' ? 28 : region.type === 'desert' ? 17 : 12;
   for (let index = 0; index < propCount; index += 1) {
@@ -1435,8 +1551,8 @@ function createWorldSector(sectorX, sectorZ) {
     if (isOnRegionalRoad(worldX, worldZ) || isOnMountainRoad(worldX, worldZ) || (Math.abs(worldX) < 170 && Math.abs(worldZ) < 170)) continue;
     if (region.type === 'forest' || (region.type === 'highlands' && index % 3 !== 0)) {
       addSectorTree(group, localX, localZ, .75 + randomFrom(seed + index + 70) * .55, seed + index);
-    } else if (region.type === 'lake' && index % 3 === 0) {
-      addMesh(group, new THREE.CylinderGeometry(2.5, 3.2, .12, 12), mats.water, [localX, -.1, localZ], { receiveShadow: true });
+    } else if (region.type === 'lake') {
+      addMesh(group, new THREE.ConeGeometry(1.5 + randomFrom(seed + index) * 1.6, 3.2 + randomFrom(seed + index + 12) * 2.6, 7), mats.mountainRock, [localX, 1.45, localZ], { castShadow: true });
     } else {
       addSectorStructure(group, sector, localX, localZ, 8 + randomFrom(seed + index + 80) * 10, 7 + randomFrom(seed + index + 90) * 8, 3 + randomFrom(seed + index + 100) * 7, seed + index);
     }
@@ -2429,7 +2545,7 @@ function purchaseUpgrade(key) {
 
 function applyQualityMode() {
   const highQuality = qualityMode === 'HIGH';
-  const pixelRatio = highQuality ? Math.min(window.devicePixelRatio || 1, 2) : Math.min(window.devicePixelRatio || 1, 1);
+  const pixelRatio = highQuality ? Math.min(window.devicePixelRatio || 1, 1.5) : Math.min(window.devicePixelRatio || 1, 1);
   renderer.shadowMap.enabled = highQuality;
   moon.castShadow = highQuality;
   renderer.setPixelRatio(pixelRatio);
@@ -2437,6 +2553,26 @@ function applyQualityMode() {
   document.querySelector('#quality-label').textContent = qualityMode;
   const menuQuality = document.querySelector('#menu-settings-quality');
   if (menuQuality) menuQuality.textContent = qualityMode;
+}
+
+let renderBudgetElapsed = 0;
+let renderBudgetFrames = 0;
+
+function updateRenderBudget(dt) {
+  renderBudgetElapsed += dt;
+  renderBudgetFrames += 1;
+  if (renderBudgetElapsed < 1) return;
+  const averageFrameTime = renderBudgetElapsed / Math.max(1, renderBudgetFrames);
+  const basePixelRatio = qualityMode === 'HIGH' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+  let pixelRatio = renderer.getPixelRatio();
+  if (averageFrameTime > .024) pixelRatio = Math.max(1, pixelRatio - .25);
+  else if (averageFrameTime < .014) pixelRatio = Math.min(basePixelRatio, pixelRatio + .1);
+  if (Math.abs(pixelRatio - renderer.getPixelRatio()) > .01) {
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  renderBudgetElapsed = 0;
+  renderBudgetFrames = 0;
 }
 
 function setWorldMapOpen(open) {
@@ -3775,6 +3911,14 @@ function drawWorldMap() {
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(offsetX, 0);
+  ctx.fillStyle = 'rgba(12, 70, 80, .62)';
+  ctx.fillRect(0, 0, mapSize, mapSize);
+  const islandInset = 9;
+  ctx.fillStyle = 'rgba(26, 55, 50, .52)';
+  ctx.fillRect(islandInset, islandInset, mapSize - islandInset * 2, mapSize - islandInset * 2);
+  ctx.strokeStyle = 'rgba(92, 227, 209, .38)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(islandInset, islandInset, mapSize - islandInset * 2, mapSize - islandInset * 2);
   const coastY = worldToMap(0, -98, mapSize).y;
   ctx.fillStyle = 'rgba(11, 67, 79, .55)';
   ctx.fillRect(0, coastY, mapSize, mapSize - coastY);
@@ -4045,8 +4189,11 @@ function animate(time) {
     updateBeacons(time, dt);
   }
   updateAudio();
+  updateWater(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
   else updateCamera(dt);
+  updateSky();
+  updateRenderBudget(dt);
   hudAccumulator += dt;
   if (hudAccumulator > .08) { updateHud(hudAccumulator); hudAccumulator = 0; }
   renderer.render(scene, camera);
