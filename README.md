@@ -1,6 +1,6 @@
 # Neonline // Aurora Bay
 
-A stylized open-world night driving game built as a browser prototype. Cruise through a modular neon city, discover route beacons, drift across the grid, and explore the waterfront.
+A stylized open-world night driving game built as a browser prototype. Cruise through a modular neon city, discover route beacons, collect data caches, run courier deliveries, outrun Night Patrol, drift across the grid, and explore the waterfront.
 
 ## Run
 
@@ -17,9 +17,13 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **Space** — handbrake / drift
 - **C** — chase / high camera
 - **E** — start or rematch Midnight Sprint when near the orange gate
+- **V** — accept a courier delivery at the blue depot
+- **X** — trigger a Night Patrol pursuit
 - **G** — open the garage and buy performance upgrades
+- **P / Escape** — pause and open settings
 - **M** — expand/collapse the map
 - **R** — reset vehicle
+- **Gamepad / touch controls** — supported on compatible devices
 
 ## Art pipeline
 

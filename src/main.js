@@ -84,6 +84,7 @@ const mats = {
   lamp: new THREE.MeshStandardMaterial({ color: 0xffd7a4, emissive: 0xff723e, emissiveIntensity: 5 }),
   beacon: new THREE.MeshStandardMaterial({ color: 0xd6fa6a, emissive: 0x8abf30, emissiveIntensity: 3.5, transparent: true, opacity: .94 }),
   event: new THREE.MeshStandardMaterial({ color: 0xff9d50, emissive: 0xa64618, emissiveIntensity: 3.3, transparent: true, opacity: .94 }),
+  cache: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x198f91, emissiveIntensity: 3.8, transparent: true, opacity: .95 }),
 };
 
 // Collision volumes are kept separate from render geometry so the imported GLB
@@ -522,6 +523,7 @@ async function loadBlenderAssets() {
     const importedCar = carResult.value.scene;
     replaceVehicleVisual(player.mesh, importedCar, 1);
     traffic.forEach((vehicle) => replaceVehicleVisual(vehicle.mesh, importedCar, .78));
+    replaceVehicleVisual(policeVehicle, importedCar, .82);
   } else {
     console.warn('Blender car unavailable; using procedural fallback.', carResult.reason);
   }
@@ -547,6 +549,7 @@ const player = {
   rep: 1280,
   cash: 420,
   upgrades: { engine: 0, nitro: 0, grip: 0 },
+  collectedCaches: [],
 };
 player.mesh.position.copy(player.position);
 actors.add(player.mesh);
@@ -615,6 +618,8 @@ let raceCountdownLast = 0;
 let raceBest = 102.8;
 let raceNear = false;
 let garageOpen = false;
+let gamePaused = false;
+let qualityMode = 'HIGH';
 const upgradeConfig = {
   engine: { costs: [240, 420, 700] },
   nitro: { costs: [220, 380, 620] },
@@ -628,6 +633,7 @@ function saveProgress() {
       rep: player.rep,
       upgrades: player.upgrades,
       raceBest,
+      cacheIds: player.collectedCaches,
     }));
   } catch (error) {
     console.warn('Progress save unavailable.', error);
@@ -641,6 +647,7 @@ function loadProgress() {
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
     if (Number.isFinite(saved.raceBest)) raceBest = saved.raceBest;
+    if (Array.isArray(saved.cacheIds)) player.collectedCaches = saved.cacheIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
     });
@@ -769,6 +776,228 @@ function updateRace(time, dt) {
   }
 }
 
+const collectiblePositions = [
+  new THREE.Vector3(-66, .42, 22),
+  new THREE.Vector3(-22, .42, 66),
+  new THREE.Vector3(22, .42, -66),
+  new THREE.Vector3(66, .42, -22),
+  new THREE.Vector3(-66, .42, -22),
+  new THREE.Vector3(22, .42, 22),
+  new THREE.Vector3(-22, .42, -22),
+  new THREE.Vector3(66, .42, 66),
+  new THREE.Vector3(-66, .42, 66),
+  new THREE.Vector3(66, .42, -66),
+  new THREE.Vector3(0, .42, 66),
+  new THREE.Vector3(0, .42, -66),
+];
+const collectibles = [];
+
+function createCollectibles() {
+  collectiblePositions.forEach((position, index) => {
+    const group = new THREE.Group();
+    group.position.copy(position);
+    const ring = addMesh(group, new THREE.TorusGeometry(.72, .065, 8, 24), mats.cache, [0, 0, 0], { rotation: [Math.PI / 2, 0, 0] });
+    const core = addMesh(group, new THREE.OctahedronGeometry(.33, 0), mats.cache, [0, 0, 0]);
+    const light = new THREE.PointLight(0x5ce3d1, .7, 7, 2);
+    group.add(light);
+    group.userData = { ring, core, light, baseY: position.y, id: index };
+    group.visible = !player.collectedCaches.includes(index);
+    world.add(group);
+    collectibles.push(group);
+  });
+}
+
+function resetCollectibles() {
+  player.collectedCaches = [];
+  collectibles.forEach((cache) => { cache.visible = true; });
+  document.querySelector('#cache-count').textContent = `00 / ${String(collectibles.length).padStart(2, '0')}`;
+  saveProgress();
+}
+
+function updateCollectibles(time, dt) {
+  let found = player.collectedCaches.length;
+  collectibles.forEach((cache) => {
+    if (!cache.visible) return;
+    const { ring, core, light, baseY, id } = cache.userData;
+    const pulse = (Math.sin(time * .004 + id) + 1) / 2;
+    ring.rotation.z += dt * 1.4;
+    core.rotation.y += dt * 2.2;
+    cache.position.y = baseY + pulse * .3;
+    ring.scale.setScalar(1 + pulse * .13);
+    light.intensity = .55 + pulse * .85;
+    if (player.position.distanceTo(cache.position) < 3.3) {
+      cache.visible = false;
+      if (!player.collectedCaches.includes(id)) {
+        player.collectedCaches.push(id);
+        found += 1;
+        player.rep += 40;
+        player.cash += 25;
+        saveProgress();
+        playTone(520 + found * 16, .15, .055, 'sine', 120);
+        showToast('DATA CACHE RECOVERED', `${found} of ${collectibles.length} caches in the city`, '+40 REP');
+      }
+    }
+  });
+  document.querySelector('#cache-count').textContent = `${String(found).padStart(2, '0')} / ${String(collectibles.length).padStart(2, '0')}`;
+}
+
+const deliveryStart = new THREE.Vector3(-66, .08, 22);
+const deliveryTarget = new THREE.Vector3(-22, .08, -66);
+const deliveryStartMarker = new THREE.Group();
+deliveryStartMarker.position.copy(deliveryStart);
+const deliveryStartRing = addMesh(deliveryStartMarker, new THREE.TorusGeometry(2.2, .08, 8, 32), mats.cache, [0, .18, 0], { rotation: [Math.PI / 2, 0, 0] });
+const deliveryStartBeam = addMesh(deliveryStartMarker, new THREE.CylinderGeometry(.035, .035, 4.5, 6), mats.cache, [0, 2.25, 0]);
+const deliveryStartLabel = makeLabel('COURIER DEPOT', '#5ce3d1', .5);
+deliveryStartLabel.position.y = 4.8;
+deliveryStartMarker.add(deliveryStartLabel);
+world.add(deliveryStartMarker);
+const deliveryTargetMarker = new THREE.Group();
+deliveryTargetMarker.position.copy(deliveryTarget);
+const deliveryTargetRing = addMesh(deliveryTargetMarker, new THREE.TorusGeometry(2.5, .09, 8, 32), mats.event, [0, .18, 0], { rotation: [Math.PI / 2, 0, 0] });
+const deliveryTargetBeam = addMesh(deliveryTargetMarker, new THREE.CylinderGeometry(.035, .035, 4.8, 6), mats.event, [0, 2.4, 0]);
+const deliveryTargetLabel = makeLabel('DROP POINT', '#ff9d50', .48);
+deliveryTargetLabel.position.y = 5.1;
+deliveryTargetMarker.add(deliveryTargetLabel);
+world.add(deliveryTargetMarker);
+let deliveryState = 'idle';
+let deliveryTime = 0;
+let deliveryNear = false;
+
+function deliveryAction() {
+  if (deliveryState === 'idle' && deliveryNear) {
+    deliveryState = 'active';
+    deliveryTime = 0;
+    playTone(320, .2, .08, 'sine', 90);
+    showToast('DELIVERY ACCEPTED', 'Blue depot to the orange drop point', '+180 REP');
+  } else if (deliveryState === 'finished' && deliveryNear) {
+    deliveryState = 'active';
+    deliveryTime = 0;
+    showToast('NEW PACKAGE', 'Another night, another line', 'COURIER RUN');
+  }
+}
+
+function updateDelivery(time, dt) {
+  const startDistance = player.position.distanceTo(deliveryStart);
+  deliveryNear = startDistance < 11;
+  if (deliveryState === 'active') {
+    deliveryTime += dt;
+    if (player.position.distanceTo(deliveryTarget) < 7.4) {
+      deliveryState = 'finished';
+      player.rep += 180;
+      player.cash += 120;
+      saveProgress();
+      playBeacon();
+      showToast('PACKAGE DELIVERED', `${deliveryTime.toFixed(1)} seconds, no questions asked`, '+180 REP');
+    }
+  }
+  const pulse = (Math.sin(time * .004) + 1) / 2;
+  deliveryStartRing.rotation.z += dt * 1.1;
+  deliveryStartRing.scale.setScalar(1 + pulse * .12);
+  deliveryStartBeam.scale.y = 1 + pulse * .2;
+  deliveryStartMarker.visible = deliveryState !== 'active';
+  deliveryTargetMarker.visible = deliveryState === 'active';
+  if (deliveryState === 'active') {
+    deliveryTargetRing.rotation.z -= dt * 1.4;
+    deliveryTargetRing.scale.setScalar(1 + pulse * .16);
+    deliveryTargetBeam.scale.y = 1 + pulse * .2;
+  }
+  const panel = document.querySelector('#delivery-panel');
+  const visible = deliveryNear || deliveryState === 'active' || deliveryState === 'finished';
+  panel.classList.toggle('visible', visible);
+  panel.classList.toggle('active', deliveryState === 'active');
+  const status = document.querySelector('#delivery-status');
+  const title = document.querySelector('#delivery-title');
+  const copy = document.querySelector('#delivery-copy');
+  const timeReadout = document.querySelector('#delivery-time');
+  const action = document.querySelector('#delivery-action');
+  if (deliveryState === 'idle') {
+    status.textContent = deliveryNear ? 'READY' : 'OPEN WORLD';
+    title.textContent = 'NIGHT SHIFT DELIVERY';
+    copy.textContent = deliveryNear ? 'Hit V to take the parcel across town.' : 'Find the blue depot and make a clean delivery.';
+    timeReadout.textContent = deliveryNear ? 'PRESS V' : 'COURIER RUN';
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT DELIVERY</span>' : '<span>BLUE DEPOT // DROP POINT</span>';
+  } else if (deliveryState === 'active') {
+    status.textContent = 'PACKAGE LIVE';
+    title.textContent = 'NIGHT SHIFT DELIVERY';
+    copy.textContent = 'Orange drop point marked. Protect the cargo and keep moving.';
+    timeReadout.textContent = `${deliveryTime.toFixed(1)} SEC`;
+    action.innerHTML = '<span class="event-live-dot"></span><span>DELIVERY LIVE</span>';
+  } else {
+    status.textContent = 'DELIVERED';
+    title.textContent = 'RUN COMPLETE';
+    copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Return to the depot for another job.`;
+    timeReadout.textContent = 'COMPLETE';
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT ANOTHER</span>' : '<span>ROUTE CLEARED</span>';
+  }
+}
+
+const policeVehicle = createCar(0x171b33, 0xff5b9c, false);
+policeVehicle.scale.setScalar(.82);
+policeVehicle.visible = false;
+actors.add(policeVehicle);
+const policeSiren = new THREE.Group();
+const policeRed = addMesh(policeSiren, new THREE.BoxGeometry(.34, .14, .34), mats.tail, [-.23, 1.82, 0]);
+const policeBlue = addMesh(policeSiren, new THREE.BoxGeometry(.34, .14, .34), mats.windowBlue, [.23, 1.82, 0]);
+policeSiren.visible = false;
+actors.add(policeSiren);
+let policeState = 'idle';
+let policeTime = 0;
+let wantedLevel = 0;
+
+function startPoliceChase() {
+  if (policeState === 'active' || garageOpen || gamePaused) return;
+  const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  const side = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
+  policeVehicle.position.copy(player.position).addScaledVector(forward, -18).addScaledVector(side, 3.5);
+  policeVehicle.position.y = .02;
+  policeVehicle.rotation.y = player.heading;
+  policeVehicle.visible = true;
+  policeSiren.visible = true;
+  policeState = 'active';
+  policeTime = 0;
+  wantedLevel = 3;
+  playTone(110, .35, .09, 'sawtooth', 140);
+  showToast('NIGHT PATROL', 'Break line of sight for 30 seconds', 'HEAT 03');
+}
+
+function updatePolice(time, dt) {
+  if (policeState === 'active') {
+    policeTime += dt;
+    const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+    const side = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
+    const target = player.position.clone().addScaledVector(forward, -6).addScaledVector(side, Math.sin(time * .0015) * 2.2);
+    policeVehicle.position.lerp(target, 1 - Math.exp(-2.6 * dt));
+    const toPlayer = player.position.clone().sub(policeVehicle.position);
+    policeVehicle.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+    policeSiren.position.copy(policeVehicle.position);
+    policeSiren.rotation.y = policeVehicle.rotation.y;
+    policeRed.visible = Math.sin(time * .025) > 0;
+    policeBlue.visible = !policeRed.visible;
+    wantedLevel = Math.max(1, Math.ceil((30 - policeTime) / 10));
+    if (policeVehicle.position.distanceTo(player.position) < 4.1) player.speed = damp(player.speed, 0, 2.2, dt);
+    if (policeTime >= 30) {
+      policeState = 'finished';
+      policeVehicle.visible = false;
+      policeSiren.visible = false;
+      wantedLevel = 0;
+      player.rep += 260;
+      player.cash += 160;
+      saveProgress();
+      playBeacon();
+      showToast('LINE BROKEN', 'You shook the patrol clean', '+260 REP');
+    }
+  } else if (policeState === 'finished') {
+    policeState = 'idle';
+  } else {
+    policeSiren.visible = false;
+  }
+  const heat = document.querySelector('#heat-readout');
+  heat.classList.toggle('hot', policeState === 'active');
+  document.querySelector('#heat-level').textContent = String(wantedLevel).padStart(2, '0');
+}
+
+createCollectibles();
+
 function updateGarageUi() {
   document.querySelector('#garage-cash').textContent = `$${player.cash.toLocaleString('en-US')}`;
   document.querySelectorAll('.upgrade-card').forEach((card) => {
@@ -810,7 +1039,46 @@ function purchaseUpgrade(key) {
   showToast(`${key.toUpperCase()} UPGRADED`, `Module level ${player.upgrades[key]} installed`, `$${cost}`);
 }
 
+function applyQualityMode() {
+  const highQuality = qualityMode === 'HIGH';
+  const pixelRatio = highQuality ? Math.min(window.devicePixelRatio || 1, 2) : Math.min(window.devicePixelRatio || 1, 1);
+  renderer.shadowMap.enabled = highQuality;
+  moon.castShadow = highQuality;
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.querySelector('#quality-label').textContent = qualityMode;
+}
+
+function setPauseOpen(open) {
+  if (open && garageOpen) setGarageOpen(false);
+  gamePaused = open;
+  const overlay = document.querySelector('#pause-overlay');
+  overlay.classList.toggle('open', open);
+  overlay.setAttribute('aria-hidden', String(!open));
+  if (open) {
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    if (audioState.master && audioState.context) audioState.master.gain.setTargetAtTime(0, audioState.context.currentTime, .08);
+  } else if (soundOn) {
+    ensureAudio();
+  }
+}
+
+function resetSavedProgress() {
+  try { localStorage.removeItem('neonline-aurora-save'); } catch (error) { console.warn('Progress reset unavailable.', error); }
+  player.cash = 420;
+  player.rep = 1280;
+  player.upgrades = { engine: 0, nitro: 0, grip: 0 };
+  player.nitro = 76;
+  raceBest = 102.8;
+  player.collectedCaches = [];
+  resetCollectibles();
+  updateGarageUi();
+  showToast('PROGRESS RESET', 'Fresh run, same city', 'LOCAL SAVE CLEARED');
+}
+
 const input = { forward: false, back: false, left: false, right: false, nitro: false, handbrake: false };
+let touchSteer = 0;
+const gamepadState = { forward: false, back: false, nitro: false, handbrake: false, steer: 0 };
 let cameraMode = 0;
 let soundOn = true;
 let routeStep = 0;
@@ -902,20 +1170,21 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
-  if (garageOpen) {
+  if (garageOpen || gamePaused) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
     audioState.nitroGain.gain.setTargetAtTime(0, now, .08);
-    audioState.master.gain.setTargetAtTime(soundOn ? .22 : 0, now, .08);
+    audioState.master.gain.setTargetAtTime(soundOn && garageOpen ? .22 : 0, now, .08);
     return;
   }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
-  const nitroActive = input.nitro && input.forward && player.nitro > 0 && player.speed > 4;
-  audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (input.forward ? 15 : 0), now, .045);
+  const accelerating = input.forward || gamepadState.forward;
+  const nitroActive = (input.nitro || gamepadState.nitro) && accelerating && player.nitro > 0 && player.speed > 4;
+  audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (accelerating ? 15 : 0), now, .045);
   audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
   audioState.engineFilter.frequency.setTargetAtTime(520 + speedRatio * 820, now, .08);
-  audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (input.forward ? .024 : 0), now, .08);
+  audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (accelerating ? .024 : 0), now, .08);
   audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
   audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (isOnRoad(player.position.x, player.position.z) ? .045 : .075), now, .12);
   audioState.nitroOsc.frequency.setTargetAtTime(170 + speedRatio * 240, now, .04);
@@ -962,27 +1231,103 @@ function setInput(code, value) {
 window.addEventListener('keydown', (event) => {
   ensureAudio();
   if (event.code === 'Escape' && !event.repeat) {
-    setGarageOpen(false);
+    if (garageOpen) setGarageOpen(false);
+    else if (gamePaused) setPauseOpen(false);
+    else setPauseOpen(true);
+    return;
+  }
+  if (event.code === 'KeyP' && !event.repeat) {
+    setPauseOpen(!gamePaused);
     return;
   }
   if (event.code === 'KeyG' && !event.repeat) {
-    setGarageOpen(!garageOpen);
+    if (!gamePaused) setGarageOpen(!garageOpen);
     return;
   }
-  if (garageOpen) return;
+  if (garageOpen || gamePaused) return;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   if (event.code === 'KeyC' && !event.repeat) {
     cameraMode = (cameraMode + 1) % 2;
     showToast(cameraMode === 0 ? 'CHASE CAMERA' : 'HIGH CAMERA', 'Camera angle changed', '');
   }
   if (event.code === 'KeyE' && !event.repeat) raceAction();
+  if (event.code === 'KeyV' && !event.repeat) deliveryAction();
+  if (event.code === 'KeyX' && !event.repeat) startPoliceChase();
   if (event.code === 'KeyM' && !event.repeat) document.querySelector('#map-expand').click();
   if (event.code === 'KeyR' && !event.repeat) resetPlayer();
   setInput(event.code, true);
 });
 window.addEventListener('keyup', (event) => setInput(event.code, false));
 window.addEventListener('pointerdown', () => ensureAudio(), { passive: true });
-window.addEventListener('blur', () => Object.keys(input).forEach((key) => { input[key] = false; }));
+window.addEventListener('blur', () => {
+  Object.keys(input).forEach((key) => { input[key] = false; });
+  touchSteer = 0;
+  Object.assign(gamepadState, { forward: false, back: false, nitro: false, handbrake: false, steer: 0 });
+});
+
+function updateGamepad() {
+  if (!navigator.getGamepads) return;
+  const gamepad = Array.from(navigator.getGamepads() || []).find(Boolean);
+  if (!gamepad) {
+    Object.assign(gamepadState, { forward: false, back: false, nitro: false, handbrake: false, steer: 0 });
+    return;
+  }
+  const throttle = gamepad.buttons[7]?.value || gamepad.buttons[0]?.value || 0;
+  const brake = gamepad.buttons[6]?.value || gamepad.buttons[1]?.value || 0;
+  gamepadState.forward = throttle > .16;
+  gamepadState.back = brake > .16;
+  gamepadState.nitro = Boolean(gamepad.buttons[4]?.pressed || gamepad.buttons[2]?.pressed);
+  gamepadState.handbrake = Boolean(gamepad.buttons[1]?.pressed);
+  gamepadState.steer = Math.abs(gamepad.axes[0] || 0) > .12 ? gamepad.axes[0] : 0;
+}
+
+function setupMobileControls() {
+  const steerPad = document.querySelector('#mobile-steer');
+  const steerKnob = document.querySelector('#steer-knob');
+  let steeringPointer = null;
+  const resetSteer = () => {
+    steeringPointer = null;
+    touchSteer = 0;
+    steerKnob.style.transform = 'translate(0, 0)';
+  };
+  const moveSteer = (event) => {
+    if (steeringPointer !== event.pointerId) return;
+    const rect = steerPad.getBoundingClientRect();
+    const maxX = rect.width * .33;
+    const maxY = rect.height * .22;
+    const dx = event.clientX - (rect.left + rect.width / 2);
+    const dy = event.clientY - (rect.top + rect.height / 2);
+    touchSteer = clamp(dx / maxX, -1, 1);
+    steerKnob.style.transform = `translate(${touchSteer * maxX}px, ${clamp(dy / maxY, -1, 1) * maxY}px)`;
+  };
+  steerPad.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    steeringPointer = event.pointerId;
+    steerPad.setPointerCapture(event.pointerId);
+    moveSteer(event);
+  });
+  steerPad.addEventListener('pointermove', moveSteer);
+  steerPad.addEventListener('pointerup', resetSteer);
+  steerPad.addEventListener('pointercancel', resetSteer);
+  const holdButtons = [
+    ['#mobile-gas', 'forward'], ['#mobile-brake', 'back'], ['#mobile-nitro', 'nitro'], ['#mobile-handbrake', 'handbrake'],
+  ];
+  holdButtons.forEach(([selector, key]) => {
+    const button = document.querySelector(selector);
+    const release = () => { input[key] = false; button.classList.remove('active'); };
+    button.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      input[key] = true;
+      button.classList.add('active');
+    });
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  });
+  document.querySelector('#mobile-pause').addEventListener('click', () => setPauseOpen(!gamePaused));
+}
+setupMobileControls();
 
 document.querySelector('#sound-toggle').addEventListener('click', (event) => {
   soundOn = !soundOn;
@@ -1006,7 +1351,16 @@ document.querySelector('#garage-overlay').addEventListener('click', (event) => {
 document.querySelectorAll('.upgrade-card').forEach((card) => {
   card.addEventListener('click', () => purchaseUpgrade(card.dataset.upgrade));
 });
+document.querySelector('#resume-button').addEventListener('click', () => setPauseOpen(false));
+document.querySelector('#pause-restart').addEventListener('click', () => { resetPlayer(); setPauseOpen(false); });
+document.querySelector('#quality-toggle').addEventListener('click', () => {
+  qualityMode = qualityMode === 'HIGH' ? 'PERFORMANCE' : 'HIGH';
+  applyQualityMode();
+  showToast('RENDER MODE', `${qualityMode} quality profile applied`, '');
+});
+document.querySelector('#reset-save').addEventListener('click', () => resetSavedProgress());
 updateGarageUi();
+applyQualityMode();
 
 function resetPlayer() {
   player.position.set(0, .02, 0);
@@ -1083,6 +1437,17 @@ function resolveTrafficCollisions() {
     player.position.z += (dz / distance) * (radius - distance);
     return true;
   }
+  if (policeState === 'active' && policeVehicle.visible) {
+    const dx = player.position.x - policeVehicle.position.x;
+    const dz = player.position.z - policeVehicle.position.z;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq < radius * radius) {
+      const distance = Math.sqrt(distanceSq) || 1;
+      player.position.x += (dx / distance) * (radius - distance);
+      player.position.z += (dz / distance) * (radius - distance);
+      return true;
+    }
+  }
   return false;
 }
 
@@ -1097,15 +1462,15 @@ function districtAt(x, z) {
 
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
-  const throttle = input.forward ? 1 : 0;
-  const braking = input.back ? 1 : 0;
-  const steering = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const throttle = input.forward || gamepadState.forward ? 1 : 0;
+  const braking = input.back || gamepadState.back ? 1 : 0;
+  const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
   const onRoad = isOnRoad(player.position.x, player.position.z);
   const engineLevel = player.upgrades.engine;
   const nitroCapacity = 100 + player.upgrades.nitro * 12;
   const engineMultiplier = 1 + engineLevel * .1;
   const gripMultiplier = 1 + player.upgrades.grip * .1;
-  const usingNitro = input.nitro && throttle && player.nitro > 0 && player.speed > 4;
+  const usingNitro = (input.nitro || gamepadState.nitro) && throttle && player.nitro > 0 && player.speed > 4;
   const handbraking = input.handbrake && Math.abs(player.speed) > 6;
   const acceleration = (onRoad ? 22 : 14) * engineMultiplier;
 
@@ -1292,6 +1657,16 @@ function drawMiniMap() {
   mapCtx.strokeStyle = 'rgba(255,91,156,.48)';
   mapCtx.lineWidth = 1;
   mapCtx.stroke();
+  collectiblePositions.forEach((position, index) => {
+    if (player.collectedCaches.includes(index)) return;
+    const cachePoint = worldToMap(position.x, position.z, size);
+    mapCtx.beginPath(); mapCtx.arc(cachePoint.x, cachePoint.y, 2.1, 0, Math.PI * 2);
+    mapCtx.fillStyle = '#5ce3d1'; mapCtx.fill();
+  });
+  const depotPoint = worldToMap(deliveryStart.x, deliveryStart.z, size);
+  const dropPoint = worldToMap(deliveryTarget.x, deliveryTarget.z, size);
+  mapCtx.fillStyle = '#5ce3d1'; mapCtx.fillRect(depotPoint.x - 2, depotPoint.y - 2, 4, 4);
+  if (deliveryState === 'active') { mapCtx.fillStyle = '#ff9d50'; mapCtx.fillRect(dropPoint.x - 2, dropPoint.y - 2, 4, 4); }
   const current = worldToMap(player.position.x, player.position.z, size);
   mapCtx.save();
   mapCtx.translate(current.x, current.y);
@@ -1341,10 +1716,14 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  if (!garageOpen) sessionSeconds += dt;
-  if (!garageOpen) {
+  if (!garageOpen && !gamePaused) sessionSeconds += dt;
+  updateGamepad();
+  if (!garageOpen && !gamePaused) {
     updatePlayer(dt);
     updateTraffic(dt);
+    updateCollectibles(time, dt);
+    updateDelivery(time, dt);
+    updatePolice(time, dt);
     updateRace(time, dt);
     updateBeacons(time, dt);
   }
