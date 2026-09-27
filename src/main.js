@@ -2449,6 +2449,8 @@ let phoneMessages = [];
 let phoneMessageSequence = 0;
 let phoneSelectedMessageId = '';
 let phoneNotificationTimer = null;
+let roadsideStopHistory = [];
+let roadsideStopSequence = 0;
 let menuShowcaseIndex = 0;
 let menuShowcaseElapsed = 0;
 let menuShowcaseTransition = 1;
@@ -2595,6 +2597,8 @@ function resetProgressStateToDefaults() {
   phoneMessages = [];
   phoneMessageSequence = 0;
   phoneSelectedMessageId = '';
+  roadsideStopHistory = [];
+  roadsideStopSequence = 0;
 }
 
 function saveProgress() {
@@ -2615,6 +2619,7 @@ function saveProgress() {
       waterRecoveryPending: player.waterRecoveryPending,
       waterBody: player.waterBody,
       phoneMessages,
+      roadsideStopHistory,
       updatedAt: Date.now(),
       saveSlot: activeSaveSlot,
     };
@@ -2682,6 +2687,25 @@ function loadProgress(slot = latestSaveSlot()) {
           unread: Boolean(message.unread),
         }));
       phoneMessageSequence = phoneMessages.reduce((highest, message) => Math.max(highest, Number(String(message.id).replace(/\D/g, '')) || 0), 0);
+    }
+    if (Array.isArray(saved.roadsideStopHistory)) {
+      roadsideStopHistory = saved.roadsideStopHistory
+        .filter((entry) => entry && typeof entry.district === 'string')
+        .slice(0, 8)
+        .map((entry, index) => ({
+          id: String(entry.id || `stop-${index}`),
+          timestamp: Number(entry.timestamp) || Date.now(),
+          district: entry.district,
+          speed: Math.max(0, Number(entry.speed) || 0),
+          speedLimit: Math.max(0, Number(entry.speedLimit) || 0),
+          safeStop: Boolean(entry.safeStop),
+          outcome: ['warning', 'citation', 'inspection-cleared', 'compromised'].includes(entry.outcome) ? entry.outcome : 'citation',
+          fine: Math.max(0, Number(entry.fine) || 0),
+          exposureBefore: clamp(Number(entry.exposureBefore) || 0, 0, 100),
+          exposureAfter: clamp(Number(entry.exposureAfter) || 0, 0, 100),
+          cargoMission: typeof entry.cargoMission === 'string' ? entry.cargoMission : '',
+        }));
+      roadsideStopSequence = roadsideStopHistory.reduce((highest, entry) => Math.max(highest, Number(String(entry.id).replace(/\D/g, '')) || 0), 0);
     }
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
@@ -2834,6 +2858,50 @@ function markAllPhoneMessagesRead() {
   phoneMessages.forEach((message) => { message.unread = false; });
   if (changed && !starterMenuOpen) saveProgress();
   renderPhone();
+}
+
+function roadsideStopOutcomeLabel(outcome) {
+  return {
+    warning: 'WARNING',
+    citation: 'CITATION',
+    'inspection-cleared': 'CASE CLEARED',
+    compromised: 'COMPROMISED',
+  }[outcome] || 'CITATION';
+}
+
+function renderRoadsideStopHistory() {
+  const list = document.querySelector('#roadside-stop-history-list');
+  const count = document.querySelector('#roadside-stop-history-count');
+  if (!list) return;
+  if (count) count.textContent = `${roadsideStopHistory.length} / 8 LOGGED`;
+  if (!roadsideStopHistory.length) {
+    list.innerHTML = '<div class="roadside-history-empty">NO PRIOR RADAR CONTACTS // CLEAN RECORD</div>';
+    return;
+  }
+  list.innerHTML = roadsideStopHistory.slice(0, 3).map((entry) => `
+    <div class="roadside-history-row ${entry.outcome === 'compromised' ? 'failed' : entry.outcome === 'inspection-cleared' ? 'cleared' : ''}">
+      <span><b>${escapePhoneHtml(roadsideStopOutcomeLabel(entry.outcome))}</b><small>${escapePhoneHtml(entry.district)} // ${escapePhoneHtml(phoneTimeLabel(entry.timestamp))}</small></span>
+      <span><b>${Math.round(entry.speed)} / ${Math.round(entry.speedLimit)} KM/H</b><small>${entry.exposureAfter > entry.exposureBefore ? `RISK +${Math.round(entry.exposureAfter - entry.exposureBefore)}%` : 'NO EXPOSURE CHANGE'}</small></span>
+    </div>`).join('');
+}
+
+function recordRoadsideStopHistory(details = {}) {
+  const entry = {
+    id: `stop-${Date.now()}-${roadsideStopSequence += 1}`,
+    timestamp: Date.now(),
+    district: typeof details.district === 'string' ? details.district : 'AURORA BAY',
+    speed: Math.max(0, Number(details.speed) || 0),
+    speedLimit: Math.max(0, Number(details.speedLimit) || 0),
+    safeStop: Boolean(details.safeStop),
+    outcome: ['warning', 'citation', 'inspection-cleared', 'compromised'].includes(details.outcome) ? details.outcome : 'citation',
+    fine: Math.max(0, Number(details.fine) || 0),
+    exposureBefore: clamp(Number(details.exposureBefore) || 0, 0, 100),
+    exposureAfter: clamp(Number(details.exposureAfter) || 0, 0, 100),
+    cargoMission: typeof details.cargoMission === 'string' ? details.cargoMission : '',
+  };
+  roadsideStopHistory = [entry, ...roadsideStopHistory].slice(0, 8);
+  renderRoadsideStopHistory();
+  return entry;
 }
 
 function setPhoneOpen(open) {
@@ -3508,6 +3576,7 @@ let policeTime = 0;
 let roadsideStopOpen = false;
 let roadsideStopResolved = false;
 let roadsideStopWasSafe = false;
+let roadsideStopContext = null;
 
 function createSpeedRadarSite(position, heading = 0) {
   const group = new THREE.Group();
@@ -3565,6 +3634,16 @@ function nearestSpeedRadarSite() {
   return nearest;
 }
 
+function currentRoadsideStopContext() {
+  return roadsideStopContext || {
+    recordedSpeed: Math.abs(player.speed) * 3.1,
+    speedLimit: getSpeedLimit(player.position.x, player.position.z),
+    severity: 'citation',
+    fine: 45,
+    district: districtAt(player.position.x, player.position.z),
+  };
+}
+
 function showRoadsideStopPanel(stoppedSafely) {
   roadsideStopOpen = true;
   roadsideStopResolved = false;
@@ -3573,56 +3652,90 @@ function showRoadsideStopPanel(stoppedSafely) {
   touchSteer = 0;
   Object.assign(gamepadState, { forward: false, back: false, handbrake: false, steer: 0 });
   const overlay = document.querySelector('#roadside-stop-overlay');
+  const title = document.querySelector('#roadside-stop-title');
   const copy = document.querySelector('#roadside-stop-copy');
   const status = document.querySelector('#roadside-stop-status');
   const reason = document.querySelector('#roadside-stop-reason');
+  const location = document.querySelector('#roadside-stop-location');
   const cargo = document.querySelector('#roadside-stop-cargo');
+  const record = document.querySelector('#roadside-stop-record');
   const outcome = document.querySelector('#roadside-stop-outcome');
   const action = document.querySelector('#roadside-stop-action');
-  if (!overlay || !copy || !status || !reason || !cargo || !outcome || !action) return;
+  if (!overlay || !title || !copy || !status || !reason || !location || !cargo || !record || !outcome || !action) {
+    roadsideStopOpen = false;
+    return;
+  }
+  const context = currentRoadsideStopContext();
   const mission = cargoRun.route === 'mountain' ? MOUNTAIN_CARGO_MISSION : currentCityDeliveryMission();
-  const limit = getSpeedLimit(player.position.x, player.position.z);
-  status.textContent = stoppedSafely ? 'STOPPED SAFELY' : 'CITATION WITHOUT STOP';
+  const warning = context.severity === 'warning';
+  title.innerHTML = warning ? 'SLOW <b>DOWN.</b>' : 'PULL <b>OVER.</b>';
+  status.textContent = stoppedSafely ? (warning ? 'STOPPED // WARNING REVIEW' : 'STOPPED SAFELY') : 'CITATION WITHOUT STOP';
   copy.textContent = stoppedSafely
-    ? 'You pulled over safely. Cooperate with the roadside check before returning to the route.'
+    ? warning
+      ? 'The radar unit logged a minor speed violation. Cooperate with the review before returning to the route.'
+      : 'You pulled over safely. Cooperate with the roadside check before returning to the route.'
     : 'The radar unit recorded a citation without a safe stop. Resolve the record before returning to the route.';
-  reason.textContent = `RADAR CHECK // POSTED LIMIT ${limit} KM/H`;
+  reason.textContent = `RADAR CHECK // ${Math.round(context.recordedSpeed)} KM/H // LIMIT ${Math.round(context.speedLimit)}`;
+  location.textContent = context.district;
   cargo.textContent = cargoRun.active ? `ACTIVE CASE // ${mission.title} // RISK ${Math.round(cargoRun.exposure)}%` : 'NO ACTIVE CASE // CITATION ONLY';
+  record.textContent = warning ? 'WARNING // NO FINE' : `CITATION // -$${context.fine}`;
   outcome.hidden = true;
   outcome.innerHTML = '';
   action.innerHTML = cargoRun.active
     ? `${stoppedSafely ? 'COOPERATE' : 'ACKNOWLEDGE'} / INSPECT CARGO <span>ENTER</span>`
-    : 'ACKNOWLEDGE CITATION <span>ENTER</span>';
+    : `${warning ? 'ACKNOWLEDGE WARNING' : 'ACKNOWLEDGE CITATION'} <span>ENTER</span>`;
+  renderRoadsideStopHistory();
   overlay.classList.add('open');
   overlay.setAttribute('aria-hidden', 'false');
+  playTone(warning ? 320 : 220, .16, .06, 'sine', warning ? -60 : -100);
 }
 
-function renderRoadsideStopResult(result, cargoWasActive) {
+function renderRoadsideStopResult(result, cargoWasActive, outcomeType) {
   const overlay = document.querySelector('#roadside-stop-overlay');
+  const title = document.querySelector('#roadside-stop-title');
   const status = document.querySelector('#roadside-stop-status');
   const copy = document.querySelector('#roadside-stop-copy');
+  const location = document.querySelector('#roadside-stop-location');
   const cargo = document.querySelector('#roadside-stop-cargo');
+  const record = document.querySelector('#roadside-stop-record');
   const outcome = document.querySelector('#roadside-stop-outcome');
   const action = document.querySelector('#roadside-stop-action');
-  if (!overlay || !status || !copy || !cargo || !outcome || !action) return;
-  const clean = !cargoWasActive || result.passed;
-  status.textContent = clean ? 'STOP CLOSED // CITATION LOGGED' : 'CASE COMPROMISED';
+  if (!overlay || !title || !status || !copy || !location || !cargo || !record || !outcome || !action) return;
+  const context = currentRoadsideStopContext();
+  const clean = outcomeType !== 'compromised';
+  const warning = context.severity === 'warning';
+  title.innerHTML = outcomeType === 'compromised' ? 'CASE <b>COMPROMISED.</b>' : warning ? 'WARNING <b>ISSUED.</b>' : 'STOP <b>CLOSED.</b>';
+  status.textContent = outcomeType === 'compromised'
+    ? 'CASE COMPROMISED'
+    : warning
+      ? 'WARNING LOGGED // NO FINE'
+      : 'CITATION LOGGED // NO PURSUIT';
   copy.textContent = !cargoWasActive
-    ? (roadsideStopWasSafe ? 'The officer recorded the speed citation. No cargo was declared, and no pursuit was started.' : 'The citation was recorded without a safe roadside stop. No pursuit was started.')
+    ? (roadsideStopWasSafe
+      ? warning
+        ? 'The officer logged a warning. No cash was deducted, and no pursuit was started.'
+        : 'The officer recorded the speed citation. No cargo was declared, and no pursuit was started.'
+      : 'The citation was recorded without a safe roadside stop. No pursuit was started.')
     : result.passed
       ? `The case stayed sealed during the roadside inspection. Exposure is now ${Math.round(result.exposure)}%.`
       : 'The roadside inspection found the unmarked case. The run is compromised and the payout is lost.';
+  location.textContent = context.district;
   cargo.textContent = !cargoWasActive
     ? 'NO ACTIVE CASE // DRIVE LEGAL'
     : result.passed
       ? `INSPECTION CLEAR // RISK ${Math.round(result.exposure)}%`
       : 'CARGO BUSTED // NO PAYOUT';
+  record.textContent = outcomeType === 'compromised'
+    ? 'RUN LOST // NO PAYOUT'
+    : warning
+      ? 'WARNING // $0'
+      : `CITATION // -$${context.fine}`;
   outcome.hidden = false;
-  outcome.classList.toggle('failed', cargoWasActive && !result.passed);
+  outcome.classList.toggle('failed', outcomeType === 'compromised');
   outcome.classList.toggle('cleared', clean);
-  outcome.innerHTML = clean
-    ? '<b>ROAD CONTACT RESOLVED</b><span>Return to the road when ready. The stop does not create a pursuit or heat state.</span>'
-    : '<b>RUN TERMINATED</b><span>The case is written off. Return to the depot and wait for the next available contract.</span>';
+  outcome.innerHTML = outcomeType === 'compromised'
+    ? '<b>RUN TERMINATED</b><span>The case is written off. Return to the depot and wait for the next available contract.</span>'
+    : '<b>ROAD CONTACT RESOLVED</b><span>Return to the road when ready. The stop does not create a pursuit or heat state.</span>';
   action.innerHTML = 'RETURN TO ROAD <span>ENTER</span>';
 }
 
@@ -3640,30 +3753,58 @@ function resolveRoadsideStop() {
     if (soundOn) ensureAudio();
     return;
   }
+  const context = currentRoadsideStopContext();
   const cargoWasActive = cargoRun.active;
-  const result = cargoWasActive ? inspectCargoAtRoadside() : { active: false, passed: true, exposure: cargoRun.exposure };
+  const mission = cargoWasActive ? (cargoRun.route === 'mountain' ? MOUNTAIN_CARGO_MISSION : currentCityDeliveryMission()) : null;
+  const exposureBefore = cargoRun.exposure;
+  const result = cargoWasActive ? inspectCargoAtRoadside() : { active: false, passed: true, exposure: exposureBefore };
+  const outcomeType = cargoWasActive ? (result.passed ? 'inspection-cleared' : 'compromised') : context.severity;
   policeState = 'ticket';
   policeTime = 0;
   policeSiren.visible = false;
   if (cargoWasActive && result.passed) {
-    const mission = cargoRun.route === 'mountain' ? MOUNTAIN_CARGO_MISSION : currentCityDeliveryMission();
     addPhoneMessage({
       missionId: mission.id,
       kind: 'inspection',
       category: 'INSPECTION',
       sender: 'MARA // OPERATIONS',
       subject: `STOP CLEARED // ${mission.title}`,
-      body: `The roadside contact cleared the case. Exposure is now ${Math.round(result.exposure)}%. Keep the next stretch calm and finish the handoff.`,
+      body: `The roadside contact cleared the case in ${context.district}. Exposure is now ${Math.round(result.exposure)}%. Keep the next stretch calm and finish the handoff.`,
       status: `CLEARED // RISK ${Math.round(result.exposure)}%`,
     }, { notify: false });
   }
+  recordRoadsideStopHistory({
+    district: context.district,
+    speed: context.recordedSpeed,
+    speedLimit: context.speedLimit,
+    safeStop: roadsideStopWasSafe,
+    outcome: outcomeType,
+    fine: context.fine,
+    exposureBefore,
+    exposureAfter: result.exposure,
+    cargoMission: mission?.title || '',
+  });
+  saveProgress();
   roadsideStopResolved = true;
-  renderRoadsideStopResult(result, cargoWasActive);
-  if (!cargoWasActive) showToast('SPEED CITATION', roadsideStopWasSafe ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
+  renderRoadsideStopResult(result, cargoWasActive, outcomeType);
+  if (!cargoWasActive) showToast(
+    context.severity === 'warning' ? 'SPEED WARNING' : 'SPEED CITATION',
+    context.severity === 'warning' ? 'Warning logged. Keep to the posted limit.' : roadsideStopWasSafe ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.',
+    context.severity === 'warning' ? 'NO FINE' : `-$${context.fine}`,
+  );
 }
 
-function beginRadarStop(site) {
+function beginRadarStop(site, details = {}) {
   if (!site || policeState !== 'idle' || garageOpen || gamePaused || roadsideStopOpen) return;
+  const speedLimit = Math.max(0, Number(details.speedLimit) || getSpeedLimit(player.position.x, player.position.z));
+  const recordedSpeed = Math.max(0, Number(details.recordedSpeed) || Math.abs(player.speed) * 3.1);
+  roadsideStopContext = {
+    recordedSpeed,
+    speedLimit,
+    severity: details.severity === 'warning' ? 'warning' : 'citation',
+    fine: Number.isFinite(Number(details.fine)) ? Math.max(0, Number(details.fine)) : 45,
+    district: districtAt(site.position.x, site.position.z),
+  };
   activeRadarSite = site;
   site.cooldown = 26;
   policeState = 'radar';
@@ -3673,7 +3814,9 @@ function beginRadarStop(site) {
   policeVehicle.rotation.y = site.heading;
   policeVehicle.visible = true;
   policeSiren.visible = false;
-  showToast('SPEED RADAR', 'A roadside unit clocked your speed. Pull over when safe.', 'RADAR STOP');
+  playTone(120, .28, .08, 'sawtooth', -45);
+  window.setTimeout(() => playTone(240, .16, .045, 'square', -90), 130);
+  showToast('SPEED RADAR', `${Math.round(recordedSpeed)} KM/H // LIMIT ${Math.round(speedLimit)} // ${roadsideStopContext.district}`, 'PULL OVER');
 }
 
 function endRadarStop() {
@@ -3682,6 +3825,7 @@ function endRadarStop() {
   roadsideStopOpen = false;
   roadsideStopResolved = false;
   roadsideStopWasSafe = false;
+  roadsideStopContext = null;
   activeRadarSite = null;
   policeVehicle.visible = false;
   policeSiren.visible = false;
@@ -4940,9 +5084,13 @@ function trafficCameraHasWitness(x, z) {
   return nearbyTraffic >= 2;
 }
 
-function recordTrafficViolation(label, fine, radarSite = null) {
+function recordTrafficViolation(label, fine, radarSite = null, details = {}) {
   if (player.violationCooldown > 0) return;
-  player.cash = Math.max(0, player.cash - fine);
+  const recordedSpeed = Math.max(0, Number(details.recordedSpeed) || Math.abs(player.speed) * 3.1);
+  const speedLimit = Math.max(0, Number(details.speedLimit) || getSpeedLimit(player.position.x, player.position.z));
+  const severity = radarSite && recordedSpeed - speedLimit < 16 ? 'warning' : 'citation';
+  const appliedFine = severity === 'warning' ? 0 : fine;
+  player.cash = Math.max(0, player.cash - appliedFine);
   player.trafficViolations += 1;
   player.speedingTime = 0;
   player.violationCooldown = 7;
@@ -4951,10 +5099,10 @@ function recordTrafficViolation(label, fine, radarSite = null) {
   updateGarageUi();
   playTone(180, .18, .08, 'square', -55);
   if (radarSite) {
-    showToast('SPEED RADAR', `${label} detected at a roadside unit`, `-$${fine}`);
-    beginRadarStop(radarSite);
+    showToast(severity === 'warning' ? 'SPEED WARNING' : 'SPEED RADAR', `${label} detected at a roadside unit`, appliedFine ? `-$${appliedFine}` : 'NO FINE');
+    beginRadarStop(radarSite, { recordedSpeed, speedLimit, severity, fine: appliedFine });
   } else {
-    showToast('TRAFFIC CITATION', `${label} violation recorded`, `-$${fine}`);
+    showToast('TRAFFIC CITATION', `${label} violation recorded`, `-$${appliedFine}`);
   }
 }
 
@@ -4973,7 +5121,7 @@ function updateTrafficRules(previousPosition, dt, onRoad) {
   if (onRoad && speedKmh > speedLimit + 10) {
     player.speedingTime += dt;
     const radarSite = nearestSpeedRadarSite();
-    if (radarSite && player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45, radarSite);
+    if (radarSite && player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45, radarSite, { recordedSpeed: speedKmh, speedLimit });
   } else {
     player.speedingTime = Math.max(0, player.speedingTime - dt * 1.8);
   }
