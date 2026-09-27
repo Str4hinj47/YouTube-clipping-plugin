@@ -15,7 +15,7 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **WASD / arrow keys** — drive and steer
 - **Space** — handbrake
 - **C** — follow / high camera
-- **V** — accept a courier delivery at the blue depot
+- **V** — accept a hot-cargo delivery at the blue depot
 - **G** — open the in-game garage, repair damage, buy performance upgrades, or respray the car
 - **P / Escape** — pause, open settings, or return to the full title menu
 - **Title menu** — Play, Market (buy and select cars), Garage (respray and upgrades), and Settings
@@ -29,7 +29,10 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - Disabled traffic clears after a short roadside incident window and respawns at the edge of the city. Traffic-to-traffic impacts are resolved separately from player collisions, so pileups can briefly slow an intersection or mountain pass.
 - The mountain pass is a two-lane road with right-hand opposing traffic, a center line, guardrails, switchbacks, and oncoming vehicles that make overtaking a deliberate risk.
 - Pinewatch Village adds a remote supply-delivery loop beyond the pass, with a depot, cabin drop, village buildings, and extra route rewards.
-- Courier work is a repeatable mission progression rather than a single route: the city rotates through six named delivery jobs with different depots, destinations, descriptions, and rewards, while Pinewatch remains a separate mountain run.
+- Courier work is a repeatable mission progression rather than a single route: the city rotates through six named delivery jobs with different depots, destinations, deadlines, and rewards, while Pinewatch remains a separate mountain run.
+- City and Pinewatch jobs now carry fictional unmarked contraband. Each run has a hard deadline: delivering early adds a cash bonus, while missing the window loses the payout.
+- Speed above the posted limit, red lights, stop signs, collisions, water loss, and vehicle damage raise a mission-only exposure meter. Higher exposure makes an existing radar roadside inspection more likely to bust the run; there is no global heat or pursuit loop.
+- The delivery HUD, full map, and roadside notifications show the countdown, estimated payout, and current exposure tier. Driving legally and smoothly protects the cargo, while taking a faster line creates a deliberate risk-versus-reward decision.
 - Completed deliveries are saved locally and grant the next vehicle automatically at the configurable milestones in `PROGRESSION_CONFIG` inside `src/main.js`. Change `starterStyle` or the `vehicleUnlocks` delivery counts there to rebalance the career without rewriting the mission logic.
 - Every player collision adds persistent, varied visual bodywork: localized dents, scratches, folded panel creases, paint transfer, cracked-looking marks, and displaced trim can accumulate across impacts on both procedural cars and authored GLB vehicles. The marks remain until a full Garage repair or water recovery clears them, and the impact records are included in the local save.
 - The HUD, Market, and both Garage interfaces show condition, repair pricing, and water-recovery pricing. Full repair is intentionally expensive: it is priced at 80% of the active vehicle's Market cost at 0% condition. If the player enters Lake Aurora, the waterfront inlet, or the outer ocean, the car sinks into a recoverable disabled state; the Garage revival fee is exactly 50% of that vehicle cost, with a meaningful `$800` insured fallback value for the free starter ride (so its first `$400` recovery fee is payable from the default `$420` balance).

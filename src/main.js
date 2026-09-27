@@ -2509,17 +2509,177 @@ deliveryTargetLabel.position.y = 5.1;
 deliveryTargetMarker.add(deliveryTargetLabel);
 world.add(deliveryTargetMarker);
 const CITY_DELIVERY_MISSIONS = [
-  { id: 'south-market', start: [-66, 22], target: [-22, -66], title: 'SOUTH MARKET RUN', copy: 'Move a fresh parcel from the depot to South Market.', activeCopy: 'South Market is marked. Keep the cargo steady through the city.', rep: 180, cash: 120 },
-  { id: 'pulse-station', start: [-22, -66], target: [44, -44], title: 'PULSE STATION SUPPLY', copy: 'Carry a sealed case to the beacon-lit Pulse Station.', activeCopy: 'Pulse Station is waiting. Take the cleanest route you know.', rep: 195, cash: 130 },
-  { id: 'octane-row', start: [44, -44], target: [-66, -66], title: 'OCTANE ROW PARTS', copy: 'Drop precision parts at Octane Row before the shop opens.', activeCopy: 'Octane Row is marked. Avoid unnecessary bodywork on the way.', rep: 210, cash: 140 },
-  { id: 'northstar-overlook', start: [-66, -66], target: [66, 22], title: 'NORTHSTAR OVERLOOK', copy: 'Deliver a night-shift kit to the overlook above the bay.', activeCopy: 'Northstar Overlook is marked. Let the road set the pace.', rep: 225, cash: 150 },
-  { id: 'pine-and-salt', start: [66, 22], target: [22, 66], title: 'PINE AND SALT RUN', copy: 'Take a small grocery order across town to Pine and Salt.', activeCopy: 'Pine and Salt is marked. Keep the parcel and the line clean.', rep: 240, cash: 160 },
-  { id: 'east-neighborhood', start: [22, 66], target: [66, 66], title: 'EAST NEIGHBORHOOD DROP', copy: 'Finish the late route at the east-side neighborhood junction.', activeCopy: 'East Neighborhood is marked. One calm run gets it done.', rep: 255, cash: 170 },
+  { id: 'south-market', start: [-66, 22], target: [-22, -66], title: 'SOUTH MARKET RUN', copy: 'Move an unmarked case from the depot to South Market.', activeCopy: 'South Market is marked. Keep the case sealed and exposure low.', rep: 180, cash: 120, deadline: 24, bonusRate: 7 },
+  { id: 'pulse-station', start: [-22, -66], target: [44, -44], title: 'PULSE STATION SUPPLY', copy: 'Carry an unmarked case to the beacon-lit Pulse Station.', activeCopy: 'Pulse Station is waiting. Avoid cameras and keep the line clean.', rep: 195, cash: 130, deadline: 22, bonusRate: 8 },
+  { id: 'octane-row', start: [44, -44], target: [-66, -66], title: 'OCTANE ROW PARTS', copy: 'Drop an unmarked package at Octane Row before the shop opens.', activeCopy: 'Octane Row is marked. Avoid unnecessary bodywork and attention.', rep: 210, cash: 140, deadline: 26, bonusRate: 8 },
+  { id: 'northstar-overlook', start: [-66, -66], target: [66, 22], title: 'NORTHSTAR OVERLOOK', copy: 'Deliver an unmarked night-shift case to the overlook above the bay.', activeCopy: 'Northstar Overlook is marked. Let the road set the pace, not panic.', rep: 225, cash: 150, deadline: 32, bonusRate: 8 },
+  { id: 'pine-and-salt', start: [66, 22], target: [22, 66], title: 'PINE AND SALT RUN', copy: 'Take a sealed unmarked order across town to Pine and Salt.', activeCopy: 'Pine and Salt is marked. Keep the cargo and the line clean.', rep: 240, cash: 160, deadline: 20, bonusRate: 9 },
+  { id: 'east-neighborhood', start: [22, 66], target: [66, 66], title: 'EAST NEIGHBORHOOD DROP', copy: 'Finish the late unmarked cargo route at the east-side junction.', activeCopy: 'East Neighborhood is marked. One calm run gets it done.', rep: 255, cash: 170, deadline: 18, bonusRate: 9 },
 ];
 let cityDeliveryMissionIndex = 0;
 let deliveryState = 'idle';
 let deliveryTime = 0;
 let deliveryNear = false;
+
+const CARGO_RUN_CONFIG = Object.freeze({
+  maxExposure: 100,
+  baseInspectionChance: .06,
+  maxInspectionChance: .84,
+  radarExposure: 8,
+  violationExposure: 13,
+});
+const MOUNTAIN_CARGO_MISSION = {
+  id: 'pinewatch-night-run',
+  title: 'PINEWATCH NIGHT RUN',
+  copy: 'Move an unmarked case through Pinewatch to the cabin above the pass.',
+  activeCopy: 'The case is live. Stay smooth through the switchbacks and keep exposure low.',
+  rep: 260,
+  cash: 180,
+  deadline: 46,
+  bonusRate: 7,
+};
+const cargoRun = {
+  active: false,
+  route: '',
+  missionId: '',
+  elapsed: 0,
+  deadline: 0,
+  exposure: 0,
+  baseCash: 0,
+  baseRep: 0,
+  bonusRate: 0,
+  outcome: '',
+  outcomeTitle: '',
+  outcomeCopy: '',
+  outcomeTimer: 0,
+  lastPayout: 0,
+  lastEarlyBonus: 0,
+  lastExposurePenalty: 0,
+};
+
+function cargoRiskTier(exposure = cargoRun.exposure) {
+  if (exposure < 20) return 'LOW';
+  if (exposure < 45) return 'WATCH';
+  if (exposure < 70) return 'HOT';
+  return 'CRITICAL';
+}
+
+function cargoPayoutPreview(mission) {
+  const secondsRemaining = Math.max(0, cargoRun.deadline - cargoRun.elapsed);
+  const earlyBonus = Math.ceil(secondsRemaining * (mission.bonusRate || cargoRun.bonusRate || 0));
+  const exposurePenalty = Math.floor(cargoRun.exposure * .6);
+  return {
+    secondsRemaining,
+    earlyBonus,
+    exposurePenalty,
+    payout: Math.max(0, mission.cash + earlyBonus - exposurePenalty),
+  };
+}
+
+function startCargoRun(route, mission) {
+  if (cargoRun.active) return false;
+  Object.assign(cargoRun, {
+    active: true,
+    route,
+    missionId: mission.id,
+    elapsed: 0,
+    deadline: mission.deadline,
+    exposure: 0,
+    baseCash: mission.cash,
+    baseRep: mission.rep,
+    bonusRate: mission.bonusRate,
+    outcome: '',
+    outcomeTitle: '',
+    outcomeCopy: '',
+    outcomeTimer: 0,
+    lastPayout: 0,
+    lastEarlyBonus: 0,
+    lastExposurePenalty: 0,
+  });
+  return true;
+}
+
+function recordCargoExposure(amount, source = 'driving incident') {
+  if (!cargoRun.active || amount <= 0) return;
+  const previous = cargoRun.exposure;
+  cargoRun.exposure = clamp(cargoRun.exposure + amount, 0, CARGO_RUN_CONFIG.maxExposure);
+  if (previous < 55 && cargoRun.exposure >= 55) {
+    showToast('EXPOSURE RISING', `${source} put the unmarked cargo under attention`, 'SLOW DOWN');
+  } else if (previous < 82 && cargoRun.exposure >= 82) {
+    showToast('CARGO RISK CRITICAL', 'One more serious incident could end the run', 'KEEP IT CLEAN');
+  }
+}
+
+function failCargoRun(title, copy, reward = 'NO PAYOUT') {
+  if (!cargoRun.active) return;
+  cargoRun.active = false;
+  cargoRun.outcome = 'failed';
+  cargoRun.outcomeTitle = title;
+  cargoRun.outcomeCopy = copy;
+  cargoRun.outcomeTimer = 4.2;
+  if (cargoRun.route === 'city') deliveryState = 'failed';
+  if (cargoRun.route === 'mountain') mountainDeliveryState = 'failed';
+  showToast(title, copy, reward);
+}
+
+function completeCargoRun(mission) {
+  if (!cargoRun.active) return;
+  const payout = cargoPayoutPreview(mission);
+  cargoRun.active = false;
+  cargoRun.outcome = 'complete';
+  cargoRun.lastPayout = payout.payout;
+  cargoRun.lastEarlyBonus = payout.earlyBonus;
+  cargoRun.lastExposurePenalty = payout.exposurePenalty;
+  player.rep += mission.rep;
+  player.cash += payout.payout;
+  registerDeliveryCompletion();
+  playBeacon();
+  showToast(`${mission.title} COMPLETE`, `${cargoRun.elapsed.toFixed(1)} seconds // ${cargoRiskTier()} exposure`, `+$${payout.payout}`);
+}
+
+function inspectCargoAtRoadside() {
+  if (!cargoRun.active) return;
+  const chance = clamp(CARGO_RUN_CONFIG.baseInspectionChance + (cargoRun.exposure / 100) * .78, CARGO_RUN_CONFIG.baseInspectionChance, CARGO_RUN_CONFIG.maxInspectionChance);
+  if (Math.random() < chance) {
+    failCargoRun('CARGO BUSTED', `The roadside inspection found the unmarked case at ${Math.round(cargoRun.exposure)}% exposure.`);
+  } else {
+    recordCargoExposure(CARGO_RUN_CONFIG.radarExposure, 'roadside inspection');
+    showToast('INSPECTION CLEARED', 'The case stayed sealed. Keep the rest of the run clean.', `RISK ${Math.round(cargoRun.exposure)}%`);
+  }
+}
+
+function settleCargoFailure(route, dt) {
+  if (cargoRun.outcome !== 'failed' || cargoRun.route !== route) return false;
+  cargoRun.outcomeTimer -= dt;
+  if (cargoRun.outcomeTimer <= 0) {
+    if (route === 'city') deliveryState = 'idle';
+    if (route === 'mountain') mountainDeliveryState = 'idle';
+    cargoRun.outcome = '';
+    cargoRun.route = '';
+  }
+  return true;
+}
+
+function clearCargoRun() {
+  Object.assign(cargoRun, {
+    active: false,
+    route: '',
+    missionId: '',
+    elapsed: 0,
+    deadline: 0,
+    exposure: 0,
+    baseCash: 0,
+    baseRep: 0,
+    bonusRate: 0,
+    outcome: '',
+    outcomeTitle: '',
+    outcomeCopy: '',
+    outcomeTimer: 0,
+    lastPayout: 0,
+    lastEarlyBonus: 0,
+    lastExposurePenalty: 0,
+  });
+}
 
 function currentCityDeliveryMission() {
   return CITY_DELIVERY_MISSIONS[cityDeliveryMissionIndex] || CITY_DELIVERY_MISSIONS[0];
@@ -2566,19 +2726,23 @@ function addMountainDeliveryMarkers() {
 }
 
 function mountainDeliveryAction() {
+  if (cargoRun.active) return;
   if (mountainDeliveryState === 'idle' && mountainDeliveryNear) {
     mountainDeliveryState = 'active';
     mountainDeliveryTime = 0;
+    startCargoRun('mountain', MOUNTAIN_CARGO_MISSION);
     playTone(320, .2, .08, 'sine', 90);
-    showToast('MOUNTAIN RUN ACCEPTED', 'Pinewatch Depot to the cabin above the pass', '+260 REP');
+    showToast('MOUNTAIN CARGO ACCEPTED', MOUNTAIN_CARGO_MISSION.copy, `DEADLINE ${MOUNTAIN_CARGO_MISSION.deadline} SEC`);
   } else if (mountainDeliveryState === 'finished' && mountainDeliveryNear) {
     mountainDeliveryState = 'active';
     mountainDeliveryTime = 0;
-    showToast('NEW MOUNTAIN PACKAGE', 'Take the next load through Pinewatch', 'DELIVERY RUN');
+    startCargoRun('mountain', MOUNTAIN_CARGO_MISSION);
+    showToast('NEW UNMARKED CASE', MOUNTAIN_CARGO_MISSION.copy, `DEADLINE ${MOUNTAIN_CARGO_MISSION.deadline} SEC`);
   }
 }
 
 function deliveryAction() {
+  if (cargoRun.active) return;
   if (mountainDeliveryNear || mountainDeliveryState === 'active') {
     mountainDeliveryAction();
     return;
@@ -2586,30 +2750,47 @@ function deliveryAction() {
   if (deliveryState === 'idle' && deliveryNear) {
     deliveryState = 'active';
     deliveryTime = 0;
-    playTone(320, .2, .08, 'sine', 90);
     const mission = currentCityDeliveryMission();
-    showToast(`${mission.title} ACCEPTED`, mission.copy, `+${mission.rep} REP`);
+    startCargoRun('city', mission);
+    playTone(320, .2, .08, 'sine', 90);
+    showToast(`${mission.title} ACCEPTED`, mission.copy, `DEADLINE ${mission.deadline} SEC`);
   } else if (deliveryState === 'finished' && deliveryNear) {
     deliveryState = 'active';
     deliveryTime = 0;
     const mission = currentCityDeliveryMission();
-    showToast('NEW PACKAGE', mission.copy, `+${mission.rep} REP`);
+    startCargoRun('city', mission);
+    showToast('NEW UNMARKED CASE', mission.copy, `DEADLINE ${mission.deadline} SEC`);
   }
+}
+
+function updateCargoRiskUi(route) {
+  const risk = document.querySelector('#delivery-risk');
+  if (!risk) return;
+  const relevant = cargoRun.route === route && (cargoRun.active || cargoRun.outcome);
+  const tier = cargoRiskTier();
+  risk.classList.remove('low', 'watch', 'hot', 'critical');
+  if (!relevant) {
+    risk.textContent = 'RISK CLEAR';
+    risk.classList.add('low');
+    return;
+  }
+  risk.textContent = `${cargoRun.outcome === 'failed' ? 'LAST RISK' : 'RISK'} ${Math.round(cargoRun.exposure)}% // ${tier}`;
+  risk.classList.add(tier.toLowerCase());
 }
 
 function updateDelivery(time, dt) {
   const startDistance = player.position.distanceTo(deliveryStart);
   deliveryNear = startDistance < 11;
-  if (deliveryState === 'active') {
-    deliveryTime += dt;
-    if (player.position.distanceTo(deliveryTarget) < 7.4) {
+  const mission = currentCityDeliveryMission();
+  settleCargoFailure('city', dt);
+  if (deliveryState === 'active' && cargoRun.active && cargoRun.route === 'city') {
+    cargoRun.elapsed += dt;
+    deliveryTime = cargoRun.elapsed;
+    if (cargoRun.elapsed >= cargoRun.deadline) {
+      failCargoRun('DEADLINE MISSED', 'The unmarked cargo window closed before you reached the drop.', 'NO PAYOUT');
+    } else if (player.position.distanceTo(deliveryTarget) < 7.4) {
       deliveryState = 'finished';
-      const mission = currentCityDeliveryMission();
-      player.rep += mission.rep;
-      player.cash += mission.cash;
-      registerDeliveryCompletion();
-      playBeacon();
-      showToast(`${mission.title} COMPLETE`, `${deliveryTime.toFixed(1)} seconds, no questions asked`, `+${mission.rep} REP`);
+      completeCargoRun(mission);
     }
   }
   const pulse = (Math.sin(time * .004) + 1) / 2;
@@ -2617,57 +2798,67 @@ function updateDelivery(time, dt) {
   deliveryStartRing.scale.setScalar(1 + pulse * .12);
   deliveryStartBeam.scale.y = 1 + pulse * .2;
   deliveryStartMarker.visible = deliveryState !== 'active';
-  deliveryTargetMarker.visible = deliveryState === 'active';
-  if (deliveryState === 'active') {
+  deliveryTargetMarker.visible = deliveryState === 'active' && cargoRun.route === 'city';
+  if (deliveryState === 'active' && cargoRun.route === 'city') {
     deliveryTargetRing.rotation.z -= dt * 1.4;
     deliveryTargetRing.scale.setScalar(1 + pulse * .16);
     deliveryTargetBeam.scale.y = 1 + pulse * .2;
   }
   const panel = document.querySelector('#delivery-panel');
-  const visible = deliveryNear || deliveryState === 'active' || deliveryState === 'finished';
+  const visible = deliveryNear || deliveryState === 'active' || deliveryState === 'finished' || deliveryState === 'failed';
   panel.classList.toggle('visible', visible);
-  panel.classList.toggle('active', deliveryState === 'active');
+  panel.classList.toggle('active', deliveryState === 'active' && cargoRun.route === 'city');
   const status = document.querySelector('#delivery-status');
   const title = document.querySelector('#delivery-title');
   const copy = document.querySelector('#delivery-copy');
   const timeReadout = document.querySelector('#delivery-time');
   const reward = document.querySelector('#delivery-reward');
   const action = document.querySelector('#delivery-action');
-  const mission = currentCityDeliveryMission();
-  if (reward) reward.textContent = `+${mission.rep} REP`;
   if (deliveryState === 'idle') {
     status.textContent = deliveryNear ? 'READY' : 'OPEN WORLD';
     title.textContent = mission.title;
-    copy.textContent = deliveryNear ? `Hit V to accept this route. ${mission.copy}` : mission.copy;
-    timeReadout.textContent = deliveryNear ? 'PRESS V' : 'COURIER RUN';
-    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT DELIVERY</span>' : '<span>BLUE DEPOT // NEXT JOB</span>';
-  } else if (deliveryState === 'active') {
-    status.textContent = 'PACKAGE LIVE';
+    copy.textContent = deliveryNear ? `Hit V to accept this deadline run. ${mission.copy}` : mission.copy;
+    timeReadout.textContent = deliveryNear ? `DEADLINE ${mission.deadline} SEC` : 'UNMARKED CARGO';
+    reward.textContent = `+$${mission.cash} BASE`;
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT HOT CARGO</span>' : '<span>BLUE DEPOT // NEXT CASE</span>';
+  } else if (deliveryState === 'active' && cargoRun.route === 'city') {
+    const preview = cargoPayoutPreview(mission);
+    status.textContent = 'CARGO LIVE';
     title.textContent = mission.title;
-    copy.textContent = mission.activeCopy;
-    timeReadout.textContent = `${deliveryTime.toFixed(1)} SEC`;
-    action.innerHTML = '<span class="event-live-dot"></span><span>DELIVERY LIVE</span>';
+    copy.textContent = `${mission.activeCopy} Deadline ${mission.deadline} seconds.`;
+    timeReadout.textContent = `${deliveryTime.toFixed(1)} / ${mission.deadline} SEC`;
+    reward.textContent = `$${preview.payout} EST.`;
+    action.innerHTML = '<span class="event-live-dot"></span><span>DEADLINE RUN LIVE</span>';
+  } else if (deliveryState === 'failed') {
+    status.textContent = 'BUSTED';
+    title.textContent = cargoRun.outcomeTitle || 'CARGO LOST';
+    copy.textContent = cargoRun.outcomeCopy || 'The run ended without a payout.';
+    timeReadout.textContent = 'NO PAYOUT';
+    reward.textContent = 'CARGO LOST';
+    action.innerHTML = '<span>RETURN TO DEPOT // RESET ROUTE</span>';
   } else {
     status.textContent = 'DELIVERED';
     title.textContent = 'RUN COMPLETE';
-    copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Return to the next depot for another job.`;
+    copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Risk stayed ${cargoRiskTier(cargoRun.exposure)}.`;
     timeReadout.textContent = 'COMPLETE';
-    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT NEXT JOB</span>' : '<span>ROUTE CLEARED</span>';
+    reward.textContent = `+$${cargoRun.lastPayout}`;
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT NEXT CASE</span>' : '<span>ROUTE CLEARED</span>';
   }
+  updateCargoRiskUi('city');
 }
 
 function updateMountainDelivery(time, dt) {
   if (!mountainDeliveryStartMarker || !mountainDeliveryTargetMarker) return;
   mountainDeliveryNear = player.position.distanceTo(mountainDeliveryStart) < 12;
-  if (mountainDeliveryState === 'active') {
-    mountainDeliveryTime += dt;
-    if (player.position.distanceTo(mountainDeliveryTarget) < 7.4) {
+  settleCargoFailure('mountain', dt);
+  if (mountainDeliveryState === 'active' && cargoRun.active && cargoRun.route === 'mountain') {
+    cargoRun.elapsed += dt;
+    mountainDeliveryTime = cargoRun.elapsed;
+    if (cargoRun.elapsed >= cargoRun.deadline) {
+      failCargoRun('DEADLINE MISSED', 'The mountain drop window closed before the case reached the cabin.', 'NO PAYOUT');
+    } else if (player.position.distanceTo(mountainDeliveryTarget) < 7.4) {
       mountainDeliveryState = 'finished';
-      player.rep += 260;
-      player.cash += 180;
-      registerDeliveryCompletion();
-      playBeacon();
-      showToast('PINEWATCH DELIVERED', `${mountainDeliveryTime.toFixed(1)} seconds through the pass`, '+260 REP');
+      completeCargoRun(MOUNTAIN_CARGO_MISSION);
     }
   }
   const pulse = (Math.sin(time * .004) + 1) / 2;
@@ -2676,38 +2867,49 @@ function updateMountainDelivery(time, dt) {
   mountainDeliveryTargetRing.rotation.z -= dt * 1.35;
   mountainDeliveryTargetRing.scale.setScalar(1 + pulse * .16);
   mountainDeliveryStartMarker.visible = mountainDeliveryState !== 'active';
-  mountainDeliveryTargetMarker.visible = mountainDeliveryState === 'active';
-  const relevant = mountainDeliveryNear || mountainDeliveryState === 'active';
+  mountainDeliveryTargetMarker.visible = mountainDeliveryState === 'active' && cargoRun.route === 'mountain';
+  const relevant = mountainDeliveryNear || mountainDeliveryState === 'active' || mountainDeliveryState === 'finished' || mountainDeliveryState === 'failed';
   if (!relevant) return;
   const panel = document.querySelector('#delivery-panel');
   panel.classList.add('visible');
-  panel.classList.toggle('active', mountainDeliveryState === 'active');
+  panel.classList.toggle('active', mountainDeliveryState === 'active' && cargoRun.route === 'mountain');
   const status = document.querySelector('#delivery-status');
   const title = document.querySelector('#delivery-title');
   const copy = document.querySelector('#delivery-copy');
   const timeReadout = document.querySelector('#delivery-time');
   const reward = document.querySelector('#delivery-reward');
   const action = document.querySelector('#delivery-action');
-  if (reward) reward.textContent = '+260 REP';
   if (mountainDeliveryState === 'idle') {
     status.textContent = mountainDeliveryNear ? 'READY' : 'MOUNTAIN ROUTE';
-    title.textContent = 'PINEWATCH SUPPLY RUN';
-    copy.textContent = mountainDeliveryNear ? 'Hit V to carry supplies up to the remote cabin.' : 'Climb the pass and find the cyan Pinewatch depot.';
-    timeReadout.textContent = mountainDeliveryNear ? 'PRESS V' : 'MOUNTAIN DELIVERY';
-    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT MOUNTAIN RUN</span>' : '<span>DEPOT // CABIN DROP</span>';
-  } else if (mountainDeliveryState === 'active') {
-    status.textContent = 'PASS RUN LIVE';
-    title.textContent = 'PINEWATCH SUPPLY RUN';
-    copy.textContent = 'Keep to your lane. The cabin drop is beyond the switchbacks.';
-    timeReadout.textContent = `${mountainDeliveryTime.toFixed(1)} SEC`;
-    action.innerHTML = '<span class="event-live-dot"></span><span>SUPPLIES ON BOARD</span>';
+    title.textContent = MOUNTAIN_CARGO_MISSION.title;
+    copy.textContent = mountainDeliveryNear ? `Hit V to accept this deadline run. ${MOUNTAIN_CARGO_MISSION.copy}` : MOUNTAIN_CARGO_MISSION.copy;
+    timeReadout.textContent = mountainDeliveryNear ? `DEADLINE ${MOUNTAIN_CARGO_MISSION.deadline} SEC` : 'PINEWATCH CARGO';
+    reward.textContent = `+$${MOUNTAIN_CARGO_MISSION.cash} BASE`;
+    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT HOT CARGO</span>' : '<span>PINEWATCH DEPOT // NEXT CASE</span>';
+  } else if (mountainDeliveryState === 'active' && cargoRun.route === 'mountain') {
+    const preview = cargoPayoutPreview(MOUNTAIN_CARGO_MISSION);
+    status.textContent = 'CARGO LIVE';
+    title.textContent = MOUNTAIN_CARGO_MISSION.title;
+    copy.textContent = `${MOUNTAIN_CARGO_MISSION.activeCopy} Deadline ${MOUNTAIN_CARGO_MISSION.deadline} seconds.`;
+    timeReadout.textContent = `${mountainDeliveryTime.toFixed(1)} / ${MOUNTAIN_CARGO_MISSION.deadline} SEC`;
+    reward.textContent = `$${preview.payout} EST.`;
+    action.innerHTML = '<span class="event-live-dot"></span><span>DEADLINE RUN LIVE</span>';
+  } else if (mountainDeliveryState === 'failed') {
+    status.textContent = 'BUSTED';
+    title.textContent = cargoRun.outcomeTitle || 'CARGO LOST';
+    copy.textContent = cargoRun.outcomeCopy || 'The mountain run ended without a payout.';
+    timeReadout.textContent = 'NO PAYOUT';
+    reward.textContent = 'CARGO LOST';
+    action.innerHTML = '<span>RETURN TO PINEWATCH DEPOT</span>';
   } else {
     status.textContent = 'DELIVERED';
     title.textContent = 'PINEWATCH COMPLETE';
-    copy.textContent = `Last run: ${mountainDeliveryTime.toFixed(1)} seconds. Return to the depot for another load.`;
+    copy.textContent = `Last run: ${mountainDeliveryTime.toFixed(1)} seconds. Risk stayed ${cargoRiskTier(cargoRun.exposure)}.`;
     timeReadout.textContent = 'COMPLETE';
-    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT ANOTHER</span>' : '<span>ROUTE CLEARED</span>';
+    reward.textContent = `+$${cargoRun.lastPayout}`;
+    action.innerHTML = mountainDeliveryNear ? '<span class="keycap">V</span><span>ACCEPT NEXT CASE</span>' : '<span>ROUTE CLEARED</span>';
   }
+  updateCargoRiskUi('mountain');
 }
 
 const policeVehicle = createCar(0x171b33, 0xff5b9c, false);
@@ -2832,7 +3034,11 @@ function updatePolice(time, dt) {
       policeState = 'ticket';
       policeTime = 0;
       policeSiren.visible = false;
-      showToast('SPEED CITATION', stoppedSafely ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
+      const cargoWasActive = cargoRun.active;
+      inspectCargoAtRoadside();
+      if (!cargoWasActive) {
+        showToast('SPEED CITATION', stoppedSafely ? 'Thank you. Please keep to the posted limit.' : 'Citation recorded without a roadside stop.', 'NO PURSUIT');
+      }
     }
   } else if (policeState === 'ticket') {
     policeTime += dt;
@@ -2889,6 +3095,8 @@ function waterBodyAt(x, z) {
 
 function enterVehicleWater(body) {
   if (player.waterRecoveryPending) return;
+  const cargoWasActive = cargoRun.active;
+  if (cargoWasActive) failCargoRun('CARGO LOST', `The unmarked case was lost in ${body.toLowerCase()}.`, 'NO PAYOUT');
   player.waterRecoveryPending = true;
   player.submerged = true;
   player.waterBody = body;
@@ -2906,7 +3114,7 @@ function enterVehicleWater(body) {
     surfaceState.textContent = 'SUBMERGED';
     surfaceState.style.color = 'var(--pink)';
   }
-  showToast('VEHICLE SUBMERGED', `${body} recovery requires half the vehicle value`, `$${player.recoveryCost.toLocaleString('en-US')}`);
+  showToast(cargoWasActive ? 'CARGO LOST // VEHICLE SUBMERGED' : 'VEHICLE SUBMERGED', cargoWasActive ? `${body} recovery required. The run paid nothing.` : `${body} recovery requires half the vehicle value`, `$${player.recoveryCost.toLocaleString('en-US')}`);
 }
 
 function updateDamageUi() {
@@ -2963,6 +3171,7 @@ function applyVehicleDamage(amount, source = 'impact', impact = {}) {
   if (amount <= 0 || player.disabledTimer > 0) return;
   player.condition = clamp(player.condition - amount, 1, 100);
   addVisibleDamage(player.mesh, amount, impact);
+  recordCargoExposure(clamp(3 + amount * .42, 3, 20), source);
   saveProgress();
   updateGarageUi();
   if (player.condition <= 8) {
@@ -3275,6 +3484,7 @@ function setStarterMenuOpen(open) {
     endRadarStop();
     deliveryState = 'idle';
     mountainDeliveryState = 'idle';
+    clearCargoRun();
     mountainDeliveryTime = 0;
     player.mesh.position.copy(player.position);
     player.mesh.rotation.y = player.heading;
@@ -3397,6 +3607,7 @@ function resetSavedProgress() {
   setCityDeliveryMission(0);
   deliveryState = 'idle';
   mountainDeliveryState = 'idle';
+  clearCargoRun();
   player.condition = 100;
   clearVisibleVehicleDamage(player.mesh);
   player.damageSequence = 0;
@@ -3758,6 +3969,8 @@ function resetPlayer() {
     showToast('RECOVERY REQUIRED', 'The vehicle is submerged. Open Garage and pay the recovery fee.', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
     return;
   }
+  const cargoAbandoned = cargoRun.active;
+  if (cargoAbandoned) failCargoRun('CARGO ABANDONED', 'Resetting the vehicle forfeited the unmarked case.', 'NO PAYOUT');
   resetRoadFurniture();
   player.position.set(0, .02, 0);
   player.lastSafePosition.copy(player.position);
@@ -3765,7 +3978,7 @@ function resetPlayer() {
   player.speed = 0;
   player.heading = 0;
   player.mesh.rotation.set(0, player.heading, 0);
-  showToast('VEHICLE RESET', 'Back at Northstar Avenue', '');
+  if (!cargoAbandoned) showToast('VEHICLE RESET', 'Back at Northstar Avenue', '');
 }
 
 function showToast(title, copy, reward) {
@@ -3817,6 +4030,7 @@ function recordTrafficViolation(label, fine, radarSite = null) {
   player.trafficViolations += 1;
   player.speedingTime = 0;
   player.violationCooldown = 7;
+  recordCargoExposure(CARGO_RUN_CONFIG.violationExposure, label);
   saveProgress();
   updateGarageUi();
   playTone(180, .18, .08, 'square', -55);
@@ -3837,6 +4051,9 @@ function crossingRoadAxis(previous, current, axis, vertical) {
 function updateTrafficRules(previousPosition, dt, onRoad) {
   const speedKmh = Math.abs(player.speed) * 3.1;
   const speedLimit = getSpeedLimit(player.position.x, player.position.z);
+  if (onRoad && speedKmh > speedLimit + 4) {
+    recordCargoExposure(dt * clamp((speedKmh - speedLimit) * .16, .4, 3.2), 'speeding');
+  }
   if (onRoad && speedKmh > speedLimit + 10) {
     player.speedingTime += dt;
     const radarSite = nearestSpeedRadarSite();
@@ -4900,7 +5117,13 @@ function drawWorldMap() {
   const routeTitle = document.querySelector('#world-map-route');
   const routeCopy = document.querySelector('#world-map-route-copy');
   const status = document.querySelector('#world-map-status');
-  if (mountainDeliveryState === 'active') {
+  if (cargoRun.active && cargoRun.route === 'mountain') {
+    routeTitle.textContent = `${MOUNTAIN_CARGO_MISSION.title} // CARGO`;
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN // ${Math.ceil(Math.max(0, cargoRun.deadline - cargoRun.elapsed))} SEC // RISK ${Math.round(cargoRun.exposure)}%`;
+  } else if (cargoRun.active && cargoRun.route === 'city') {
+    routeTitle.textContent = `${currentCityDeliveryMission().title} // CARGO`;
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP // ${Math.ceil(Math.max(0, cargoRun.deadline - cargoRun.elapsed))} SEC // RISK ${Math.round(cargoRun.exposure)}%`;
+  } else if (mountainDeliveryState === 'active') {
     routeTitle.textContent = 'PINEWATCH CABIN DROP';
     routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN`;
   } else if (deliveryState === 'active') {
@@ -4913,7 +5136,7 @@ function drawWorldMap() {
     routeTitle.textContent = 'FREE ROAM';
     routeCopy.textContent = 'All streets open. Choose your next line.';
   }
-  status.textContent = policeState !== 'idle' ? 'RADAR STOP // PULL OVER SAFELY' : 'LIVE NAVIGATION // LEGAL DRIVE';
+  status.textContent = policeState !== 'idle' ? 'RADAR STOP // PULL OVER SAFELY' : cargoRun.active ? 'UNMARKED CARGO // DEADLINE RUN' : 'LIVE NAVIGATION // LEGAL DRIVE';
   document.querySelector('#world-map-location').textContent = districtAt(player.position.x, player.position.z);
   document.querySelector('#world-map-coordinates').textContent = `X ${Math.round(player.position.x).toString().padStart(3, '0')} // Z ${Math.round(player.position.z).toString().padStart(3, '0')}`;
 }
