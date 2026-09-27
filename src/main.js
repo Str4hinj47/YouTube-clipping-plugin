@@ -2746,6 +2746,20 @@ const player = {
 player.mesh.position.copy(player.position);
 actors.add(player.mesh);
 
+// Driving feel is intentionally separated from simulation state. The car remains
+// deterministic for collisions and saves, while the presentation layer can add
+// suspension, body load, camera lag, and impact feedback without changing mission
+// rules or vehicle progression.
+const drivingPresentation = {
+  visualSpeed: 0,
+  steering: 0,
+  bodyRoll: 0,
+  bodyPitch: 0,
+  suspension: 0,
+  time: 0,
+  cameraShake: 0,
+};
+
 const beaconPositions = [
   new THREE.Vector3(66, .05, 22),
   new THREE.Vector3(66, .05, -66),
@@ -5614,6 +5628,31 @@ function updatePlayerLighting(steering) {
   player.mesh.userData.headlights.forEach((beam) => { beam.intensity = .72; });
 }
 
+function updateVehiclePresentation(dt, steering, onRoad, handbraking = false) {
+  drivingPresentation.time += dt;
+  drivingPresentation.steering = damp(drivingPresentation.steering, steering, 11, dt);
+  const acceleration = (player.speed - drivingPresentation.visualSpeed) / Math.max(.016, dt);
+  drivingPresentation.visualSpeed = damp(drivingPresentation.visualSpeed, player.speed, 13, dt);
+  const speedRatio = clamp(Math.abs(player.speed) / Math.max(1, vehicleCatalogEntry().turnSpeed), 0, 1);
+  const load = clamp(acceleration * .0042, -.085, .085);
+  const targetPitch = onRoad ? -load : -load * .45;
+  const targetRoll = clamp(-drivingPresentation.steering * speedRatio * (handbraking ? .14 : .075), -.12, .12);
+  const targetSuspension = onRoad
+    ? Math.sin(drivingPresentation.time * (8.5 + speedRatio * 7)) * speedRatio * .018
+    : Math.sin(drivingPresentation.time * 6.5) * .012;
+  drivingPresentation.bodyPitch = damp(drivingPresentation.bodyPitch, targetPitch, 8, dt);
+  drivingPresentation.bodyRoll = damp(drivingPresentation.bodyRoll, targetRoll, 8, dt);
+  drivingPresentation.suspension = damp(drivingPresentation.suspension, targetSuspension, 11, dt);
+  player.mesh.position.copy(player.position);
+  player.mesh.position.y += drivingPresentation.suspension;
+  player.mesh.rotation.y = player.heading;
+  player.mesh.rotation.x = drivingPresentation.bodyPitch;
+  player.mesh.rotation.z = drivingPresentation.bodyRoll;
+  player.mesh.userData.wheels.forEach((wheel) => {
+    if (wheel.userData.isFront) wheel.rotation.y = drivingPresentation.steering * .22;
+  });
+}
+
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
   player.violationCooldown = Math.max(0, player.violationCooldown - dt);
@@ -5679,6 +5718,7 @@ function updatePlayer(dt) {
   if (staticCollision.hit || trafficHit) {
     if (collisionCooldown <= 0) {
       player.speed *= trafficHit ? -.28 : -.22;
+      drivingPresentation.cameraShake = Math.max(drivingPresentation.cameraShake, clamp(impactSpeed / 42, .08, .26));
       playImpact(trafficHit);
       const furnitureHit = staticCollision.breakable && !trafficHit;
       const impactOrigin = trafficCollision.policeHit
@@ -5701,18 +5741,14 @@ function updatePlayer(dt) {
     player.position.z = clamp(player.position.z, -WORLD_LIMIT, WORLD_LIMIT);
     player.speed *= -.25;
   }
-  player.mesh.position.copy(player.position);
-  player.mesh.rotation.y = player.heading;
   player.mesh.userData.wheels.forEach((wheel) => {
     wheel.rotation.z = Math.PI / 2;
-    if (wheel.userData.isFront) wheel.rotation.y = steering * .22;
-  });
-  player.mesh.userData.wheels.forEach((wheel) => {
     wheel.children[0].rotation.x -= player.speed * dt * 1.8;
   });
   player.mesh.userData.loadedWheels?.forEach((wheel) => {
     wheel.rotation.x -= player.speed * dt * 1.8;
   });
+  updateVehiclePresentation(dt, steering, onRoad, handbraking);
   updatePlayerLighting(steering);
   setBrakeLights(player.mesh, Boolean(braking || handbraking || staticCollision.hit || trafficHit));
 
@@ -6217,13 +6253,20 @@ function updateBeacons(time, dt) {
 
 function updateCamera(dt) {
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
+  const right = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
   let offset = cameraMode === 0 ? new THREE.Vector3(0, 5.15, -10.8) : new THREE.Vector3(0, 10.8, -14.8);
   offset.applyAxisAngle(Y_AXIS, player.heading);
   const targetPosition = player.position.clone().add(offset);
+  const shake = drivingPresentation.cameraShake;
+  targetPosition.addScaledVector(right, Math.sin(drivingPresentation.time * 34) * shake * .34);
+  targetPosition.y += Math.cos(drivingPresentation.time * 42) * shake * .22;
   camera.position.lerp(targetPosition, 1 - Math.exp(-5.5 * dt));
-  const lookTarget = player.position.clone().add(forward.multiplyScalar(cameraMode === 0 ? 3.1 : 2.2));
+  const lookLead = cameraMode === 0 ? 3.1 + Math.abs(player.speed) * .055 : 2.2;
+  const lookTarget = player.position.clone().add(forward.multiplyScalar(lookLead));
   lookTarget.y = cameraMode === 0 ? 1.05 : .2;
   camera.lookAt(lookTarget);
+  camera.rotation.z = damp(camera.rotation.z, -drivingPresentation.bodyRoll * .22, 7, dt);
+  drivingPresentation.cameraShake = damp(drivingPresentation.cameraShake, 0, 9, dt);
   const targetFov = 55 + clamp(Math.abs(player.speed) * .2, 0, 10);
   camera.fov = damp(camera.fov, targetFov, 4, dt);
   camera.updateProjectionMatrix();
