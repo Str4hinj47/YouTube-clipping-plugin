@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c111c" />
+    <title>NEONLINE // Open World Drive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="Neonline open world driving game"></canvas>
+
+      <div class="screen-effects" aria-hidden="true">
+        <div class="top-glow"></div>
+        <div class="vignette"></div>
+        <div class="scanlines"></div>
+      </div>
+
+      <header class="topbar hud-layer">
+        <div class="brand-lockup">
+          <div class="brand-mark"><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">NEON<span>LINE</span></div>
+            <div class="brand-sub">AURORA BAY // FREE ROAM</div>
+          </div>
+        </div>
+        <div class="session-status"><i></i><span>LIVE SESSION</span><b id="session-clock">00:00</b></div>
+        <div class="top-actions">
+          <button class="icon-button" id="sound-toggle" type="button" aria-label="Toggle sound">◒</button>
+          <button class="profile-pill" type="button"><span class="avatar">M</span><span class="profile-copy"><b>MILES</b><small>RANK 04</small></span><span class="chevron">⌄</span></button>
+        </div>
+      </header>
+
+      <section class="mission-panel glass-panel hud-layer">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> CURRENT RUN <span class="eyebrow-rule"></span><span id="mission-step">01 / 04</span></div>
+        <div class="mission-heading"><span id="mission-title">THE LONG WAY HOME</span><span class="mission-glyph">↗</span></div>
+        <p id="mission-description">Cruise to the next beacon. Keep your lines clean.</p>
+        <div class="mission-progress"><span id="mission-progress-fill"></span></div>
+        <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span class="reward">+120 REP</span></div>
+      </section>
+
+      <section class="world-readout hud-layer">
+        <div class="district-readout"><span class="district-pin">⌖</span><div><small>DISTRICT</small><strong id="district-name">NORTHSTAR AVE</strong></div></div>
+        <div class="weather-readout"><span>21°</span><span class="weather-icon">◒</span><small>CLEAR / 22:48</small></div>
+      </section>
+
+      <section class="map-panel glass-panel hud-layer">
+        <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
+        <canvas id="mini-map" width="220" height="220"></canvas>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span></div>
+      </section>
+
+      <section class="vehicle-panel glass-panel hud-layer">
+        <div class="vehicle-topline"><span class="eyebrow">PERSONAL VEHICLE</span><span class="vehicle-id">NL—07</span></div>
+        <div class="vehicle-name">MIDNIGHT <b>GT</b></div>
+        <div class="vehicle-meta"><span>RWD</span><i></i><span>SPORT COUPE</span><i></i><span id="surface-state">ASPHALT</span></div>
+        <div class="vehicle-bars">
+          <div class="bar-label"><span>ENGINE</span><b>94%</b></div><div class="bar"><span style="width:94%"></span></div>
+          <div class="bar-label"><span>NITRO</span><b id="nitro-percent">76%</b></div><div class="bar nitro-bar"><span id="nitro-fill" style="width:76%"></span></div>
+        </div>
+      </section>
+
+      <section class="speed-panel hud-layer">
+        <div class="speed-ring"><div class="speed-ticks"></div><div class="speed-inner"><div class="speed-number" id="speed-value">000</div><div class="speed-unit">KM/H</div></div></div>
+        <div class="gear-readout"><span>GEAR</span><b id="gear-value">P</b><small id="drive-mode">SPORT</small></div>
+      </section>
+
+      <section class="controls-panel glass-panel hud-layer">
+        <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
+        <div class="control-row"><span class="keycap wide">SHIFT</span><span class="control-label">NITRO</span><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
+        <div class="control-row muted"><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
+      </section>
+
+      <div class="rep-toast hud-layer" id="rep-toast"><span class="toast-icon">✦</span><div><b>BEACON DISCOVERED</b><small>New route unlocked in Neon District</small></div><span class="toast-rep">+120 REP</span></div>
+      <div class="center-reticle hud-layer" aria-hidden="true"><span></span></div>
+      <div class="pause-hint hud-layer"><span class="pulse-dot"></span> OPEN WORLD <span>•</span> NO LIMITS</div>
+
+      <div class="loading-screen" id="loading-screen">
+        <div class="loading-brand">NEON<span>LINE</span></div>
+        <div class="loading-line"><span id="loading-fill"></span></div>
+        <div class="loading-copy"><span>BUILDING AURORA BAY</span><b id="loading-percent">00%</b></div>
+      </div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
