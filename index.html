@@ -64,12 +64,13 @@
         <div class="weather-readout"><span>21°</span><span class="weather-icon">◒</span><small>CLEAR / 22:48</small></div>
         <div class="cache-readout"><small>CACHES</small><strong id="cache-count">00 / 12</strong></div>
         <div class="speed-limit-readout"><small>LIMIT</small><strong id="speed-limit">45</strong></div>
+        <div class="home-readout"><small>SAFEHOUSE</small><strong id="home-name">PINEWATCH SHACK</strong><span id="home-location">PINEWATCH VILLAGE</span></div>
       </section>
 
       <section class="map-panel glass-panel hud-layer">
         <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
         <canvas id="mini-map" width="220" height="220"></canvas>
-        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span></div>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot delivery-map-dot"></i> WAYPOINT</span></div>
       </section>
 
       <section class="world-map-overlay" id="world-map-overlay" aria-hidden="true">
@@ -186,6 +187,11 @@
                   <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and road stability</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
                 </div>
                 <div class="menu-garage-note"><span class="pulse-dot"></span> Paint changes are free. Performance modules use your Aurora Bay balance.</div>
+                <section class="property-section" aria-labelledby="property-heading">
+                  <div class="menu-section-heading"><span id="property-heading">SAFEHOUSES // PROPERTIES</span><small>BUY // OWN // SELECT SPAWN</small></div>
+                  <p class="property-intro">Your selected home is where every new run and vehicle reset begins. The Pinewatch shack is free; purchased homes are saved locally.</p>
+                  <div class="property-grid" id="property-grid"></div>
+                </section>
               </section>
 
               <section class="menu-page" data-menu-content="settings">
@@ -194,7 +200,7 @@
                   <div class="settings-row"><div><b>AUDIO MIX</b><small>Engine, ambience, impacts, and menu UI</small></div><button class="settings-action" id="menu-settings-sound" type="button">ON</button></div>
                   <div class="settings-row"><div><b>RENDER QUALITY</b><small>Shadows, pixel density, and lighting detail</small></div><button class="settings-action" id="menu-settings-quality" type="button">HIGH</button></div>
                   <div class="settings-row"><div><b>TOUCH CONTROLS</b><small>Show mobile driving controls on touch devices</small></div><button class="settings-action static" type="button">AUTO</button></div>
-                  <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, owned cars, upgrades, and routes</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
+                  <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, cars, upgrades, routes, and safehouses</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
                 </div>
                 <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>V</b> DELIVERY</span><span><b>G</b> GARAGE</span></div></div>
               </section>

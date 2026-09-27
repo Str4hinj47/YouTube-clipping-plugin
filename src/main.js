@@ -65,6 +65,15 @@ const mountainVillagePosition = new THREE.Vector3(136, 18.55, 68);
 const mountainVillageDropPosition = new THREE.Vector3(151, 18.8, 54);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
+// Homes are persistent spawn points. The starter is intentionally a modest,
+// poorly furnished Pinewatch shack; later properties are optional purchases.
+const HOME_CATALOG = [
+  { id: 'pinewatch-shack', name: 'PINEWATCH SHACK', className: 'STARTER HOME', price: 0, style: 'shack', location: 'PINEWATCH VILLAGE', description: 'A small, drafty room above the village road. It is not much, but it is yours.', position: [132, 86], spawn: [132, 18.58, 91.2], heading: -2.5 },
+  { id: 'pinewatch-cottage', name: 'PINEWATCH COTTAGE', className: 'TWO-ROOM COTTAGE', price: 650, style: 'cottage', location: 'PINEWATCH VILLAGE', description: 'A warmer place with a porch and a clear view of the pass.', position: [145, 84], spawn: [145, 18.48, 89.5], heading: -2.35 },
+  { id: 'harbor-flat', name: 'HARBOR FLAT', className: 'CITY APARTMENT', price: 1100, style: 'flat', location: 'AURORA BAY', description: 'A narrow upstairs flat above the waterfront service lanes.', position: [-92, 89], spawn: [-92, .02, 95], heading: -1.55 },
+  { id: 'ridge-house', name: 'RIDGE HOUSE', className: 'REMOTE HOUSE', price: 1650, style: 'ridge', location: 'NORTHSTAR OUTPOST', description: 'A quiet remote house for drivers who prefer a long view and fewer neighbors.', position: [388, 2043], spawn: [388, .02, 2050], heading: .1 },
+];
+
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -122,6 +131,14 @@ world.add(mountainExpansion);
 const pinewatchExpansion = new THREE.Group();
 pinewatchExpansion.name = 'Pinewatch small-town expansion details';
 world.add(pinewatchExpansion);
+const homeProperties = new THREE.Group();
+homeProperties.name = 'Player homes and safehouses';
+world.add(homeProperties);
+const homePropertyRecords = new Map();
+const cargoPickupLocations = new THREE.Group();
+cargoPickupLocations.name = 'City contraband pickup locations';
+world.add(cargoPickupLocations);
+const cargoPickupVisuals = [];
 const regionalRoadGroup = new THREE.Group();
 regionalRoadGroup.name = 'Streamed 10km regional highway network';
 world.add(regionalRoadGroup);
@@ -968,7 +985,7 @@ const PROGRESSION_CONFIG = {
 };
 
 const VEHICLE_CATALOG = [
-  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, vehicleValue: 800, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
+  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, vehicleValue: 2200, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
   { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, vehicleValue: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
   { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, vehicleValue: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78 },
   { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, vehicleValue: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6 },
@@ -1751,7 +1768,11 @@ function mountainRoadHeightAt(x, z) {
 }
 
 function isOnMountainRoad(x, z) {
-  return nearestMountainRoadPoint(x, z).distance < 6.2;
+  const nearest = nearestMountainRoadPoint(x, z);
+  const villageRadius = Math.hypot(x - mountainVillagePosition.x, z - mountainVillagePosition.z);
+  // Pinewatch branches are laid over the same pass grade, so the village
+  // streets keep their elevation even where they leave the main switchback.
+  return nearest.distance < 6.2 || (villageRadius < 38 && nearest.distance < 46);
 }
 
 function addMountainPathRibbon(points, width, material, yLift = .02, parent = mountainExpansion) {
@@ -1845,6 +1866,100 @@ function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1,
   addObstacle(x, z, width / 2 + .7, depth / 2 + .7, 'mountain-village-building');
   parent.add(group);
   return { group, warmWindow };
+}
+
+function homeGroundHeight(home) {
+  return home.style === 'shack' || home.style === 'cottage' ? (home.groundY ?? home.spawn[1]) : .02;
+}
+
+function createHomeProperty(home, index = 0) {
+  const [x, z] = home.position || [home.spawn[0], home.spawn[2] + 4];
+  const groundY = homeGroundHeight(home);
+  const group = new THREE.Group();
+  group.name = `${home.name} // player property`;
+  group.position.set(x, groundY, z);
+  const isFlat = home.style === 'flat';
+  const width = home.style === 'shack' ? 6.8 : home.style === 'cottage' ? 8.2 : isFlat ? 7.2 : 8.8;
+  const depth = home.style === 'shack' ? 5.1 : home.style === 'cottage' ? 6.1 : isFlat ? 5.8 : 6.8;
+  const height = home.style === 'shack' ? 3.2 : home.style === 'cottage' ? 3.8 : isFlat ? 6.3 : 4.3;
+  const wallMaterial = home.style === 'shack' ? mats.cabinWood : home.style === 'cottage' ? mats.cabinWood : new THREE.MeshStandardMaterial({ color: isFlat ? 0x3d4a55 : 0x4f5e58, roughness: .92 });
+  const roofMaterial = home.style === 'flat' ? mats.mountainRockLit : mats.cabinRoof;
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), wallMaterial, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  if (isFlat) {
+    addMesh(group, new THREE.BoxGeometry(width + .35, .34, depth + .35), roofMaterial, [0, height + .17, 0], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .7, .04, .05), mats.villageLight, [0, height * .68, depth / 2 + .04]);
+  } else {
+    addMesh(group, new THREE.ConeGeometry(Math.max(width, depth) * .72, height * .52, 4), roofMaterial, [0, height + height * .22, 0], { rotation: [0, Math.PI / 4, 0], castShadow: true });
+  }
+  const doorMaterial = home.style === 'shack' ? mats.sidewalkDark : mats.cabinRoof;
+  addMesh(group, new THREE.BoxGeometry(.72, 1.55, .07), doorMaterial, [0, .78, depth / 2 + .045], { castShadow: true });
+  const windowMaterial = home.style === 'shack' ? mats.windowAmber : mats.windowCyan;
+  addMesh(group, new THREE.BoxGeometry(1.0, .62, .055), windowMaterial, [-width * .27, height * .55, depth / 2 + .05]);
+  addMesh(group, new THREE.BoxGeometry(1.0, .62, .055), home.style === 'shack' ? mats.windowAmber : mats.windowBlue, [width * .27, height * .55, depth / 2 + .05]);
+  if (home.style === 'shack') {
+    addMesh(group, new THREE.BoxGeometry(width * .56, .12, 1.05), mats.mountainShoulder, [0, .08, depth / 2 + .58], { receiveShadow: true });
+    addMesh(group, new THREE.CylinderGeometry(.14, .18, 1.2, 7), mats.cabinRoof, [-width * .34, .62, depth / 2 + .78], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.9, .08, .18), mats.sidewalkDark, [width * .27, .25, depth / 2 + .12]);
+  } else if (home.style === 'cottage') {
+    addMesh(group, new THREE.BoxGeometry(width * .6, .14, 1.25), mats.mountainShoulder, [0, .1, depth / 2 + .66], { receiveShadow: true });
+    [-width * .25, width * .25].forEach((px) => addMesh(group, new THREE.CylinderGeometry(.05, .07, 1.1, 6), mats.guardrail, [px, .62, depth / 2 + .94], { castShadow: true }));
+  } else if (isFlat) {
+    for (let level = 0; level < 2; level += 1) {
+      addMesh(group, new THREE.BoxGeometry(width * .58, .06, .06), mats.windowAmber, [0, 1.2 + level * 2.3, depth / 2 + .05]);
+    }
+    addMesh(group, new THREE.BoxGeometry(.22, height * .58, .22), mats.guardrail, [width * .42, height * .45, depth / 2 + .2]);
+  } else {
+    addMesh(group, new THREE.BoxGeometry(width * .58, .14, 1.25), mats.mountainShoulder, [0, .1, depth / 2 + .68], { receiveShadow: true });
+    addMesh(group, new THREE.BoxGeometry(width * .45, .12, depth * .55), mats.cabinRoof, [0, height + .15, -depth * .08], { castShadow: true });
+  }
+  const porchLight = new THREE.PointLight(0xffb36d, home.style === 'shack' ? .65 : 1.05, 8, 2);
+  porchLight.position.set(0, 2.15, depth / 2 + .28);
+  group.add(porchLight);
+  const label = makeLabel(home.price ? 'FOR SALE' : 'STARTER HOME', home.price ? '#ff9d50' : '#d6fa6a', .32);
+  label.position.set(0, height + (isFlat ? .8 : 1.2), depth / 2 + .1);
+  group.add(label);
+  const homeObstacle = addObstacle(x, z, width / 2 + .65, depth / 2 + .65, 'home-property', group);
+  homeObstacle.homeId = home.id;
+  homeProperties.add(group);
+  const record = { group, label, porchLight, homeObstacle, homeId: home.id, index };
+  homePropertyRecords.set(home.id, record);
+  return record;
+}
+
+function buildHomeProperties() {
+  HOME_CATALOG.forEach((home, index) => {
+    if (home.style === 'shack' || home.style === 'cottage') {
+      const villageY = mountainRoadHeightAt(home.spawn[0], home.spawn[2]);
+      home.spawn[1] = villageY + .08;
+      home.groundY = mountainRoadHeightAt(home.position[0], home.position[1]);
+    }
+    createHomeProperty(home, index);
+  });
+  spawnPlayerAtHome();
+}
+
+function selectedHomeEntry() {
+  return HOME_CATALOG.find((home) => home.id === player.selectedHome) || HOME_CATALOG[0];
+}
+
+function spawnPlayerAtHome() {
+  const home = selectedHomeEntry();
+  player.position.set(home.spawn[0], home.spawn[1], home.spawn[2]);
+  player.lastSafePosition.copy(player.position);
+  player.heading = home.heading || 0;
+  player.speed = 0;
+  player.mesh.position.copy(player.position);
+  player.mesh.rotation.set(0, player.heading, 0);
+  return home;
+}
+
+function updateHomePropertyVisuals() {
+  homePropertyRecords.forEach((record, id) => {
+    const owned = player.ownedHomes?.includes(id);
+    const selected = player.selectedHome === id;
+    if (record.label?.material) record.label.material.opacity = selected ? 1 : owned ? .72 : .52;
+    if (record.porchLight) record.porchLight.intensity = selected ? 1.7 : owned ? 1.05 : .55;
+  });
 }
 
 function createPinewatchStore(x, z, width, depth, height, name, rotation = 0, seed = 1) {
@@ -2253,7 +2368,9 @@ const player = {
   waterBody: '',
   waterSinkTime: 0,
   recoveryCost: 0,
-  lastSafePosition: new THREE.Vector3(0, .02, 0),
+  lastSafePosition: new THREE.Vector3(132, 18.58, 91.2),
+  ownedHomes: ['pinewatch-shack'],
+  selectedHome: 'pinewatch-shack',
   speedingTime: 0,
   violationCooldown: 0,
   trafficViolations: 0,
@@ -2369,6 +2486,8 @@ function saveProgress() {
       selectedStyle: player.selectedStyle,
       ownedCars: player.ownedCars,
       completedDeliveries: player.completedDeliveries,
+      ownedHomes: player.ownedHomes,
+      selectedHome: player.selectedHome,
       paint: player.paint,
       condition: player.condition,
       damageRecords: player.damageRecords,
@@ -2389,6 +2508,11 @@ function loadProgress() {
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
     if (Number.isFinite(saved.completedDeliveries)) player.completedDeliveries = Math.max(0, Math.floor(saved.completedDeliveries));
+    if (Array.isArray(saved.ownedHomes)) {
+      player.ownedHomes = saved.ownedHomes.filter((id) => HOME_CATALOG.some((home) => home.id === id));
+    }
+    if (!player.ownedHomes.includes('pinewatch-shack')) player.ownedHomes.unshift('pinewatch-shack');
+    if (typeof saved.selectedHome === 'string' && player.ownedHomes.includes(saved.selectedHome)) player.selectedHome = saved.selectedHome;
     if (Array.isArray(saved.ownedCars)) {
       player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
     }
@@ -2423,6 +2547,7 @@ function loadProgress() {
   }
 }
 loadProgress();
+spawnPlayerAtHome();
 restoreVisibleDamage();
 
 const collectiblePositions = [
@@ -2490,13 +2615,97 @@ function updateCollectibles(time, dt) {
   document.querySelector('#cache-count').textContent = `${String(found).padStart(2, '0')} / ${String(collectibles.length).padStart(2, '0')}`;
 }
 
-const deliveryStart = new THREE.Vector3(-66, .08, 22);
-const deliveryTarget = new THREE.Vector3(-22, .08, -66);
+const CARGO_PICKUP_SPOTS = [
+  { id: 'underpass', label: 'UNDERPASS', copy: 'beneath the old city overpass', position: [0, .08, -44], style: 'underpass' },
+  { id: 'dark-alley', label: 'DARK ALLEY', copy: 'inside a shadowed service alley', position: [46, .08, 2], style: 'alley' },
+  { id: 'rail-alley', label: 'RAIL ALLEY', copy: 'inside a second shadowed service alley', position: [-38, .08, 78], style: 'alley' },
+];
+const CARGO_DROPOFF_SPOTS = [
+  { id: 'northstar-outpost', label: 'NORTHSTAR OUTPOST', position: [400, .08, 2050] },
+  { id: 'redwood-valley', label: 'REDWOOD VALLEY', position: [-1750, .08, 1750] },
+  { id: 'lake-road', label: 'LAKE ROAD LOOKOUT', position: [-1100, .08, -1050] },
+  { id: 'cinder-flats', label: 'CINDER FLATS', position: [2300, .08, -1850] },
+  { id: 'eastgate', label: 'EASTGATE YARD', position: [2800, .08, 500] },
+  { id: 'southern-crossroads', label: 'SOUTHERN CROSSROADS', position: [500, .08, -2800] },
+];
+let cargoPickupIndex = 0;
+let cargoDropoffIndex = 0;
+
+function createCargoPickupVisuals() {
+  CARGO_PICKUP_SPOTS.forEach((spot, index) => {
+    const [x, y, z] = spot.position;
+    const group = new THREE.Group();
+    group.name = `${spot.label} // city pickup`;
+    group.position.set(x, y, z);
+    if (spot.style === 'underpass') {
+      addMesh(group, new THREE.BoxGeometry(24, 1.15, 8), mats.mountainRockLit, [0, 5.1, 0], { castShadow: true, receiveShadow: true });
+      [-9, 9].forEach((columnX) => {
+        addMesh(group, new THREE.BoxGeometry(.9, 5, 1.1), mats.mountainRock, [columnX, 2.5, 0], { castShadow: true });
+        addObstacle(x + columnX, z, .65, .8, 'cargo-pickup-support');
+      });
+      addMesh(group, new THREE.BoxGeometry(20, .06, 7), mats.asphaltEdge, [0, .02, 0], { receiveShadow: true });
+      for (let lightX = -7; lightX <= 7; lightX += 7) {
+        const lamp = addMesh(group, new THREE.BoxGeometry(1.05, .08, .24), mats.lamp, [lightX, 4.48, 0]);
+        lamp.material = mats.lamp;
+      }
+    } else if (spot.style === 'alley') {
+      addMesh(group, new THREE.BoxGeometry(.55, 3.8, 12), mats.mountainRock, [-4.3, 1.9, 0], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(.55, 3.8, 12), mats.mountainRock, [4.3, 1.9, 0], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(9, .25, 1.1), mats.guardrail, [0, 3.7, -4.8], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(9, .08, 12), mats.asphaltEdge, [0, .02, 0], { receiveShadow: true });
+      addMesh(group, new THREE.BoxGeometry(.12, 2.2, .12), mats.guardrail, [-3.2, 1.1, -3.9]);
+      addMesh(group, new THREE.SphereGeometry(.16, 8, 8), mats.lamp, [-3.2, 2.2, -3.9]);
+      addObstacle(x - 4.3, z, .5, 6.2, 'cargo-pickup-wall');
+      addObstacle(x + 4.3, z, .5, 6.2, 'cargo-pickup-wall');
+    } else {
+      addMesh(group, new THREE.BoxGeometry(12, .18, 7), mats.asphaltEdge, [0, .05, 0], { receiveShadow: true });
+      addMesh(group, new THREE.BoxGeometry(11, .3, .35), mats.guardrail, [0, 3.05, -2.8], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(.22, 3, .22), mats.guardrail, [-5, 1.5, -2.8], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(.22, 3, .22), mats.guardrail, [5, 1.5, -2.8], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(3.4, 2.4, .35), mats.cabinWood, [0, 1.2, 2.6], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(2.3, .08, .9), mats.cabinRoof, [0, 2.45, 2.6], { castShadow: true });
+      addObstacle(x, z + 2.6, 1.9, .55, 'cargo-pickup-wall');
+    }
+    const waypoint = new THREE.Group();
+    const ring = addMesh(waypoint, new THREE.TorusGeometry(2.0, .075, 8, 28), mats.cache, [0, .18, 0], { rotation: [Math.PI / 2, 0, 0] });
+    const beam = addMesh(waypoint, new THREE.CylinderGeometry(.03, .03, 3.2, 6), mats.cache, [0, 1.6, 0]);
+    const label = makeLabel(`${spot.label} PICKUP`, '#5ce3d1', .34);
+    label.position.y = 3.8;
+    waypoint.add(label);
+    group.add(waypoint);
+    cargoPickupLocations.add(group);
+    cargoPickupVisuals.push({ group, waypoint, ring, beam, label });
+  });
+}
+
+function currentCargoPickupSpot() {
+  return CARGO_PICKUP_SPOTS[cargoPickupIndex] || CARGO_PICKUP_SPOTS[0];
+}
+
+function currentCargoDropoffSpot() {
+  return CARGO_DROPOFF_SPOTS[cargoDropoffIndex] || CARGO_DROPOFF_SPOTS[0];
+}
+
+function updateCargoPickupVisuals(time = performance.now(), dt = 0) {
+  cargoPickupVisuals.forEach((visual, index) => {
+    const selected = index === cargoPickupIndex && !cargoRun.active;
+    visual.waypoint.visible = selected;
+    const pulse = (Math.sin(time * .004 + index) + 1) / 2;
+    if (selected) {
+      visual.ring.rotation.z += dt * 1.15;
+      visual.ring.scale.setScalar(1 + pulse * .13);
+      visual.beam.scale.y = 1 + pulse * .18;
+    }
+  });
+}
+
+const deliveryStart = new THREE.Vector3(0, .08, -44);
+const deliveryTarget = new THREE.Vector3(400, .08, 2050);
 const deliveryStartMarker = new THREE.Group();
 deliveryStartMarker.position.copy(deliveryStart);
 const deliveryStartRing = addMesh(deliveryStartMarker, new THREE.TorusGeometry(2.2, .08, 8, 32), mats.cache, [0, .18, 0], { rotation: [Math.PI / 2, 0, 0] });
 const deliveryStartBeam = addMesh(deliveryStartMarker, new THREE.CylinderGeometry(.035, .035, 4.5, 6), mats.cache, [0, 2.25, 0]);
-const deliveryStartLabel = makeLabel('COURIER DEPOT', '#5ce3d1', .5);
+const deliveryStartLabel = makeLabel('CITY PICKUP', '#5ce3d1', .5);
 deliveryStartLabel.position.y = 4.8;
 deliveryStartMarker.add(deliveryStartLabel);
 world.add(deliveryStartMarker);
@@ -2509,12 +2718,12 @@ deliveryTargetLabel.position.y = 5.1;
 deliveryTargetMarker.add(deliveryTargetLabel);
 world.add(deliveryTargetMarker);
 const CITY_DELIVERY_MISSIONS = [
-  { id: 'south-market', start: [-66, 22], target: [-22, -66], title: 'SOUTH MARKET RUN', copy: 'Move an unmarked case from the depot to South Market.', activeCopy: 'South Market is marked. Keep the case sealed and exposure low.', rep: 180, cash: 120, deadline: 24, bonusRate: 7 },
-  { id: 'pulse-station', start: [-22, -66], target: [44, -44], title: 'PULSE STATION SUPPLY', copy: 'Carry an unmarked case to the beacon-lit Pulse Station.', activeCopy: 'Pulse Station is waiting. Avoid cameras and keep the line clean.', rep: 195, cash: 130, deadline: 22, bonusRate: 8 },
-  { id: 'octane-row', start: [44, -44], target: [-66, -66], title: 'OCTANE ROW PARTS', copy: 'Drop an unmarked package at Octane Row before the shop opens.', activeCopy: 'Octane Row is marked. Avoid unnecessary bodywork and attention.', rep: 210, cash: 140, deadline: 26, bonusRate: 8 },
-  { id: 'northstar-overlook', start: [-66, -66], target: [66, 22], title: 'NORTHSTAR OVERLOOK', copy: 'Deliver an unmarked night-shift case to the overlook above the bay.', activeCopy: 'Northstar Overlook is marked. Let the road set the pace, not panic.', rep: 225, cash: 150, deadline: 32, bonusRate: 8 },
-  { id: 'pine-and-salt', start: [66, 22], target: [22, 66], title: 'PINE AND SALT RUN', copy: 'Take a sealed unmarked order across town to Pine and Salt.', activeCopy: 'Pine and Salt is marked. Keep the cargo and the line clean.', rep: 240, cash: 160, deadline: 20, bonusRate: 9 },
-  { id: 'east-neighborhood', start: [22, 66], target: [66, 66], title: 'EAST NEIGHBORHOOD DROP', copy: 'Finish the late unmarked cargo route at the east-side junction.', activeCopy: 'East Neighborhood is marked. One calm run gets it done.', rep: 255, cash: 170, deadline: 18, bonusRate: 9 },
+  { id: 'south-market', title: 'SOUTH MARKET RUN', copy: 'Collect an unmarked case at the city pickup, then move it to the remote handoff.', activeCopy: 'The remote handoff is marked. Keep the case sealed and exposure low.', rep: 180, cash: 120, deadline: 24, bonusRate: 7 },
+  { id: 'pulse-station', title: 'PULSE STATION SUPPLY', copy: 'Move a sealed case out of Aurora Bay before the city wakes up.', activeCopy: 'The remote handoff is waiting. Avoid cameras and keep the line clean.', rep: 195, cash: 130, deadline: 22, bonusRate: 8 },
+  { id: 'octane-row', title: 'OCTANE ROW PARTS', copy: 'Collect the unmarked package and take it beyond the city boundary.', activeCopy: 'The outside drop is marked. Avoid unnecessary bodywork and attention.', rep: 210, cash: 140, deadline: 26, bonusRate: 8 },
+  { id: 'northstar-overlook', title: 'NORTHSTAR OVERLOOK', copy: 'Run a night-shift case from a fixed city pickup to a remote overlook.', activeCopy: 'The remote overlook is marked. Let the road set the pace, not panic.', rep: 225, cash: 150, deadline: 32, bonusRate: 8 },
+  { id: 'pine-and-salt', title: 'PINE AND SALT RUN', copy: 'Take a sealed unmarked order across the island after collecting it in town.', activeCopy: 'The outside handoff is marked. Keep the cargo and the line clean.', rep: 240, cash: 160, deadline: 20, bonusRate: 9 },
+  { id: 'east-neighborhood', title: 'EAST NEIGHBORHOOD DROP', copy: 'Finish the late unmarked cargo route at a remote regional junction.', activeCopy: 'The regional drop is marked. One calm run gets it done.', rep: 255, cash: 170, deadline: 18, bonusRate: 9 },
 ];
 let cityDeliveryMissionIndex = 0;
 let deliveryState = 'idle';
@@ -2687,11 +2896,15 @@ function currentCityDeliveryMission() {
 
 function setCityDeliveryMission(index) {
   cityDeliveryMissionIndex = ((index % CITY_DELIVERY_MISSIONS.length) + CITY_DELIVERY_MISSIONS.length) % CITY_DELIVERY_MISSIONS.length;
-  const mission = currentCityDeliveryMission();
-  deliveryStart.set(mission.start?.[0] ?? -66, .08, mission.start?.[1] ?? 22);
-  deliveryTarget.set(mission.target?.[0] ?? -22, .08, mission.target?.[1] ?? -66);
+  cargoPickupIndex = Math.floor(Math.random() * CARGO_PICKUP_SPOTS.length);
+  cargoDropoffIndex = Math.floor(Math.random() * CARGO_DROPOFF_SPOTS.length);
+  const pickup = currentCargoPickupSpot();
+  const dropoff = currentCargoDropoffSpot();
+  deliveryStart.set(pickup.position[0], pickup.position[1], pickup.position[2]);
+  deliveryTarget.set(dropoff.position[0], dropoff.position[1], dropoff.position[2]);
   deliveryStartMarker.position.copy(deliveryStart);
   deliveryTargetMarker.position.copy(deliveryTarget);
+  updateCargoPickupVisuals();
 }
 
 setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
@@ -2753,13 +2966,13 @@ function deliveryAction() {
     const mission = currentCityDeliveryMission();
     startCargoRun('city', mission);
     playTone(320, .2, .08, 'sine', 90);
-    showToast(`${mission.title} ACCEPTED`, mission.copy, `DEADLINE ${mission.deadline} SEC`);
+    showToast(`${mission.title} ACCEPTED`, `Pickup at ${currentCargoPickupSpot().label}. Drop at ${currentCargoDropoffSpot().label}.`, `DEADLINE ${mission.deadline} SEC`);
   } else if (deliveryState === 'finished' && deliveryNear) {
     deliveryState = 'active';
     deliveryTime = 0;
     const mission = currentCityDeliveryMission();
     startCargoRun('city', mission);
-    showToast('NEW UNMARKED CASE', mission.copy, `DEADLINE ${mission.deadline} SEC`);
+    showToast('NEW UNMARKED CASE', `Pickup at ${currentCargoPickupSpot().label}. Drop at ${currentCargoDropoffSpot().label}.`, `DEADLINE ${mission.deadline} SEC`);
   }
 }
 
@@ -2815,17 +3028,18 @@ function updateDelivery(time, dt) {
   const reward = document.querySelector('#delivery-reward');
   const action = document.querySelector('#delivery-action');
   if (deliveryState === 'idle') {
-    status.textContent = deliveryNear ? 'READY' : 'OPEN WORLD';
+    status.textContent = deliveryNear ? 'READY // PICKUP' : 'OPEN WORLD';
     title.textContent = mission.title;
-    copy.textContent = deliveryNear ? `Hit V to accept this deadline run. ${mission.copy}` : mission.copy;
-    timeReadout.textContent = deliveryNear ? `DEADLINE ${mission.deadline} SEC` : 'UNMARKED CARGO';
+    const pickup = currentCargoPickupSpot();
+    copy.textContent = deliveryNear ? `Hit V to collect ${pickup.copy}. Drop at ${currentCargoDropoffSpot().label}.` : `${mission.copy} Pickup: ${pickup.label}.`;
+    timeReadout.textContent = deliveryNear ? `DEADLINE ${mission.deadline} SEC` : 'UNMARKED CARGO // CITY PICKUP';
     reward.textContent = `+$${mission.cash} BASE`;
-    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT HOT CARGO</span>' : '<span>BLUE DEPOT // NEXT CASE</span>';
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT HOT CARGO</span>' : '<span>CITY PICKUP // NEXT CASE</span>';
   } else if (deliveryState === 'active' && cargoRun.route === 'city') {
     const preview = cargoPayoutPreview(mission);
     status.textContent = 'CARGO LIVE';
     title.textContent = mission.title;
-    copy.textContent = `${mission.activeCopy} Deadline ${mission.deadline} seconds.`;
+    copy.textContent = `${mission.activeCopy} Drop at ${currentCargoDropoffSpot().label}. Deadline ${mission.deadline} seconds.`;
     timeReadout.textContent = `${deliveryTime.toFixed(1)} / ${mission.deadline} SEC`;
     reward.textContent = `$${preview.payout} EST.`;
     action.innerHTML = '<span class="event-live-dot"></span><span>DEADLINE RUN LIVE</span>';
@@ -3420,6 +3634,76 @@ function purchaseMarketVehicle(style) {
   showToast('VEHICLE ACQUIRED', `${vehicle.name} added to your garage`, `$${vehicle.price.toLocaleString('en-US')}`);
 }
 
+function renderProperties() {
+  const grid = document.querySelector('#property-grid');
+  if (!grid) return;
+  grid.innerHTML = HOME_CATALOG.map((home) => {
+    const owned = player.ownedHomes.includes(home.id);
+    const selected = player.selectedHome === home.id;
+    const action = selected ? 'CURRENT HOME' : owned ? 'SELECT HOME' : `BUY FOR $${home.price.toLocaleString('en-US')}`;
+    const disabled = selected ? 'disabled' : '';
+    return `<article class="property-card ${owned ? 'owned' : ''} ${selected ? 'selected' : ''}">
+      <div class="property-art property-art-${home.style}"><span class="property-art-door"></span><span class="property-art-window a"></span><span class="property-art-window b"></span><span class="property-art-light"></span></div>
+      <div class="property-card-top"><span>${home.className}</span><b>${owned ? (selected ? 'ACTIVE' : 'OWNED') : 'AVAILABLE'}</b></div>
+      <h3>${home.name}</h3><p>${home.description}</p>
+      <div class="property-card-meta"><span>${home.location}</span><strong>${home.price ? `$${home.price.toLocaleString('en-US')}` : 'STARTER'}</strong></div>
+      <button class="property-card-button ${selected ? 'selected-button' : owned ? '' : 'buy'}" data-home-id="${home.id}" type="button" ${disabled}>${action}</button>
+    </article>`;
+  }).join('');
+}
+
+function updateHomeUi() {
+  const home = selectedHomeEntry();
+  const name = document.querySelector('#home-name');
+  if (name) name.textContent = home.name;
+  const location = document.querySelector('#home-location');
+  if (location) location.textContent = home.location;
+  updateHomePropertyVisuals();
+}
+
+function selectHome(id) {
+  const home = HOME_CATALOG.find((entry) => entry.id === id);
+  if (!home || !player.ownedHomes.includes(id)) return;
+  if (player.waterRecoveryPending) {
+    showToast('RECOVERY REQUIRED', 'Recover the submerged vehicle before changing safehouses', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return;
+  }
+  if (cargoRun.active || deliveryState === 'active' || mountainDeliveryState === 'active') {
+    showToast('CARGO RUN LIVE', 'Finish or forfeit the current case before changing safehouses', 'NO TELEPORT');
+    return;
+  }
+  player.selectedHome = id;
+  saveProgress();
+  spawnPlayerAtHome();
+  updateHomeUi();
+  updateGarageUi();
+  showToast('HOME SELECTED', `${home.name} is now your spawn point`, home.location);
+}
+
+function purchaseHome(id) {
+  const home = HOME_CATALOG.find((entry) => entry.id === id);
+  if (!home) return;
+  if (player.ownedHomes.includes(id)) {
+    selectHome(id);
+    return;
+  }
+  if (player.waterRecoveryPending) {
+    showToast('RECOVERY REQUIRED', 'Recover the submerged vehicle before buying a safehouse', `$${vehicleRecoveryCost().toLocaleString('en-US')}`);
+    return;
+  }
+  if (player.cash < home.price) {
+    showToast('FUNDS TOO LOW', `${home.name} needs $${home.price.toLocaleString('en-US')}`, 'EARN MORE CASH');
+    return;
+  }
+  player.cash -= home.price;
+  player.ownedHomes.push(id);
+  player.selectedHome = id;
+  saveProgress();
+  spawnPlayerAtHome();
+  updateGarageUi();
+  showToast('PROPERTY ACQUIRED', `${home.name} is now owned and selected`, `$${home.price.toLocaleString('en-US')}`);
+}
+
 function updateGarageUi() {
   const garageCash = document.querySelector('#garage-cash');
   if (garageCash) garageCash.textContent = `$${player.cash.toLocaleString('en-US')}`;
@@ -3438,6 +3722,8 @@ function updateGarageUi() {
   updateDamageUi();
   renderMarket();
   renderOwnedGarage();
+  renderProperties();
+  updateHomeUi();
 }
 
 function setMenuPage(page) {
@@ -3478,9 +3764,7 @@ function setStarterMenuOpen(open) {
       player.mesh.parent?.remove(player.mesh);
       actors.add(player.mesh);
     }
-    player.position.set(0, .02, 0);
-    player.speed = 0;
-    player.heading = 0;
+    spawnPlayerAtHome();
     endRadarStop();
     deliveryState = 'idle';
     mountainDeliveryState = 'idle';
@@ -3602,6 +3886,8 @@ function resetSavedProgress() {
   player.rep = 1280;
   player.ownedCars = [PROGRESSION_CONFIG.starterStyle];
   player.completedDeliveries = 0;
+  player.ownedHomes = ['pinewatch-shack'];
+  player.selectedHome = 'pinewatch-shack';
   player.selectedStyle = PROGRESSION_CONFIG.starterStyle;
   player.paint = vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint;
   setCityDeliveryMission(0);
@@ -3617,7 +3903,7 @@ function resetSavedProgress() {
   player.waterBody = '';
   player.waterSinkTime = 0;
   player.recoveryCost = 0;
-  player.lastSafePosition.copy(new THREE.Vector3(0, .02, 0));
+  spawnPlayerAtHome();
   player.speedingTime = 0;
   player.violationCooldown = 0;
   player.trafficViolations = 0;
@@ -3930,6 +4216,13 @@ document.querySelector('#market-grid').addEventListener('click', (event) => {
   const button = event.target.closest('[data-market-style]');
   if (button) purchaseMarketVehicle(button.dataset.marketStyle);
 });
+document.querySelector('#property-grid').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-home-id]');
+  if (!button) return;
+  const homeId = button.dataset.homeId;
+  if (player.ownedHomes.includes(homeId)) selectHome(homeId);
+  else purchaseHome(homeId);
+});
 document.querySelector('#owned-car-carousel').addEventListener('click', (event) => {
   const button = event.target.closest('[data-owned-style]');
   if (button) applyPlayerVehicleStyle(button.dataset.ownedStyle);
@@ -3972,13 +4265,8 @@ function resetPlayer() {
   const cargoAbandoned = cargoRun.active;
   if (cargoAbandoned) failCargoRun('CARGO ABANDONED', 'Resetting the vehicle forfeited the unmarked case.', 'NO PAYOUT');
   resetRoadFurniture();
-  player.position.set(0, .02, 0);
-  player.lastSafePosition.copy(player.position);
-  player.mesh.position.copy(player.position);
-  player.speed = 0;
-  player.heading = 0;
-  player.mesh.rotation.set(0, player.heading, 0);
-  if (!cargoAbandoned) showToast('VEHICLE RESET', 'Back at Northstar Avenue', '');
+  const home = spawnPlayerAtHome();
+  if (!cargoAbandoned) showToast('VEHICLE RESET', `Back at ${home.name}`, '');
 }
 
 function showToast(title, copy, reward) {
@@ -4908,8 +5196,25 @@ function drawMiniMap() {
   });
   const depotPoint = worldToMap(deliveryStart.x, deliveryStart.z, size);
   const dropPoint = worldToMap(deliveryTarget.x, deliveryTarget.z, size);
-  mapCtx.fillStyle = '#5ce3d1'; mapCtx.fillRect(depotPoint.x - 2, depotPoint.y - 2, 4, 4);
-  if (deliveryState === 'active') { mapCtx.fillStyle = '#ff9d50'; mapCtx.fillRect(dropPoint.x - 2, dropPoint.y - 2, 4, 4); }
+  const mountainDropPoint = worldToMap(mountainDeliveryTarget.x, mountainDeliveryTarget.z, size);
+  const cityCargoActive = cargoRun.active && cargoRun.route === 'city' && deliveryState === 'active';
+  const mountainCargoActive = cargoRun.active && cargoRun.route === 'mountain' && mountainDeliveryState === 'active';
+  const waypointPoint = cityCargoActive ? dropPoint : mountainCargoActive ? mountainDropPoint : depotPoint;
+  const waypointColor = cityCargoActive || mountainCargoActive ? '#ff9d50' : '#5ce3d1';
+  mapCtx.fillStyle = waypointColor;
+  mapCtx.shadowColor = waypointColor;
+  mapCtx.shadowBlur = 8;
+  mapCtx.fillRect(waypointPoint.x - 2.8, waypointPoint.y - 2.8, 5.6, 5.6);
+  mapCtx.shadowBlur = 0;
+  if (cityCargoActive) {
+    mapCtx.strokeStyle = 'rgba(255,157,80,.5)';
+    mapCtx.lineWidth = 1.5;
+    mapCtx.strokeRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
+  } else if (mountainCargoActive) {
+    mapCtx.strokeStyle = 'rgba(255,157,80,.5)';
+    mapCtx.lineWidth = 1.5;
+    mapCtx.strokeRect(mountainDropPoint.x - 5, mountainDropPoint.y - 5, 10, 10);
+  }
   const current = worldToMap(player.position.x, player.position.z, size);
   mapCtx.save();
   mapCtx.translate(current.x, current.y);
@@ -5070,20 +5375,31 @@ function drawWorldMap() {
     ctx.restore();
   });
   const depotPoint = worldToMap(deliveryStart.x, deliveryStart.z, mapSize);
-  ctx.fillStyle = '#5ce3d1';
-  ctx.fillRect(depotPoint.x - 5, depotPoint.y - 5, 10, 10);
-  drawText('DEPOT', depotPoint.x + 10, depotPoint.y + 12, '#79eee1');
-  if (deliveryState === 'active') {
+  const cityCargoActive = cargoRun.active && cargoRun.route === 'city' && deliveryState === 'active';
+  const mountainCargoActive = cargoRun.active && cargoRun.route === 'mountain' && mountainDeliveryState === 'active';
+  if (cityCargoActive) {
     const dropPoint = worldToMap(deliveryTarget.x, deliveryTarget.z, mapSize);
     ctx.fillStyle = '#ff9d50';
+    ctx.shadowColor = '#ff9d50';
+    ctx.shadowBlur = 13;
     ctx.fillRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
-    drawText('DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
-  }
-  if (mountainDeliveryState === 'active') {
+    ctx.shadowBlur = 0;
+    drawText(`DROP // ${currentCargoDropoffSpot().label}`, dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
+  } else if (mountainCargoActive) {
     const dropPoint = worldToMap(mountainDeliveryTarget.x, mountainDeliveryTarget.z, mapSize);
     ctx.fillStyle = '#ff9d50';
+    ctx.shadowColor = '#ff9d50';
+    ctx.shadowBlur = 13;
     ctx.fillRect(dropPoint.x - 5, dropPoint.y - 5, 10, 10);
-    drawText('CABIN DROP', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
+    ctx.shadowBlur = 0;
+    drawText('DROP // CABIN', dropPoint.x + 10, dropPoint.y + 12, '#ffbd80');
+  } else {
+    ctx.fillStyle = '#5ce3d1';
+    ctx.shadowColor = '#5ce3d1';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(depotPoint.x - 5, depotPoint.y - 5, 10, 10);
+    ctx.shadowBlur = 0;
+    drawText(`PICKUP // ${currentCargoPickupSpot().label}`, depotPoint.x + 10, depotPoint.y + 12, '#79eee1');
   }
 
   [...traffic, ...mountainTraffic, ...regionalTraffic].forEach((vehicle) => {
@@ -5122,13 +5438,16 @@ function drawWorldMap() {
     routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN // ${Math.ceil(Math.max(0, cargoRun.deadline - cargoRun.elapsed))} SEC // RISK ${Math.round(cargoRun.exposure)}%`;
   } else if (cargoRun.active && cargoRun.route === 'city') {
     routeTitle.textContent = `${currentCityDeliveryMission().title} // CARGO`;
-    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP // ${Math.ceil(Math.max(0, cargoRun.deadline - cargoRun.elapsed))} SEC // RISK ${Math.round(cargoRun.exposure)}%`;
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO ${currentCargoDropoffSpot().label} // ${Math.ceil(Math.max(0, cargoRun.deadline - cargoRun.elapsed))} SEC // RISK ${Math.round(cargoRun.exposure)}%`;
   } else if (mountainDeliveryState === 'active') {
     routeTitle.textContent = 'PINEWATCH CABIN DROP';
     routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN`;
   } else if (deliveryState === 'active') {
     routeTitle.textContent = currentCityDeliveryMission().title;
-    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP POINT`;
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO ${currentCargoDropoffSpot().label}`;
+  } else if (deliveryNear || deliveryState === 'finished' || deliveryState === 'failed') {
+    routeTitle.textContent = `${currentCityDeliveryMission().title} // PICKUP`;
+    routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryStart))} M TO ${currentCargoPickupSpot().label}`;
   } else if (routeStep < beaconPositions.length) {
     routeTitle.textContent = beaconNames[routeStep];
     routeCopy.textContent = `${Math.round(player.position.distanceTo(beaconPositions[routeStep]))} M TO ACTIVE BEACON`;
@@ -5168,6 +5487,10 @@ function resize() {
 window.addEventListener('resize', resize);
 
 buildWorld();
+buildHomeProperties();
+createCargoPickupVisuals();
+updateHomePropertyVisuals();
+updateCargoPickupVisuals();
 updateWorldStreaming(true);
 buildMenuGarage();
 
@@ -5195,6 +5518,7 @@ function animate(time) {
     resolveRegionalTrafficCollisions();
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
+    updateCargoPickupVisuals(time, dt);
     updateMountainDelivery(time, dt);
     updatePolice(time, dt);
       updateBeacons(time, dt);
