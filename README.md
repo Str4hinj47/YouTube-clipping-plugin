@@ -5,8 +5,10 @@ A stylized open-world driving game built as a browser prototype. Cruise legally 
 ## Run
 
 ```sh
-python3 -m http.server 4173 --bind 0.0.0.0
+python serve.py 4173
 ```
+
+`serve.py` is a plain static server that also disables browser caching, so edits to `src/main.js` show up on a normal refresh. Plain `python -m http.server 4173` works too, but Chrome will keep serving stale JS unless you hard-reload (Ctrl+Shift+R).
 
 The production scope, vertical-slice gates, art rules, and initial runtime budgets are documented in [`PRODUCTION_DIRECTION.md`](./PRODUCTION_DIRECTION.md). This is being built as a serious publishable game prototype; the browser build is the current iteration target, not a reason to lower the art or systems bar.
 
