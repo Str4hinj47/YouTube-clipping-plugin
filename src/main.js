@@ -2761,8 +2761,10 @@ async function loadBlenderAssets() {
     const importedEnvironment = prepareImportedModel(environmentResult.value.scene);
     importedEnvironment.name = 'Aurora Bay Environment — Blender GLB';
     let importedMountainExtension = false;
+    let importedCityBuildings = 0;
     importedEnvironment.traverse((object) => {
       if (/mountain|pinewatch|guardrail/i.test(object.name || '')) importedMountainExtension = true;
+      if (object.isMesh && /city[ _]block|building[ _]body/i.test(object.name || '')) importedCityBuildings += 1;
       const ridgeMatch = /mountain[ _]ridge[ _](\d+)/i.exec(object.name || '');
       if (ridgeMatch) {
         // The authored ridge rocks were exported straddling the mountain pass
@@ -2772,7 +2774,11 @@ async function loadBlenderAssets() {
         if (relocated) object.position.set(relocated[0], object.position.y, relocated[1]);
       }
     });
-    city.visible = false;
+    // Only retire the procedural city blocks if the authored environment
+    // actually ships buildings. The current GLB carries ground, roads,
+    // landmarks and the mountain pass but no city blocks; hiding the procedural
+    // ones left floating windows/signs and invisible collision boxes.
+    city.visible = importedCityBuildings >= 8;
     fallbackBase.visible = false;
     if (importedMountainExtension) mountainExpansion.visible = false;
     world.add(importedEnvironment);
