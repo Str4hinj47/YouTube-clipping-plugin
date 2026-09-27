@@ -19,8 +19,9 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **E** — start or rematch Midnight Sprint when near the orange gate
 - **V** — accept a courier delivery at the blue depot
 - **X** — trigger a Night Patrol pursuit
-- **G** — open the garage and buy performance upgrades
-- **P / Escape** — pause and open settings
+- **G** — open the in-game garage and buy performance upgrades or respray the car
+- **P / Escape** — pause, open settings, or return to the full title menu
+- **Title menu** — Play, Market (buy and select cars), Garage (respray and upgrades), and Settings
 - **M** — expand/collapse the map
 - **R** — reset vehicle
 - **Gamepad / touch controls** — supported on compatible devices

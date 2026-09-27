@@ -52,6 +52,10 @@ scene.add(sunsetFill);
 const world = new THREE.Group();
 world.name = 'Aurora Bay — Blender Environment';
 scene.add(world);
+const menuGarage = new THREE.Group();
+menuGarage.name = 'Neonline menu display garage';
+menuGarage.visible = false;
+scene.add(menuGarage);
 const city = new THREE.Group();
 city.name = 'Procedural Fallback Environment';
 world.add(city);
@@ -468,15 +472,27 @@ function updateTrafficSignals(time) {
 }
 
 const CAR_PROFILES = {
-  sport: { label: 'MIDNIGHT GT', scale: [1, 1, 1] },
-  hatch: { label: 'METRO HATCH', scale: [.91, .94, .84] },
-  supercar: { label: 'VELOCE R', scale: [.96, .82, 1.02] },
-  suv: { label: 'TRAIL SCOUT', scale: [1.08, 1.22, 1.02] },
-  pickup: { label: 'HARBOR UTILITY', scale: [1.1, 1.07, 1.06] },
-  wagon: { label: 'GRAND TOURER', scale: [1.04, 1.03, 1.1] },
-  classic: { label: 'CINDER CLASSIC', scale: [1.1, 1.02, 1.05] },
-  ev: { label: 'PULSE EV', scale: [1.02, .98, 1] },
+  sport: { label: 'MIDNIGHT GT', className: 'SPORT COUPE', scale: [1, 1, 1] },
+  hatch: { label: 'METRO HATCH', className: 'CITY HATCH', scale: [.91, .94, .84] },
+  supercar: { label: 'VELOCE R', className: 'SUPER COUPE', scale: [.96, .82, 1.02] },
+  suv: { label: 'TRAIL SCOUT', className: 'ADVENTURE SUV', scale: [1.08, 1.22, 1.02] },
+  pickup: { label: 'HARBOR UTILITY', className: 'UTILITY PICKUP', scale: [1.1, 1.07, 1.06] },
+  wagon: { label: 'GRAND TOURER', className: 'TOURING WAGON', scale: [1.04, 1.03, 1.1] },
+  classic: { label: 'CINDER CLASSIC', className: 'GRAND TOURER', scale: [1.1, 1.02, 1.05] },
+  ev: { label: 'PULSE EV', className: 'ELECTRIC SPORT', scale: [1.02, .98, 1] },
 };
+
+const VEHICLE_CATALOG = [
+  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94 },
+  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76 },
+  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91 },
+  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98 },
+  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84 },
+  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82 },
+  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79 },
+  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97 },
+];
+const fleetAssetScenes = {};
 
 function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style = 'sport') {
   const profile = CAR_PROFILES[style] || CAR_PROFILES.sport;
@@ -484,9 +500,12 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   root.name = playerCar ? 'Blender Midnight GT — Player' : `${profile.label} — Fictional Traffic Vehicle`;
   root.userData.wheels = [];
   root.userData.style = style;
+  root.userData.paintColor = `#${new THREE.Color(color).getHexString()}`;
+  root.userData.paintMaterials = [];
   root.userData.indicators = { left: [], right: [] };
   root.userData.headlights = [];
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color, metalness: .75, roughness: .23, clearcoat: 1, clearcoatRoughness: .13 });
+  root.userData.paintMaterials.push(bodyMaterial);
   const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x101720, metalness: .65, roughness: .23 });
   const accentMaterial = new THREE.MeshStandardMaterial({ color: accent, metalness: .4, roughness: .22, emissive: accent, emissiveIntensity: playerCar ? .32 : .08 });
   const headMaterial = new THREE.MeshStandardMaterial({ color: 0xf3fbff, emissive: 0xa8dcff, emissiveIntensity: 4.5, transparent: true, opacity: .98 });
@@ -628,13 +647,41 @@ function prepareImportedModel(root) {
   return root;
 }
 
+function applyPaintToVehicleRoot(vehicleRoot, paint) {
+  if (!vehicleRoot || !paint) return;
+  const normalizedPaint = paint.startsWith('#') ? paint : `#${paint}`;
+  vehicleRoot.userData.paintColor = normalizedPaint;
+  vehicleRoot.userData.paintMaterials?.forEach((material) => material.color.set(normalizedPaint));
+  const importedModel = vehicleRoot.userData.loadedModel;
+  importedModel?.traverse((object) => {
+    if (!object.isMesh || !object.material) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    const materialNames = materials.map((material) => material?.name || '').join(' ');
+    if (/(glass|window|wheel|tire|rubber|brake|disc|light|lamp|indicator|head|tail|chrome|trim|carbon|black)/i.test(`${object.name} ${materialNames}`)) return;
+    materials.forEach((material) => {
+      if (material?.color) {
+        material.color.set(normalizedPaint);
+        material.needsUpdate = true;
+      }
+    });
+  });
+}
+
 function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   // Keep the physics wrapper and replace only its visible geometry with the
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
   const preservedLighting = vehicleRoot.userData.lightingRig;
+  const previousLoaded = vehicleRoot.userData.loadedModel;
+  if (previousLoaded) vehicleRoot.remove(previousLoaded);
   vehicleRoot.children.forEach((child) => { if (child !== preservedLighting) child.visible = false; });
   if (preservedLighting) preservedLighting.visible = true;
   const importedCar = prepareImportedModel(sourceScene.clone(true));
+  importedCar.traverse((object) => {
+    if (!object.isMesh || !object.material) return;
+    object.material = Array.isArray(object.material)
+      ? object.material.map((material) => material.clone())
+      : object.material.clone();
+  });
   vehicleRoot.scale.setScalar(scale);
   importedCar.scale.setScalar(1);
   vehicleRoot.add(importedCar);
@@ -643,6 +690,7 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   importedCar.traverse((object) => {
     if (object.isMesh && /(wheel|tire|hub)/i.test(object.name)) vehicleRoot.userData.loadedWheels.push(object);
   });
+  applyPaintToVehicleRoot(vehicleRoot, vehicleRoot.userData.paintColor);
 }
 
 function loadOneAsset(url) {
@@ -670,6 +718,7 @@ async function loadBlenderAssets() {
   }
   if (carResult.status === 'fulfilled') {
     const importedCar = carResult.value.scene;
+    fleetAssetScenes.sport = importedCar;
     replaceVehicleVisual(player.mesh, importedCar, 1);
     replaceVehicleVisual(policeVehicle, importedCar, .82);
   } else {
@@ -678,6 +727,7 @@ async function loadBlenderAssets() {
   fleetStyles.forEach((style, index) => {
     const result = results[index + 2];
     if (result.status === 'fulfilled') {
+      fleetAssetScenes[style] = result.value.scene;
       traffic.filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
         replaceVehicleVisual(vehicle.mesh, result.value.scene, .78);
       });
@@ -685,6 +735,55 @@ async function loadBlenderAssets() {
       console.warn(`Fleet asset unavailable for ${style}; using procedural fallback.`, result.reason);
     }
   });
+  applyPlayerVehicleStyle(player.selectedStyle, false);
+  applyPaintToVehicleRoot(player.mesh, player.paint);
+}
+
+function buildMenuGarage() {
+  const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x101c27, roughness: .66, metalness: .32 });
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x101d2a, roughness: .86, metalness: .12 });
+  const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x070d16, roughness: .78, metalness: .4 });
+  const cyanMaterial = new THREE.MeshBasicMaterial({ color: 0x5ce3d1, transparent: true, opacity: .82 });
+  const limeMaterial = new THREE.MeshBasicMaterial({ color: 0xd6fa6a, transparent: true, opacity: .86 });
+  const pinkMaterial = new THREE.MeshBasicMaterial({ color: 0xff5b9c, transparent: true, opacity: .7 });
+  addMesh(menuGarage, new THREE.BoxGeometry(54, .28, 38), floorMaterial, [0, -.28, 0], { receiveShadow: true });
+  addMesh(menuGarage, new THREE.BoxGeometry(54, 17, .3), wallMaterial, [0, 8.2, -14.5], { receiveShadow: true });
+  addMesh(menuGarage, new THREE.BoxGeometry(.3, 17, 38), wallMaterial, [-27, 8.2, 0], { receiveShadow: true });
+  addMesh(menuGarage, new THREE.BoxGeometry(.3, 17, 38), wallMaterial, [27, 8.2, 0], { receiveShadow: true });
+  addMesh(menuGarage, new THREE.BoxGeometry(54, .25, .25), darkMaterial, [0, 16.5, -14.2]);
+  for (let x = -24; x <= 24; x += 6) {
+    addMesh(menuGarage, new THREE.BoxGeometry(.035, .018, 35), cyanMaterial, [x, -.1, 0]);
+  }
+  for (let z = -12; z <= 14; z += 4) {
+    addMesh(menuGarage, new THREE.BoxGeometry(52, .018, .035), z % 8 === 0 ? limeMaterial : darkMaterial, [0, -.1, z]);
+  }
+  // A raised service plinth gives the menu car a showroom silhouette instead of a floating model.
+  addMesh(menuGarage, new THREE.CylinderGeometry(7.1, 7.3, .32, 48), darkMaterial, [0, -.05, 0], { receiveShadow: true });
+  addMesh(menuGarage, new THREE.TorusGeometry(6.65, .06, 8, 64), limeMaterial, [0, .13, 0], { rotation: [Math.PI / 2, 0, 0] });
+  addMesh(menuGarage, new THREE.TorusGeometry(5.6, .025, 8, 64), cyanMaterial, [0, .15, 0], { rotation: [Math.PI / 2, 0, 0] });
+  for (const x of [-19, 19]) {
+    addMesh(menuGarage, new THREE.BoxGeometry(3.8, .08, .18), pinkMaterial, [x, 8.8, -14.25]);
+    addMesh(menuGarage, new THREE.BoxGeometry(.12, 10, .12), cyanMaterial, [x, 5, -14.15]);
+  }
+  for (const x of [-13, -7, 0, 7, 13]) {
+    addMesh(menuGarage, new THREE.BoxGeometry(3.7, .08, .11), x === 0 ? limeMaterial : cyanMaterial, [x, 14.4, -13.95]);
+  }
+  const bayLabel = makeLabel('BAY 07 // NIGHT SERVICE', '#d6fa6a', .7);
+  bayLabel.position.set(0, 9.9, -14.1);
+  menuGarage.add(bayLabel);
+  const subLabel = makeLabel('AURORA BAY MOTOR WORKS', '#5ce3d1', .45);
+  subLabel.position.set(0, 8.9, -14.08);
+  menuGarage.add(subLabel);
+  const keyLight = new THREE.PointLight(0x86b9ff, 13, 28, 1.7);
+  keyLight.position.set(4, 8, 7);
+  menuGarage.add(keyLight);
+  const fillLight = new THREE.PointLight(0xff5b9c, 8, 22, 1.8);
+  fillLight.position.set(-12, 5, -7);
+  menuGarage.add(fillLight);
+  const rimLight = new THREE.PointLight(0x5ce3d1, 10, 25, 1.8);
+  rimLight.position.set(12, 4, -10);
+  menuGarage.add(rimLight);
+  menuGarage.userData.lights = [keyLight, fillLight, rimLight];
 }
 
 function buildWorld() {
@@ -707,6 +806,9 @@ const player = {
   distance: 0,
   rep: 1280,
   cash: 420,
+  selectedStyle: 'sport',
+  ownedCars: ['sport'],
+  paint: '#303fca',
   upgrades: { engine: 0, nitro: 0, grip: 0 },
   collectedCaches: [],
 };
@@ -778,6 +880,8 @@ let raceBest = 102.8;
 let raceNear = false;
 let garageOpen = false;
 let gamePaused = false;
+let starterMenuOpen = true;
+let menuPage = 'home';
 let qualityMode = 'HIGH';
 const upgradeConfig = {
   engine: { costs: [240, 420, 700] },
@@ -790,6 +894,9 @@ function saveProgress() {
     localStorage.setItem('neonline-aurora-save', JSON.stringify({
       cash: player.cash,
       rep: player.rep,
+      selectedStyle: player.selectedStyle,
+      ownedCars: player.ownedCars,
+      paint: player.paint,
       upgrades: player.upgrades,
       raceBest,
       cacheIds: player.collectedCaches,
@@ -806,6 +913,12 @@ function loadProgress() {
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
     if (Number.isFinite(saved.raceBest)) raceBest = saved.raceBest;
+    if (Array.isArray(saved.ownedCars)) {
+      player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
+      if (!player.ownedCars.includes('sport')) player.ownedCars.unshift('sport');
+    }
+    if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
+    if (typeof saved.paint === 'string' && /^#[0-9a-f]{6}$/i.test(saved.paint)) player.paint = saved.paint;
     if (Array.isArray(saved.cacheIds)) player.collectedCaches = saved.cacheIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
@@ -1157,8 +1270,153 @@ function updatePolice(time, dt) {
 
 createCollectibles();
 
+function vehicleCatalogEntry(style = player.selectedStyle) {
+  return VEHICLE_CATALOG.find((vehicle) => vehicle.style === style) || VEHICLE_CATALOG[0];
+}
+
+function paintName(paint) {
+  const names = {
+    '#303fca': 'MIDNIGHT BLUE',
+    '#d85062': 'SIGNAL RED',
+    '#d6fa6a': 'ACID LIME',
+    '#5ce3d1': 'AQUA MINT',
+    '#f0e6cf': 'PEARL WHITE',
+    '#141a24': 'OBSIDIAN',
+  };
+  return names[paint.toLowerCase()] || 'CUSTOM FINISH';
+}
+
+function updateMenuCash() {
+  const cash = `$${player.cash.toLocaleString('en-US')}`;
+  const rep = player.rep.toLocaleString('en-US');
+  ['#menu-cash', '#market-cash', '#menu-garage-cash', '#garage-cash'].forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = selector === '#menu-rep' ? rep : cash;
+  });
+  const repElement = document.querySelector('#menu-rep');
+  if (repElement) repElement.textContent = rep;
+  const balance = document.querySelector('#menu-balance-copy');
+  if (balance) balance.textContent = `${cash} AVAILABLE`;
+}
+
+function updateMenuVehicleUi() {
+  const vehicle = vehicleCatalogEntry();
+  const nameElements = ['#menu-vehicle-name', '#menu-garage-name'];
+  nameElements.forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = vehicle.name;
+  });
+  const classElements = ['#menu-vehicle-class', '#menu-garage-class'];
+  classElements.forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = vehicle.className;
+  });
+  const copy = document.querySelector('#menu-vehicle-copy');
+  if (copy) copy.textContent = vehicle.description;
+  const paint = document.querySelector('#menu-vehicle-paint');
+  if (paint) paint.textContent = paintName(player.paint);
+  const art = document.querySelector('.menu-art-car');
+  if (art) art.style.setProperty('--menu-paint', player.paint);
+  const power = document.querySelector('.menu-stat-bars em');
+  const grip = document.querySelectorAll('.menu-stat-bars em')[1];
+  const styleScore = document.querySelectorAll('.menu-stat-bars em')[2];
+  if (power) power.style.width = `${vehicle.power}%`;
+  if (grip) grip.style.width = `${vehicle.grip}%`;
+  if (styleScore) styleScore.style.width = `${vehicle.styleScore}%`;
+  const hudName = document.querySelector('.vehicle-name');
+  if (hudName) hudName.textContent = vehicle.name;
+  const menuGarageCash = document.querySelector('#menu-garage-cash');
+  if (menuGarageCash) menuGarageCash.textContent = `$${player.cash.toLocaleString('en-US')}`;
+  document.querySelectorAll('[data-paint-group] .paint-swatch').forEach((swatch) => {
+    swatch.classList.toggle('active', swatch.dataset.paint.toLowerCase() === player.paint.toLowerCase());
+  });
+  const selectedMarket = document.querySelector('.market-card.selected');
+  if (selectedMarket) selectedMarket.style.setProperty('--card-paint', player.paint);
+  // The profile line in the HUD remains useful after changing cars from the title screen.
+  const meta = document.querySelector('.vehicle-meta');
+  if (meta) meta.innerHTML = `<span>${vehicle.className.includes('ELECTRIC') ? 'AWD' : 'RWD'}</span><i></i><span>${vehicle.className}</span><i></i><span id="surface-state">ASPHALT</span>`;
+  const garageHeading = document.querySelector('#garage-overlay .garage-header h2');
+  if (garageHeading) garageHeading.textContent = vehicle.name;
+  const profile = document.querySelector('#garage-overlay .garage-specs strong');
+  if (profile) profile.textContent = `${paintName(player.paint)} SPEC`;
+  const garageClass = document.querySelector('#garage-overlay .garage-specs > span');
+  if (garageClass) garageClass.textContent = `${vehicle.className} / ${vehicle.style.toUpperCase()}`;
+}
+
+function renderMarket() {
+  const grid = document.querySelector('#market-grid');
+  if (!grid) return;
+  const ownedCount = document.querySelector('#market-owned-count');
+  if (ownedCount) ownedCount.textContent = String(player.ownedCars.length);
+  grid.innerHTML = VEHICLE_CATALOG.map((vehicle) => {
+    const owned = player.ownedCars.includes(vehicle.style);
+    const selected = player.selectedStyle === vehicle.style;
+    const action = !owned ? 'BUY' : selected ? 'SELECTED' : 'SELECT';
+    const buttonClass = !owned ? 'buy' : selected ? 'selected-button' : '';
+    const disabled = selected ? 'disabled' : '';
+    const price = vehicle.price ? `$${vehicle.price.toLocaleString('en-US')}` : 'STARTER RIDE';
+    return `<article class="market-card ${owned ? 'owned' : ''} ${selected ? 'selected' : ''}" style="--card-paint:${vehicle.paint};--card-accent:${vehicle.accent}">
+      <div class="market-art"><div class="market-art-car"></div><div class="market-art-wheel a"></div><div class="market-art-wheel b"></div></div>
+      <div class="market-tag"><span>${vehicle.className}</span><b>${owned ? 'OWNED' : 'LOCKED'}</b></div>
+      <h3>${vehicle.name}</h3><p>${vehicle.description}</p>
+      <div class="market-card-footer"><span class="market-price ${vehicle.price ? '' : 'free'}">${price}</span><button class="market-card-button ${buttonClass}" data-market-style="${vehicle.style}" type="button" ${disabled}>${action}</button></div>
+    </article>`;
+  }).join('');
+}
+
+function applyPlayerVehicleStyle(style, announce = true) {
+  if (!player.ownedCars.includes(style)) return false;
+  const vehicle = vehicleCatalogEntry(style);
+  const oldMesh = player.mesh;
+  const oldParent = oldMesh.parent;
+  const wasMenuCar = oldParent === menuGarage || starterMenuOpen;
+  if (oldParent) oldParent.remove(oldMesh);
+  const paintHex = new THREE.Color(player.paint).getHex();
+  const nextMesh = createCar(paintHex, new THREE.Color(vehicle.accent).getHex(), true, style);
+  nextMesh.position.copy(wasMenuCar ? new THREE.Vector3(0, .02, 0) : player.position);
+  nextMesh.rotation.y = player.heading;
+  player.mesh = nextMesh;
+  player.selectedStyle = style;
+  if (fleetAssetScenes[style]) replaceVehicleVisual(nextMesh, fleetAssetScenes[style], 1);
+  applyPaintToVehicleRoot(nextMesh, player.paint);
+  (wasMenuCar ? menuGarage : actors).add(nextMesh);
+  updateGarageUi();
+  if (announce) showToast('VEHICLE SELECTED', `${vehicle.name} is ready for Aurora Bay`, 'GARAGE UPDATED');
+  return true;
+}
+
+function applyPlayerPaint(paint, announce = true) {
+  if (!/^#[0-9a-f]{6}$/i.test(paint)) return;
+  player.paint = paint.toLowerCase();
+  applyPaintToVehicleRoot(player.mesh, player.paint);
+  updateGarageUi();
+  saveProgress();
+  if (announce) showToast('BODY SHOP COMPLETE', `${paintName(player.paint)} finish applied`, 'FREE RESPRAY');
+}
+
+function purchaseMarketVehicle(style) {
+  const vehicle = vehicleCatalogEntry(style);
+  if (player.ownedCars.includes(style)) {
+    applyPlayerVehicleStyle(style);
+    setMenuPage('home');
+    return;
+  }
+  if (player.cash < vehicle.price) {
+    showToast('FUNDS TOO LOW', `${vehicle.name} needs $${vehicle.price.toLocaleString('en-US')}`, 'EARN MORE CASH');
+    return;
+  }
+  player.cash -= vehicle.price;
+  player.ownedCars.push(style);
+  saveProgress();
+  applyPlayerVehicleStyle(style, false);
+  renderMarket();
+  updateGarageUi();
+  showToast('VEHICLE ACQUIRED', `${vehicle.name} added to your garage`, `$${vehicle.price.toLocaleString('en-US')}`);
+}
+
 function updateGarageUi() {
-  document.querySelector('#garage-cash').textContent = `$${player.cash.toLocaleString('en-US')}`;
+  const garageCash = document.querySelector('#garage-cash');
+  if (garageCash) garageCash.textContent = `$${player.cash.toLocaleString('en-US')}`;
   document.querySelectorAll('.upgrade-card').forEach((card) => {
     const key = card.dataset.upgrade;
     const level = player.upgrades[key];
@@ -1168,6 +1426,76 @@ function updateGarageUi() {
     card.disabled = !cost || player.cash < cost;
     card.classList.toggle('maxed', !cost);
   });
+  updateMenuCash();
+  updateMenuVehicleUi();
+  renderMarket();
+}
+
+function setMenuPage(page) {
+  const validPages = ['home', 'market', 'garage', 'settings'];
+  menuPage = validPages.includes(page) ? page : 'home';
+  document.querySelectorAll('.menu-nav-button').forEach((button) => button.classList.toggle('active', button.dataset.menuPage === menuPage));
+  document.querySelectorAll('.menu-page').forEach((section) => section.classList.toggle('active', section.dataset.menuContent === menuPage));
+  updateGarageUi();
+}
+
+function setStarterMenuOpen(open) {
+  starterMenuOpen = open;
+  const overlay = document.querySelector('#main-menu-overlay');
+  overlay.classList.toggle('open', open);
+  overlay.setAttribute('aria-hidden', String(!open));
+  if (open) {
+    if (garageOpen) setGarageOpen(false);
+    if (gamePaused) setPauseOpen(false);
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    touchSteer = 0;
+    world.visible = false;
+    menuGarage.visible = true;
+    if (player.mesh.parent !== menuGarage) {
+      player.mesh.parent?.remove(player.mesh);
+      menuGarage.add(player.mesh);
+    }
+    player.mesh.position.set(0, .02, 0);
+    player.speed = 0;
+    setMenuPage('home');
+    updateGarageUi();
+    ensureAudio();
+    if (audioState.master && audioState.context) audioState.master.gain.setTargetAtTime(soundOn ? .2 : 0, audioState.context.currentTime, .08);
+  } else {
+    world.visible = true;
+    menuGarage.visible = false;
+    if (player.mesh.parent !== actors) {
+      player.mesh.parent?.remove(player.mesh);
+      actors.add(player.mesh);
+    }
+    player.position.set(0, .02, 0);
+    player.speed = 0;
+    player.heading = 0;
+    policeState = 'idle';
+    policeVehicle.visible = false;
+    policeSiren.visible = false;
+    wantedLevel = 0;
+    raceState = 'idle';
+    deliveryState = 'idle';
+    player.mesh.position.copy(player.position);
+    player.mesh.rotation.y = player.heading;
+    gamePaused = false;
+    if (soundOn) ensureAudio();
+  }
+}
+
+function updateMenuShowcase(time, dt) {
+  if (!starterMenuOpen) return;
+  player.mesh.position.set(0, .02, 0);
+  player.mesh.rotation.y = .18 + Math.sin(time * .00028) * .17;
+  const desiredCamera = new THREE.Vector3(8.7, 4.35, 10.8);
+  camera.position.lerp(desiredCamera, 1 - Math.exp(-3.2 * dt));
+  const lookTarget = new THREE.Vector3(0, 1.05, 0);
+  camera.lookAt(lookTarget);
+  camera.fov = damp(camera.fov, 48, 3, dt);
+  camera.updateProjectionMatrix();
+  const pulse = (Math.sin(time * .002) + 1) / 2;
+  menuGarage.userData.lights?.forEach((light, index) => { light.intensity = [13, 8 + pulse * 2, 10 + (1 - pulse) * 2][index]; });
 }
 
 function setGarageOpen(open) {
@@ -1206,9 +1534,12 @@ function applyQualityMode() {
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.querySelector('#quality-label').textContent = qualityMode;
+  const menuQuality = document.querySelector('#menu-settings-quality');
+  if (menuQuality) menuQuality.textContent = qualityMode;
 }
 
 function setPauseOpen(open) {
+  if (open && starterMenuOpen) return;
   if (open && garageOpen) setGarageOpen(false);
   gamePaused = open;
   const overlay = document.querySelector('#pause-overlay');
@@ -1226,10 +1557,15 @@ function resetSavedProgress() {
   try { localStorage.removeItem('neonline-aurora-save'); } catch (error) { console.warn('Progress reset unavailable.', error); }
   player.cash = 420;
   player.rep = 1280;
+  player.ownedCars = ['sport'];
+  player.selectedStyle = 'sport';
+  player.paint = '#303fca';
   player.upgrades = { engine: 0, nitro: 0, grip: 0 };
   player.nitro = 76;
   raceBest = 102.8;
   player.collectedCaches = [];
+  applyPlayerVehicleStyle('sport', false);
+  applyPlayerPaint(player.paint, false);
   resetCollectibles();
   updateGarageUi();
   showToast('PROGRESS RESET', 'Fresh run, same city', 'LOCAL SAVE CLEARED');
@@ -1329,12 +1665,12 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
-  if (garageOpen || gamePaused) {
+  if (starterMenuOpen || garageOpen || gamePaused) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
     audioState.nitroGain.gain.setTargetAtTime(0, now, .08);
-    audioState.master.gain.setTargetAtTime(soundOn && garageOpen ? .22 : 0, now, .08);
+    audioState.master.gain.setTargetAtTime(soundOn ? (starterMenuOpen ? .2 : garageOpen ? .22 : 0) : 0, now, .08);
     return;
   }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
@@ -1389,6 +1725,11 @@ function setInput(code, value) {
 }
 window.addEventListener('keydown', (event) => {
   ensureAudio();
+  if (starterMenuOpen) {
+    if (event.code === 'Escape' && !event.repeat && menuPage !== 'home') setMenuPage('home');
+    if (event.code === 'Enter' && !event.repeat && menuPage === 'home') setStarterMenuOpen(false);
+    return;
+  }
   if (event.code === 'Escape' && !event.repeat) {
     if (garageOpen) setGarageOpen(false);
     else if (gamePaused) setPauseOpen(false);
@@ -1403,7 +1744,7 @@ window.addEventListener('keydown', (event) => {
     if (!gamePaused) setGarageOpen(!garageOpen);
     return;
   }
-  if (garageOpen || gamePaused) return;
+  if (garageOpen || gamePaused || starterMenuOpen) return;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   if (event.code === 'KeyC' && !event.repeat) {
     cameraMode = (cameraMode + 1) % 2;
@@ -1488,15 +1829,21 @@ function setupMobileControls() {
 }
 setupMobileControls();
 
-document.querySelector('#sound-toggle').addEventListener('click', (event) => {
+function toggleSound() {
   soundOn = !soundOn;
-  event.currentTarget.textContent = soundOn ? '◒' : '◑';
-  event.currentTarget.style.color = soundOn ? '' : 'var(--orange)';
+  document.querySelectorAll('#sound-toggle, #menu-sound-toggle').forEach((button) => {
+    button.textContent = soundOn ? '◒' : '◑';
+    button.style.color = soundOn ? '' : 'var(--orange)';
+  });
+  const menuSound = document.querySelector('#menu-settings-sound');
+  if (menuSound) menuSound.textContent = soundOn ? 'ON' : 'OFF';
   if (soundOn) ensureAudio();
   if (audioState.master && audioState.context) {
-    audioState.master.gain.setTargetAtTime(soundOn ? .28 : 0, audioState.context.currentTime, .08);
+    audioState.master.gain.setTargetAtTime(soundOn ? (starterMenuOpen ? .2 : .28) : 0, audioState.context.currentTime, .08);
   }
-});
+}
+
+document.querySelector('#sound-toggle').addEventListener('click', toggleSound);
 document.querySelector('#map-expand').addEventListener('click', () => {
   const panel = document.querySelector('.map-panel');
   panel.classList.toggle('expanded');
@@ -1518,7 +1865,34 @@ document.querySelector('#quality-toggle').addEventListener('click', () => {
   showToast('RENDER MODE', `${qualityMode} quality profile applied`, '');
 });
 document.querySelector('#reset-save').addEventListener('click', () => resetSavedProgress());
+
+document.querySelectorAll('.menu-nav-button').forEach((button) => {
+  button.addEventListener('click', () => setMenuPage(button.dataset.menuPage));
+});
+document.querySelectorAll('[data-menu-goto]').forEach((button) => {
+  button.addEventListener('click', () => setMenuPage(button.dataset.menuGoto));
+});
+document.querySelector('#menu-play-button').addEventListener('click', () => setStarterMenuOpen(false));
+document.querySelector('#main-menu-button').addEventListener('click', () => {
+  setPauseOpen(false);
+  setStarterMenuOpen(true);
+});
+document.querySelector('#market-grid').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-market-style]');
+  if (button) purchaseMarketVehicle(button.dataset.marketStyle);
+});
+document.querySelectorAll('[data-paint-group] .paint-swatch').forEach((button) => {
+  button.addEventListener('click', () => applyPlayerPaint(button.dataset.paint));
+});
+document.querySelector('#menu-sound-toggle').addEventListener('click', toggleSound);
+document.querySelector('#menu-settings-sound').addEventListener('click', toggleSound);
+document.querySelector('#menu-settings-quality').addEventListener('click', () => {
+  qualityMode = qualityMode === 'HIGH' ? 'PERFORMANCE' : 'HIGH';
+  applyQualityMode();
+});
+document.querySelector('#menu-settings-reset').addEventListener('click', () => resetSavedProgress());
 updateGarageUi();
+setStarterMenuOpen(true);
 applyQualityMode();
 
 function resetRoadFurniture() {
@@ -1897,6 +2271,7 @@ function resize() {
 window.addEventListener('resize', resize);
 
 buildWorld();
+buildMenuGarage();
 
 let assetsReady = false;
 loadBlenderAssets()
@@ -1908,9 +2283,9 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  if (!garageOpen && !gamePaused) sessionSeconds += dt;
+  if (!starterMenuOpen && !garageOpen && !gamePaused) sessionSeconds += dt;
   updateGamepad();
-  if (!garageOpen && !gamePaused) {
+  if (!starterMenuOpen && !garageOpen && !gamePaused) {
     updatePlayer(dt);
     updateTraffic(dt);
     updateCollectibles(time, dt);
@@ -1921,7 +2296,8 @@ function animate(time) {
     updateBeacons(time, dt);
   }
   updateAudio();
-  updateCamera(dt);
+  if (starterMenuOpen) updateMenuShowcase(time, dt);
+  else updateCamera(dt);
   hudAccumulator += dt;
   if (hudAccumulator > .08) { updateHud(hudAccumulator); hudAccumulator = 0; }
   renderer.render(scene, camera);

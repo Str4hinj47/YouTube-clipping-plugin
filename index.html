@@ -106,9 +106,81 @@
           <div class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY // SESSION PAUSED</div>
           <h2>RUN <b>PAUSED</b></h2>
           <p>Take a breath. Your route and progress are safe.</p>
-          <div class="pause-actions"><button class="pause-primary" id="resume-button" type="button">RESUME RUN <span>↗</span></button><button class="pause-secondary" id="pause-restart" type="button">RESET VEHICLE</button></div>
+          <div class="pause-actions"><button class="pause-primary" id="resume-button" type="button">RESUME RUN <span>↗</span></button><button class="pause-secondary" id="pause-restart" type="button">RESET VEHICLE</button><button class="pause-secondary" id="main-menu-button" type="button">MAIN MENU</button></div>
           <div class="pause-settings"><div><small>RENDER QUALITY</small><b id="quality-label">HIGH</b></div><button class="pause-secondary" id="quality-toggle" type="button">CHANGE</button><div><small>PROGRESS</small><b>LOCAL SAVE</b></div><button class="pause-secondary danger" id="reset-save" type="button">CLEAR SAVE</button></div>
           <div class="pause-footer"><span><span class="keycap">P</span> PAUSE</span><span><span class="keycap">ESC</span> CLOSE</span><span class="pause-version">NEONLINE 0.4 // BUILD 275BC9C</span></div>
+        </div>
+      </section>
+
+      <section class="main-menu-overlay open" id="main-menu-overlay" aria-hidden="false">
+        <div class="menu-grid-lines" aria-hidden="true"></div>
+        <div class="menu-shell">
+          <header class="menu-header">
+            <div class="menu-brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><div class="brand-name">NEON<span>LINE</span></div><div class="brand-sub">AURORA BAY // NIGHT DRIVE</div></div></div>
+            <div class="menu-header-status"><span class="pulse-dot"></span><span>GARAGE BAY 07</span><b>LOCAL PROFILE</b></div>
+            <div class="menu-header-actions"><span class="menu-cash"><small>CASH</small><b id="menu-cash">$420</b></span><span class="menu-rep"><small>REP</small><b id="menu-rep">1,280</b></span><button class="menu-icon-button" id="menu-sound-toggle" type="button" aria-label="Toggle sound">◒</button></div>
+          </header>
+          <div class="menu-body">
+            <aside class="menu-sidebar">
+              <div class="menu-welcome"><span class="eyebrow-dot"></span> WELCOME BACK, MILES</div>
+              <h1>OWN THE<br><b>NIGHT.</b></h1>
+              <p>Build your line through Aurora Bay. Tune the ride, find the clean route, and leave your mark.</p>
+              <nav class="menu-nav" aria-label="Main menu">
+                <button class="menu-nav-button active" data-menu-page="home" type="button"><b>01</b><span>PLAY</span><small>FREE ROAM</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="market" type="button"><b>02</b><span>MARKET</span><small>BUY CARS</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="garage" type="button"><b>03</b><span>GARAGE</span><small>RESPRAY // TUNE</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="settings" type="button"><b>04</b><span>SETTINGS</span><small>OPTIONS // CONTROLS</small><i>↗</i></button>
+              </nav>
+              <div class="menu-sidebar-footer"><span class="pulse-dot"></span><span>AURORA BAY ONLINE</span><b>0.4</b></div>
+            </aside>
+            <main class="menu-main">
+              <section class="menu-page active" data-menu-content="home">
+                <div class="menu-page-kicker"><span>GARAGE FLOOR // BAY 07</span><b>22:48 / CLEAR</b></div>
+                <div class="menu-hero-copy"><div><span class="eyebrow"><span class="eyebrow-dot"></span> CURRENT RIDE</span><h2 id="menu-vehicle-name">MIDNIGHT <b>GT</b></h2><p id="menu-vehicle-copy">The city is still awake. Your line is waiting.</p></div><div class="menu-ready-badge"><span></span><b>READY TO DRIVE</b><small>ALL SYSTEMS NOMINAL</small></div></div>
+                <div class="menu-vehicle-card">
+                  <div class="menu-vehicle-card-art"><span class="menu-art-scan"></span><span class="menu-art-label">NL—07 // BLUE HOUR SPEC</span><div class="menu-art-floor"></div><div class="menu-art-car"><i></i><b></b><em></em></div><div class="menu-art-wheel menu-art-wheel-a"></div><div class="menu-art-wheel menu-art-wheel-b"></div></div>
+                  <div class="menu-vehicle-info"><div class="menu-stat-line"><span>CLASS</span><b id="menu-vehicle-class">SPORT COUPE</b></div><div class="menu-stat-line"><span>DRIVETRAIN</span><b>RWD // 6 SPEED</b></div><div class="menu-stat-line"><span>PAINT</span><b id="menu-vehicle-paint">MIDNIGHT BLUE</b></div><div class="menu-stat-bars"><div><span>POWER</span><i><em style="width:86%"></em></i></div><div><span>GRIP</span><i><em style="width:72%"></em></i></div><div><span>STYLE</span><i><em style="width:94%"></em></i></div></div><button class="menu-ghost-button" data-menu-goto="garage" type="button">CUSTOMIZE RIDE <span>↗</span></button></div>
+                </div>
+                <div class="menu-home-bottom"><div class="menu-quick-card"><span class="quick-icon">⌁</span><div><small>NEXT OBJECTIVE</small><b>THE LONG WAY HOME</b><p>Reach the next beacon and keep the city moving.</p></div><strong>+120 REP</strong></div><div class="menu-quick-card"><span class="quick-icon cyan">◈</span><div><small>GARAGE BALANCE</small><b id="menu-balance-copy">$420 AVAILABLE</b><p>Buy a new silhouette or upgrade the one you own.</p></div><button class="menu-quick-link" data-menu-goto="market" type="button">VISIT MARKET ↗</button></div></div>
+                <button class="menu-play-button" id="menu-play-button" type="button"><span class="play-mark">▶</span><span><b>PLAY AURORA BAY</b><small>ENTER OPEN WORLD // FREE ROAM</small></span><i>↗</i></button>
+              </section>
+
+              <section class="menu-page" data-menu-content="market">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY MARKET</span><h2>CHOOSE YOUR <b>LINE.</b></h2></div><span class="menu-page-note">FICTIONAL FLEET // LOGO-FREE</span></div>
+                <p class="menu-page-intro">Own a different silhouette for every district. Every car is detailed, unbranded, and ready for the open world.</p>
+                <div class="market-toolbar"><span><b id="market-owned-count">1</b> / 8 GARAGE SLOTS FILLED</span><span>AVAILABLE <b id="market-cash">$420</b></span></div>
+                <div class="market-grid" id="market-grid"></div>
+              </section>
+
+              <section class="menu-page" data-menu-content="garage">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> GARAGE // BUILD SHEET</span><h2>MAKE IT <b>YOURS.</b></h2></div><span class="menu-page-note">AUTO-SAVE ENABLED</span></div>
+                <div class="menu-garage-identity"><div><span id="menu-garage-class">RWD / SPORT COUPE</span><strong id="menu-garage-name">MIDNIGHT GT</strong><small>Current vehicle // selected for free roam</small></div><div><small>AVAILABLE FUNDS</small><b id="menu-garage-cash">$420</b></div></div>
+                <div class="menu-section-heading"><span>BODY SHOP // RESPRAY</span><small>SELECT FINISH</small></div>
+                <div class="paint-swatches menu-paints" data-paint-group>
+                  <button class="paint-swatch active" data-paint="#303fca" type="button"><i style="--paint:#303fca"></i><span>MIDNIGHT</span></button><button class="paint-swatch" data-paint="#d85062" type="button"><i style="--paint:#d85062"></i><span>SIGNAL</span></button><button class="paint-swatch" data-paint="#d6fa6a" type="button"><i style="--paint:#d6fa6a"></i><span>ACID</span></button><button class="paint-swatch" data-paint="#5ce3d1" type="button"><i style="--paint:#5ce3d1"></i><span>AQUA</span></button><button class="paint-swatch" data-paint="#f0e6cf" type="button"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button><button class="paint-swatch" data-paint="#141a24" type="button"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
+                </div>
+                <div class="menu-section-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS // 3 LEVELS</small></div>
+                <div class="upgrade-list menu-upgrade-list">
+                  <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+                  <button class="upgrade-card" data-upgrade="nitro" type="button"><span class="upgrade-icon">✦</span><span class="upgrade-copy"><b>NITRO CELL</b><small>Capacity + recharge rate</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$220</small></span></button>
+                  <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and cleaner drifts</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$180</small></span></button>
+                </div>
+                <div class="menu-garage-note"><span class="pulse-dot"></span> Paint changes are free. Performance modules use your Aurora Bay balance.</div>
+              </section>
+
+              <section class="menu-page" data-menu-content="settings">
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> SYSTEM CONFIGURATION</span><h2>SETTINGS <b>//</b> CONTROL.</h2></div><span class="menu-page-note">BUILD 275BC9C</span></div>
+                <div class="settings-list">
+                  <div class="settings-row"><div><b>AUDIO MIX</b><small>Engine, ambience, impacts, and menu UI</small></div><button class="settings-action" id="menu-settings-sound" type="button">ON</button></div>
+                  <div class="settings-row"><div><b>RENDER QUALITY</b><small>Shadows, pixel density, and lighting detail</small></div><button class="settings-action" id="menu-settings-quality" type="button">HIGH</button></div>
+                  <div class="settings-row"><div><b>TOUCH CONTROLS</b><small>Show mobile driving controls on touch devices</small></div><button class="settings-action static" type="button">AUTO</button></div>
+                  <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, owned cars, upgrades, and routes</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
+                </div>
+                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SHIFT</b> NITRO</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>E</b> EVENT</span><span><b>V</b> DELIVERY</span><span><b>X</b> PATROL</span><span><b>G</b> GARAGE</span></div></div>
+              </section>
+            </main>
+          </div>
+          <footer class="menu-footer"><span><span class="keycap">ENTER</span> SELECT</span><span><span class="keycap">ESC</span> BACK</span><span class="menu-footer-center">NO BRANDS. NO BOUNDARIES. JUST THE LINE.</span><span>NEONLINE // AURORA BAY</span></footer>
         </div>
       </section>
 
@@ -118,6 +190,15 @@
           <div class="garage-vehicle-row">
             <div class="garage-car-art"><div class="garage-car-glow"></div><div class="garage-car-body"><i></i><b></b><em></em></div><div class="garage-wheel wheel-a"></div><div class="garage-wheel wheel-b"></div></div>
             <div class="garage-specs"><span>RWD / SPORT COUPE</span><strong>BLUE HOUR SPEC</strong><small>Build your line. Make the city yours.</small><div class="garage-balance"><span>AVAILABLE FUNDS</span><b id="garage-cash">$420</b></div></div>
+          </div>
+          <div class="respray-heading"><span>BODY SHOP // RESPRAY</span><small>SELECT FINISH</small></div>
+          <div class="paint-swatches" data-paint-group>
+            <button class="paint-swatch active" data-paint="#303fca" type="button" aria-label="Midnight blue paint"><i style="--paint:#303fca"></i><span>MIDNIGHT</span></button>
+            <button class="paint-swatch" data-paint="#d85062" type="button" aria-label="Signal red paint"><i style="--paint:#d85062"></i><span>SIGNAL</span></button>
+            <button class="paint-swatch" data-paint="#d6fa6a" type="button" aria-label="Acid lime paint"><i style="--paint:#d6fa6a"></i><span>ACID</span></button>
+            <button class="paint-swatch" data-paint="#5ce3d1" type="button" aria-label="Aqua paint"><i style="--paint:#5ce3d1"></i><span>AQUA</span></button>
+            <button class="paint-swatch" data-paint="#f0e6cf" type="button" aria-label="Pearl paint"><i style="--paint:#f0e6cf"></i><span>PEARL</span></button>
+            <button class="paint-swatch" data-paint="#141a24" type="button" aria-label="Obsidian paint"><i style="--paint:#141a24"></i><span>OBSIDIAN</span></button>
           </div>
           <div class="upgrade-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS / 3 LEVELS</small></div>
           <div class="upgrade-list">
