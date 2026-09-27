@@ -1,6 +1,6 @@
 # Neonline // Aurora Bay
 
-A stylized open-world night driving game built as a browser prototype. Cruise legally through a modular neon city, climb the two-lane mountain pass with opposing traffic, use the full Aurora Bay map to plan routes, discover route beacons, collect data caches, run city and Pinewatch village deliveries, and explore the waterfront at your own pace.
+A stylized open-world driving game built as a browser prototype. Cruise legally through a modular neon city, climb the two-lane mountain pass with opposing traffic, watch the accelerated day/night cycle move the dynamic sun and moon across the island, use the full Aurora Bay map to plan routes, discover route beacons, collect data caches, run city and Pinewatch village deliveries, and explore the waterfront at your own pace.
 
 ## Run
 

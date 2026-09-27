@@ -64,6 +64,9 @@ const CITY_LIMIT = 116;
 const WORLD_LIMIT = 5000;
 const WORLD_SECTOR_SIZE = 500;
 const WORLD_STREAM_RADIUS = 1;
+const DAY_CYCLE_DURATION = 480;
+const DAY_CYCLE_START_PHASE = .70; // 22:48 at a 06:00 sunrise reference.
+let dayCycleSeconds = DAY_CYCLE_DURATION * DAY_CYCLE_START_PHASE;
 const worldRegions = [
   { name: 'AURORA BAY', x: 0, z: 0, type: 'city', color: '#d6fa6a' },
   { name: 'PINEWATCH VILLAGE', x: 136, z: 68, type: 'mountain', color: '#ff9d50' },
@@ -148,6 +151,7 @@ camera.position.set(0, 6, -12);
 const ambient = new THREE.HemisphereLight(0x93b3c0, 0x122019, 1.65);
 scene.add(ambient);
 const moon = new THREE.DirectionalLight(0xb9d2ff, 2.0);
+moon.name = 'Dynamic moonlight';
 moon.position.set(-55, 90, -42);
 moon.castShadow = true;
 moon.shadow.mapSize.set(1024, 1024);
@@ -158,6 +162,20 @@ moon.shadow.camera.bottom = -120;
 moon.shadow.camera.near = 1;
 moon.shadow.camera.far = 260;
 scene.add(moon);
+scene.add(moon.target);
+const sun = new THREE.DirectionalLight(0xfff1cf, 0);
+sun.name = 'Dynamic sunlight';
+sun.position.set(0, 140, 80);
+sun.castShadow = false;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -120;
+sun.shadow.camera.right = 120;
+sun.shadow.camera.top = 120;
+sun.shadow.camera.bottom = -120;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 260;
+scene.add(sun);
+scene.add(sun.target);
 const sunsetFill = new THREE.DirectionalLight(0xff8f6b, 0.52);
 sunsetFill.position.set(70, 28, 80);
 scene.add(sunsetFill);
@@ -166,6 +184,31 @@ scene.add(sunsetFill);
 const nightRim = new THREE.DirectionalLight(0x4b88a8, 0.34);
 nightRim.position.set(-100, 72, -130);
 scene.add(nightRim);
+
+const dayNightState = {
+  phase: DAY_CYCLE_START_PHASE,
+  sunHeight: -1,
+  daylight: 0,
+  twilight: 0,
+  sunDirection: new THREE.Vector3(-.31, -.81, .39).normalize(),
+  moonDirection: new THREE.Vector3(.31, .81, -.39).normalize(),
+};
+const dayNightSunPosition = new THREE.Vector3();
+const dayNightLights = [];
+const dayNightPalette = {
+  nightAmbient: new THREE.Color(0x93b3c0),
+  dayAmbient: new THREE.Color(0xd7e8ef),
+  nightGround: new THREE.Color(0x122019),
+  dayGround: new THREE.Color(0x6f806f),
+  nightFog: new THREE.Color(0x0c1a24),
+  dayFog: new THREE.Color(0x9bb6bd),
+  nightBackground: new THREE.Color(0x091522),
+  dayBackground: new THREE.Color(0x9ab8c6),
+  nightMoon: new THREE.Color(0xb9d2ff),
+  dayMoon: new THREE.Color(0x758ca8),
+  nightSun: new THREE.Color(0xffa16c),
+  daySun: new THREE.Color(0xfff2d0),
+};
 
 const world = new THREE.Group();
 world.name = 'Aurora Bay — Blender Environment';
@@ -519,14 +562,21 @@ function makeLabel(text, color = '#d6fa6a', scale = 1) {
 let skyStars = null;
 let skyMoon = null;
 let skyMoonGlow = null;
+let skySun = null;
+let skySunGlow = null;
 let skyMaterial = null;
 const skyMoonOffset = new THREE.Vector3(-75, 68, -145);
+const skySunOffset = new THREE.Vector3();
 
 function buildSky() {
   // The gradient is deliberately shader-only: it gives the city a teal horizon,
   // indigo zenith, and a very subtle magenta pollution band for depth at distance.
   skyMaterial = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+    uniforms: {
+      uTime: { value: 0 },
+      uDaylight: { value: 0 },
+      uTwilight: { value: 0 },
+    },
     vertexShader: `
       varying vec3 vWorldPosition;
       void main() {
@@ -537,22 +587,28 @@ function buildSky() {
     `,
     fragmentShader: `
       uniform float uTime;
+      uniform float uDaylight;
+      uniform float uTwilight;
       varying vec3 vWorldPosition;
       void main() {
         vec3 direction = normalize(vWorldPosition - cameraPosition);
         float horizon = smoothstep(-.18, .48, direction.y);
-        vec3 horizonColor = vec3(.045, .135, .18);
-        vec3 zenithColor = vec3(.008, .018, .055);
+        vec3 nightHorizon = vec3(.045, .135, .18);
+        vec3 dayHorizon = vec3(.42, .62, .7);
+        vec3 nightZenith = vec3(.008, .018, .055);
+        vec3 dayZenith = vec3(.12, .28, .5);
+        vec3 horizonColor = mix(nightHorizon, dayHorizon, uDaylight);
+        vec3 zenithColor = mix(nightZenith, dayZenith, uDaylight);
         vec3 color = mix(horizonColor, zenithColor, horizon);
         float horizonBand = exp(-abs(direction.y - .035) * 18.0);
-        color += vec3(.075, .035, .075) * horizonBand;
-        color += vec3(.015, .055, .065) * pow(max(direction.y, 0.0), 1.6);
+        color += mix(vec3(.075, .035, .075), vec3(.95, .34, .16), uTwilight) * horizonBand * (1.0 + uTwilight * .55 - uDaylight * .55);
+        color += mix(vec3(.015, .055, .065), vec3(.08, .15, .18), uDaylight) * pow(max(direction.y, 0.0), 1.6);
         float skyMask = smoothstep(.02, .38, direction.y) * (1.0 - smoothstep(.42, .7, direction.y));
         float ribbonA = exp(-abs(direction.y - (.2 + sin(direction.x * 7.5 + direction.z * 2.2 + uTime * .055) * .055)) * 28.0);
         float ribbonB = exp(-abs(direction.y - (.29 + sin(direction.x * 12.0 - direction.z * 3.5 - uTime * .072) * .045)) * 34.0);
         float strands = .55 + .45 * (sin(direction.x * 25.0 + direction.z * 9.0 + uTime * .25) * .5 + .5);
         vec3 auroraColor = mix(vec3(.12, .72, .62), vec3(.46, .26, .72), .5 + .5 * sin(direction.x * 3.0 + uTime * .08));
-        color += auroraColor * (ribbonA * .075 + ribbonB * .04) * strands * skyMask;
+        color += auroraColor * (ribbonA * .075 + ribbonB * .04) * strands * skyMask * (1.0 - uDaylight * .92);
         float cloudSignal = sin(direction.x * 15.0 + direction.z * 8.0 + uTime * .018) * .5 + .5;
         cloudSignal *= sin(direction.x * 4.0 - direction.z * 13.0 - uTime * .012) * .5 + .5;
         float cloudHaze = smoothstep(.62, .82, cloudSignal) * exp(-abs(direction.y - .095) * 19.0);
@@ -590,11 +646,100 @@ function buildSky() {
   const moonDisk = addMesh(world, new THREE.CircleGeometry(13, 32), new THREE.MeshBasicMaterial({ color: 0x90a9b1, transparent: true, opacity: .14, side: THREE.DoubleSide, depthWrite: false }), [-75, 68, -145]);
   skyMoon = moonDisk;
   moonDisk.lookAt(camera.position);
+  const sunGlowMaterial = new THREE.MeshBasicMaterial({ color: 0xffa45e, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const sunHalo = addMesh(world, new THREE.CircleGeometry(34, 32), sunGlowMaterial, [0, 0, 0]);
+  sunHalo.renderOrder = -9;
+  skySunGlow = sunHalo;
+  const sunDisk = addMesh(world, new THREE.CircleGeometry(15, 32), new THREE.MeshBasicMaterial({ color: 0xfff0c2, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }), [0, 0, 0]);
+  sunDisk.renderOrder = -8;
+  skySun = sunDisk;
+  sunDisk.lookAt(camera.position);
+}
+
+function dayNightSmoothstep(edge0, edge1, value) {
+  const amount = clamp((value - edge0) / Math.max(.0001, edge1 - edge0), 0, 1);
+  return amount * amount * (3 - 2 * amount);
+}
+
+function dayNightClockLabel(phase) {
+  const totalMinutes = (6 * 60 + phase * 24 * 60) % (24 * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.floor(totalMinutes % 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function updateDayNight(dt = 0) {
+  if (dt > 0) dayCycleSeconds = (dayCycleSeconds + dt) % DAY_CYCLE_DURATION;
+  const phase = dayCycleSeconds / DAY_CYCLE_DURATION;
+  const angle = phase * Math.PI * 2;
+  const sunHeight = Math.sin(angle);
+  const daylight = dayNightSmoothstep(-.12, .3, sunHeight);
+  const twilightBand = clamp(1 - Math.abs(sunHeight) / .4, 0, 1);
+  const twilight = twilightBand * (1 - daylight * .55);
+  const horizontal = Math.cos(angle);
+  dayNightSunPosition.set(horizontal * 180, sunHeight * 170, 78);
+  dayNightState.phase = phase;
+  dayNightState.sunHeight = sunHeight;
+  dayNightState.daylight = daylight;
+  dayNightState.twilight = twilight;
+  dayNightState.sunDirection.copy(dayNightSunPosition).normalize();
+  dayNightState.moonDirection.copy(dayNightState.sunDirection).multiplyScalar(-1);
+
+  sun.position.copy(player.position).addScaledVector(dayNightState.sunDirection, 170);
+  moon.position.copy(player.position).addScaledVector(dayNightState.moonDirection, 150);
+  sun.target.position.copy(player.position);
+  moon.target.position.copy(player.position);
+  sun.intensity = daylight * 2.45 + twilight * .18;
+  moon.intensity = .08 + (1 - daylight) * 1.92;
+  sun.color.copy(dayNightPalette.daySun).lerp(dayNightPalette.nightSun, twilight);
+  moon.color.copy(dayNightPalette.nightMoon).lerp(dayNightPalette.dayMoon, daylight);
+  sun.castShadow = daylight > .12;
+  moon.castShadow = daylight <= .12;
+  const artificialIntensity = .2 + (1 - daylight) * .8;
+  dayNightLights.forEach((light) => {
+    light.intensity = (light.userData.dayNightBaseIntensity || light.intensity) * artificialIntensity;
+  });
+  sunsetFill.intensity = .28 * (1 - daylight) + twilight * .58 + daylight * .12;
+  nightRim.intensity = .34 * (1 - daylight) + daylight * .08;
+  ambient.intensity = 1.65 + daylight * .52 + twilight * .12;
+  ambient.color.lerpColors(dayNightPalette.nightAmbient, dayNightPalette.dayAmbient, daylight);
+  ambient.groundColor.lerpColors(dayNightPalette.nightGround, dayNightPalette.dayGround, daylight);
+  const atmosphericBlend = clamp(daylight + twilight * .3, 0, 1);
+  scene.fog.color.lerpColors(dayNightPalette.nightFog, dayNightPalette.dayFog, atmosphericBlend);
+  scene.background.lerpColors(dayNightPalette.nightBackground, dayNightPalette.dayBackground, atmosphericBlend * .72);
+  mats.water.uniforms.uSunDirection.value.copy(dayNightState.sunDirection);
+  mats.ocean.uniforms.uSunDirection.value.copy(dayNightState.sunDirection);
+
+  if (skyMaterial) {
+    skyMaterial.uniforms.uDaylight.value = daylight;
+    skyMaterial.uniforms.uTwilight.value = twilight;
+  }
+  if (skyStars) skyStars.material.opacity = .62 * (1 - daylight) * (1 - twilight * .42);
+  if (skyMoonGlow) {
+    skyMoonGlow.material.opacity = .035 * (1 - daylight);
+    skyMoonGlow.material.color.setHex(0x5ca4b6);
+  }
+  if (skyMoon) {
+    skyMoon.material.opacity = .14 * (1 - daylight);
+    skyMoon.material.color.setHex(0x90a9b1);
+  }
+  if (skySunGlow) {
+    skySunGlow.material.color.copy(dayNightPalette.nightSun).lerp(dayNightPalette.daySun, daylight);
+    skySunGlow.material.opacity = dayNightSmoothstep(-.02, .16, sunHeight) * (.08 + twilight * .17);
+  }
+  if (skySun) {
+    skySun.material.color.copy(dayNightPalette.daySun).lerp(dayNightPalette.nightSun, twilight);
+    skySun.material.opacity = dayNightSmoothstep(-.02, .12, sunHeight) * (.72 + twilight * .22);
+  }
+  const timeReadout = document.querySelector('#world-time');
+  if (timeReadout) timeReadout.textContent = dayNightClockLabel(phase);
 }
 
 function updateSky(time = 0) {
   if (skyMaterial) skyMaterial.uniforms.uTime.value = time * .001;
   if (skyStars) skyStars.position.copy(camera.position);
+  skyMoonOffset.copy(dayNightState.moonDirection).multiplyScalar(620);
+  skySunOffset.copy(dayNightState.sunDirection).multiplyScalar(620);
   if (skyMoonGlow) {
     skyMoonGlow.position.copy(camera.position).add(skyMoonOffset);
     skyMoonGlow.lookAt(camera.position);
@@ -602,6 +747,14 @@ function updateSky(time = 0) {
   if (skyMoon) {
     skyMoon.position.copy(camera.position).add(skyMoonOffset);
     skyMoon.lookAt(camera.position);
+  }
+  if (skySunGlow) {
+    skySunGlow.position.copy(camera.position).add(skySunOffset);
+    skySunGlow.lookAt(camera.position);
+  }
+  if (skySun) {
+    skySun.position.copy(camera.position).add(skySunOffset);
+    skySun.lookAt(camera.position);
   }
 }
 
@@ -679,8 +832,9 @@ function updateVisualPolish(time) {
   polishPulseMeshes.forEach(({ material, baseOpacity, phase }) => {
     material.opacity = baseOpacity * (.84 + Math.sin(seconds * 2.1 + phase) * .16);
   });
+  const artificialIntensity = .2 + (1 - dayNightState.daylight) * .8;
   polishPulseLights.forEach(({ light, baseIntensity, phase }) => {
-    light.intensity = baseIntensity * (.88 + Math.sin(seconds * 1.7 + phase) * .12);
+    light.intensity = baseIntensity * artificialIntensity * (.88 + Math.sin(seconds * 1.7 + phase) * .12);
   });
 }
 
@@ -1501,6 +1655,8 @@ function createStreetLight(x, z, horizontal = false, seed = 1, parent = city) {
   if (seed % 4 === 0) {
     const light = new THREE.PointLight(0xff9561, 1.3, 13, 2);
     light.position.copy(lamp.position);
+    light.userData.dayNightBaseIntensity = 1.3;
+    dayNightLights.push(light);
     group.add(light);
   }
   parent.add(group);
@@ -3131,6 +3287,8 @@ function createPinewatchStreetLight(x, z, seed = 1) {
   if (seed % 2 === 0) {
     const light = new THREE.PointLight(0xffb27d, 1.1, 10, 2);
     light.position.set(.78, 3.2, 0);
+    light.userData.dayNightBaseIntensity = 1.1;
+    dayNightLights.push(light);
     group.add(light);
   }
   pinewatchExpansion.add(group);
@@ -8377,6 +8535,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 buildWorld();
+updateDayNight(0);
 worldBuilt = true;
 buildHomeProperties();
 createCargoPickupVisuals();
@@ -8401,6 +8560,7 @@ function animate(time) {
   updateGamepad();
   const simulationActive = !starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen && !roadsideStopOpen;
   if (simulationActive) {
+    updateDayNight(dt);
     physicsAccumulator = Math.min(physicsAccumulator + dt, PHYSICS_FIXED_STEP * MAX_PHYSICS_STEPS);
     let physicsSteps = 0;
     while (physicsAccumulator >= PHYSICS_FIXED_STEP && physicsSteps < MAX_PHYSICS_STEPS) {
