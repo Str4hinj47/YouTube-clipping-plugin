@@ -71,7 +71,7 @@
       <section class="map-panel glass-panel hud-layer">
         <div class="map-heading"><span>MAP</span><button id="map-expand" type="button">⌗ FULL</button></div>
         <canvas id="mini-map" width="220" height="220"></canvas>
-        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot delivery-map-dot"></i> WAYPOINT</span></div>
+        <div class="map-footer"><span><i class="legend-dot player-dot"></i> YOU</span><span><i class="legend-dot beacon-dot"></i> BEACON</span><span><i class="legend-dot delivery-map-dot"></i> WAYPOINT</span><span><i class="legend-dot shop-map-dot"></i> SHOP</span></div>
       </section>
 
       <section class="world-map-overlay" id="world-map-overlay" aria-hidden="true">
@@ -85,7 +85,7 @@
             <aside class="world-map-sidebar">
               <div class="world-map-readout"><small>YOU ARE HERE</small><strong id="world-map-location">NORTHSTAR AVE</strong><span id="world-map-coordinates">X 000 // Z 000</span></div>
               <div class="world-map-route-card"><span class="eyebrow"><span class="eyebrow-dot event-dot"></span> ACTIVE ROUTE</span><strong id="world-map-route">NEXT BEACON</strong><p id="world-map-route-copy">Follow the orange marker through the city.</p></div>
-              <div class="world-map-legend"><span class="world-map-section-title">ROAD LEGEND</span><div><i class="legend-dot player-dot"></i><span>YOU / HEADING</span></div><div><i class="legend-dot beacon-dot"></i><span>BEACON NETWORK</span></div><div><i class="legend-dot delivery-map-dot"></i><span>COURIER POINT</span></div><div><i class="legend-dot incident-map-dot"></i><span>RADAR STOP</span></div></div>
+              <div class="world-map-legend"><span class="world-map-section-title">ROAD LEGEND</span><div><i class="legend-dot player-dot"></i><span>YOU / HEADING</span></div><div><i class="legend-dot beacon-dot"></i><span>BEACON NETWORK</span></div><div><i class="legend-dot delivery-map-dot"></i><span>COURIER POINT</span></div><div><i class="legend-dot incident-map-dot"></i><span>RADAR STOP</span></div><div><i class="legend-dot shop-map-dot"></i><span>MECHANIC SHOP</span></div></div>
               <div class="world-map-places"><span class="world-map-section-title">KNOWN PLACES</span><span>PINEWATCH VILLAGE</span><span>MOUNTAIN PASS</span><span>REDWOOD VALLEY</span><span>LAKE AURORA</span><span>CINDER FLATS</span><span>EASTGATE</span><span>NORTHSTAR OUTPOST</span><span>SOUTHERN CROSSROADS</span><span>NORTHSTAR OVERLOOK</span><span>PULSE STATION</span><span>OCTANE ROW</span><span>SOUTH MARKET</span><span>WATERFRONT LOOP</span></div>
               <button class="world-map-close-button" id="world-map-close-button" type="button">RETURN TO DRIVE <span>ESC / M</span></button>
             </aside>
@@ -155,6 +155,11 @@
       </section>
 
       <div class="rep-toast hud-layer" id="rep-toast"><span class="toast-icon">✦</span><div><b>BEACON DISCOVERED</b><small>New route unlocked in Neon District</small></div><span class="toast-rep">+120 REP</span></div>
+      <section class="mechanic-shop-prompt hud-layer" id="mechanic-shop-prompt" aria-hidden="true">
+        <div class="mechanic-shop-prompt-kicker"><span class="pulse-dot"></span> SERVICE BAY // <span id="mechanic-shop-district">NORTHSTAR AVE</span></div>
+        <strong id="mechanic-shop-name">NORTHSTAR AUTO WORKS</strong>
+        <button id="mechanic-shop-action" type="button"><span class="keycap">E</span><span>OPEN REPAIR BAY</span><b>STOP TO SERVICE</b></button>
+      </section>
       <div class="center-reticle hud-layer" aria-hidden="true"><span></span></div>
       <div class="pause-hint hud-layer"><span class="pulse-dot"></span> OPEN WORLD <span>•</span> NO LIMITS</div>
 

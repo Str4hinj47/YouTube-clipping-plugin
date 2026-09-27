@@ -101,6 +101,24 @@ const PINEWATCH_DIRT_ZONES = [
   { x: 156, z: 55, width: 13, depth: 8, rotation: -.12 },
 ];
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const MECHANIC_SHOP_LOCATIONS = [
+  { id: 'waterfront-loop-mechanic', name: 'WATERFRONT LOOP GARAGE', district: 'WATERFRONT LOOP', x: -102, z: -84, heading: 0 },
+  { id: 'neon-district-mechanic', name: 'NEON DISTRICT MOTOR WORKS', district: 'NEON DISTRICT', x: 88, z: -22, heading: Math.PI / 2 },
+  { id: 'octane-row-mechanic', name: 'OCTANE ROW SERVICE', district: 'OCTANE ROW', x: -88, z: -22, heading: -Math.PI / 2 },
+  { id: 'northstar-avenue-mechanic', name: 'NORTHSTAR AVE GARAGE', district: 'NORTHSTAR AVE', x: 0, z: 88, heading: 0 },
+  { id: 'midtown-east-mechanic', name: 'MIDTOWN EAST AUTOWORKS', district: 'MIDTOWN EAST', x: 88, z: 22, heading: Math.PI / 2 },
+  { id: 'south-market-mechanic', name: 'SOUTH MARKET REPAIR', district: 'SOUTH MARKET', x: -42, z: -44, heading: 0 },
+  { id: 'outer-ridge-mechanic', name: 'OUTER RIDGE SERVICE', district: 'OUTER RIDGE', x: -140, z: 0, heading: Math.PI / 2 },
+  { id: 'mountain-pass-mechanic', name: 'MOUNTAIN PASS WORKSHOP', district: 'MOUNTAIN PASS', x: 122, z: 154, heading: .35 },
+  { id: 'pinewatch-mechanic', name: 'PINEWATCH MOTOR HOUSE', district: 'PINEWATCH VILLAGE', x: 182, z: 72, heading: .15 },
+  { id: 'northstar-outpost-mechanic', name: 'NORTHSTAR OUTPOST SERVICE', district: 'NORTHSTAR OUTPOST', x: 400, z: 2025, heading: 0 },
+  { id: 'redwood-valley-mechanic', name: 'REDWOOD VALLEY GARAGE', district: 'REDWOOD VALLEY', x: -1750, z: 1780, heading: -.5 },
+  { id: 'lake-aurora-mechanic', name: 'LAKE AURORA SERVICE', district: 'LAKE AURORA', x: -2280, z: -1190, heading: .2 },
+  { id: 'cinder-flats-mechanic', name: 'CINDER FLATS MOTOR WORKS', district: 'CINDER FLATS', x: 2260, z: -1820, heading: -.65 },
+  { id: 'eastgate-mechanic', name: 'EASTGATE FLEET SERVICE', district: 'EASTGATE', x: 2760, z: 540, heading: .8 },
+  { id: 'southern-crossroads-mechanic', name: 'SOUTHERN CROSSROADS REPAIR', district: 'SOUTHERN CROSSROADS', x: 460, z: -2760, heading: -.9 },
+];
+const mechanicShops = [];
 
 // Homes are persistent spawn points. The starter is intentionally a modest,
 // poorly furnished Pinewatch shack; later properties are optional purchases.
@@ -264,6 +282,9 @@ world.add(waterfrontDetails);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
+const mechanicShopGroup = new THREE.Group();
+mechanicShopGroup.name = 'District mechanic shops';
+world.add(mechanicShopGroup);
 const surfaceEffects = new THREE.Group();
 surfaceEffects.name = 'Loose dirt and gravel surface effects';
 world.add(surfaceEffects);
@@ -3493,6 +3514,68 @@ function addRegionalRoadNetwork() {
   });
 }
 
+function mechanicShopGroundHeight(shop) {
+  const mountain = nearestMountainRoadPoint(shop.x, shop.z);
+  const villageDistance = Math.hypot(shop.x - mountainVillagePosition.x, shop.z - mountainVillagePosition.z);
+  if (mountain.distance < 48 && (villageDistance < 90 || shop.district === 'MOUNTAIN PASS')) return mountain.height;
+  const regional = nearestRegionalRoadPoint(shop.x, shop.z);
+  if (regional.distance < 18) return regional.height;
+  return .02;
+}
+
+function createMechanicShop(shop) {
+  const groundY = mechanicShopGroundHeight(shop);
+  const group = new THREE.Group();
+  group.name = `${shop.name} // district mechanic shop`;
+  group.position.set(shop.x, groundY, shop.z);
+  group.rotation.y = shop.heading;
+  const width = 8.2;
+  const depth = 6.4;
+  const height = 3.7;
+  addMesh(group, new THREE.BoxGeometry(width + 3.2, .08, depth + 3.2), mats.asphaltEdge, [0, .02, 0], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), mats.buildingFrame, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width + .24, .18, depth + .24), mats.mountainRockLit, [0, height + .09, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .62, 2.18, .08), mats.glass, [0, 1.2, depth / 2 + .045], { castShadow: true });
+  for (let row = 0; row < 4; row += 1) {
+    addMesh(group, new THREE.BoxGeometry(width * .58, .045, .06), mats.event, [0, .35 + row * .47, depth / 2 + .1]);
+  }
+  addMesh(group, new THREE.BoxGeometry(width * .76, .14, .08), mats.event, [0, height * .73, depth / 2 + .1]);
+  addMesh(group, new THREE.BoxGeometry(.14, 2.35, .1), mats.event, [-width * .31, 1.18, depth / 2 + .105]);
+  addMesh(group, new THREE.BoxGeometry(.14, 2.35, .1), mats.event, [width * .31, 1.18, depth / 2 + .105]);
+  addMesh(group, new THREE.BoxGeometry(1.9, .14, .08), mats.lamp, [0, height + .38, depth / 2 + .12]);
+  const sign = makeLabel('MECHANIC SHOP', '#ffbd80', .44);
+  sign.position.set(0, height + .72, depth / 2 + .16);
+  group.add(sign);
+  const light = new THREE.PointLight(0xff9561, 1.25, 13, 2);
+  light.position.set(0, 3.1, depth / 2 + .55);
+  light.userData.dayNightBaseIntensity = 1.25;
+  dayNightLights.push(light);
+  group.add(light);
+  const ringMaterial = mats.event.clone();
+  const ring = addMesh(group, new THREE.TorusGeometry(1.65, .08, 8, 32), ringMaterial, [0, .16, depth / 2 + 2.15], { rotation: [Math.PI / 2, 0, 0] });
+  const interactionPoint = new THREE.Vector3(0, .02, depth / 2 + 2.15).applyAxisAngle(Y_AXIS, shop.heading);
+  interactionPoint.add(new THREE.Vector3(shop.x, groundY, shop.z));
+  const obstacle = addObstacle(shop.x, shop.z, width / 2 + .35, depth / 2 + .35, 'mechanic-shop', group);
+  obstacle.mechanicShopId = shop.id;
+  mechanicShopGroup.add(group);
+  mechanicShops.push({ ...shop, group, ring, sign, light, groundY, interactionPoint, obstacle, pulse: Math.random() * Math.PI * 2 });
+}
+
+function buildMechanicShops() {
+  mechanicShops.length = 0;
+  MECHANIC_SHOP_LOCATIONS.forEach((shop) => createMechanicShop(shop));
+}
+
+function updateMechanicShopVisuals(time, dt) {
+  mechanicShops.forEach((shop) => {
+    const pulse = (Math.sin(time * .004 + shop.pulse) + 1) / 2;
+    shop.ring.rotation.z += dt * .5;
+    shop.ring.scale.setScalar(1 + pulse * .09);
+    shop.ring.material.opacity = .55 + pulse * .35;
+    shop.sign.material.opacity = .8 + pulse * .2;
+  });
+}
+
 function worldSectorIndices(x, z) {
   return { x: Math.floor(x / WORLD_SECTOR_SIZE), z: Math.floor(z / WORLD_SECTOR_SIZE) };
 }
@@ -3832,6 +3915,7 @@ function buildWorld() {
   createUrbanRouteTraffic();
   buildMountainWorld();
   addRegionalRoadNetwork();
+  buildMechanicShops();
   createRegionalTraffic();
   createSpeedRadarSites();
 }
@@ -3942,6 +4026,7 @@ let phoneSelectedMessageId = '';
 let phoneNotificationTimer = null;
 let roadsideStopHistory = [];
 let roadsideStopSequence = 0;
+let nearbyMechanicShop = null;
 let pendingSavedRun = null;
 let menuShowcaseIndex = 0;
 let menuShowcaseElapsed = 0;
@@ -6490,6 +6575,10 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (worldMapOpen || phoneOpen) return;
+  if (event.code === 'KeyE' && !event.repeat) {
+    interactWithMechanicShop();
+    return;
+  }
   if (event.code === 'KeyG' && !event.repeat) {
     if (!gamePaused) setGarageOpen(!garageOpen);
     return;
@@ -6609,6 +6698,7 @@ document.querySelector('#world-map-overlay').addEventListener('click', (event) =
   if (event.target.id === 'world-map-overlay') setWorldMapOpen(false);
 });
 document.querySelector('#garage-open').addEventListener('click', () => setGarageOpen(true));
+document.querySelector('#mechanic-shop-action').addEventListener('click', interactWithMechanicShop);
 document.querySelector('#water-recovery-open-garage').addEventListener('click', () => setGarageOpen(true));
 document.querySelector('#garage-close').addEventListener('click', () => setGarageOpen(false));
 document.querySelector('#garage-overlay').addEventListener('click', (event) => {
@@ -6987,6 +7077,49 @@ function districtAt(x, z) {
   if (z > 44) return 'NORTHSTAR AVE';
   if (x > 0) return 'MIDTOWN EAST';
   return 'SOUTH MARKET';
+}
+
+function playerServiceSpeed() {
+  return Math.max(Math.abs(player.speed || 0), player.physics?.velocity?.length() || 0);
+}
+
+function updateMechanicShopPrompt() {
+  const prompt = document.querySelector('#mechanic-shop-prompt');
+  const name = document.querySelector('#mechanic-shop-name');
+  const district = document.querySelector('#mechanic-shop-district');
+  const action = document.querySelector('#mechanic-shop-action');
+  if (!prompt || !name || !district || !action) return;
+  let closest = null;
+  let closestDistance = Infinity;
+  mechanicShops.forEach((shop) => {
+    const distance = player.position.distanceTo(shop.interactionPoint);
+    if (distance < closestDistance) {
+      closest = shop;
+      closestDistance = distance;
+    }
+  });
+  const blocked = starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen || roadsideStopOpen;
+  nearbyMechanicShop = !blocked && closest && closestDistance <= 15.5 ? closest : null;
+  const visible = Boolean(nearbyMechanicShop);
+  prompt.classList.toggle('visible', visible);
+  prompt.setAttribute('aria-hidden', String(!visible));
+  if (!visible) return;
+  district.textContent = nearbyMechanicShop.district;
+  name.textContent = nearbyMechanicShop.name;
+  const stopped = playerServiceSpeed() < 1.35;
+  action.classList.toggle('ready', stopped);
+  action.setAttribute('aria-disabled', String(!stopped));
+  action.querySelectorAll('span')[1].textContent = stopped ? 'OPEN REPAIR BAY' : 'STOP TO SERVICE';
+  action.querySelector('b').textContent = stopped ? 'REUSE GARAGE SYSTEM' : 'BRAKE TO INTERACT';
+}
+
+function interactWithMechanicShop() {
+  if (!nearbyMechanicShop || starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen || roadsideStopOpen) return;
+  if (playerServiceSpeed() >= 1.35) {
+    showToast('STOP TO SERVICE', 'Bring the vehicle to a complete stop inside the marked bay', 'PRESS E WHEN PARKED');
+    return;
+  }
+  setGarageOpen(true);
 }
 
 function updatePlayerLighting(steering) {
@@ -7938,6 +8071,34 @@ function worldToMap(x, z, size) {
   return { x: (x + WORLD_LIMIT) / (WORLD_LIMIT * 2) * size, y: size - (z + WORLD_LIMIT) / (WORLD_LIMIT * 2) * size };
 }
 
+function drawMechanicShopMarkers(ctx, size, markerRadius = 3.5) {
+  mechanicShops.forEach((shop) => {
+    const point = worldToMap(shop.x, shop.z, size);
+    const active = nearbyMechanicShop?.id === shop.id;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.fillStyle = active ? '#ffe0b8' : '#ff9d50';
+    ctx.strokeStyle = active ? '#fff0d7' : 'rgba(255,157,80,.78)';
+    ctx.lineWidth = active ? 1.6 : 1;
+    ctx.shadowColor = '#ff9d50';
+    ctx.shadowBlur = active ? 10 : 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, active ? markerRadius + 1.2 : markerRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#182029';
+    ctx.lineWidth = Math.max(.8, markerRadius * .28);
+    ctx.beginPath();
+    ctx.moveTo(-markerRadius * .55, markerRadius * .55);
+    ctx.lineTo(markerRadius * .55, -markerRadius * .55);
+    ctx.moveTo(-markerRadius * .55, -markerRadius * .55);
+    ctx.lineTo(markerRadius * .55, markerRadius * .55);
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
 let navigationGraph = null;
 let navigationRouteCache = null;
 
@@ -8199,6 +8360,7 @@ function drawMiniMap() {
   const villagePoint = worldToMap(mountainVillagePosition.x, mountainVillagePosition.z, size);
   mapCtx.fillStyle = '#d6fa6a';
   mapCtx.fillRect(villagePoint.x - 2.5, villagePoint.y - 2.5, 5, 5);
+  drawMechanicShopMarkers(mapCtx, size, 3.2);
   beaconPositions.forEach((position, index) => {
     const point = worldToMap(position.x, position.z, size);
     const active = index === routeStep;
@@ -8394,6 +8556,7 @@ function drawWorldMap() {
   ctx.shadowBlur = 10;
   ctx.beginPath(); ctx.moveTo(villagePoint.x, villagePoint.y - 7); ctx.lineTo(villagePoint.x + 7, villagePoint.y); ctx.lineTo(villagePoint.x, villagePoint.y + 7); ctx.lineTo(villagePoint.x - 7, villagePoint.y); ctx.closePath(); ctx.fill();
   ctx.shadowBlur = 0;
+  drawMechanicShopMarkers(ctx, mapSize, 5.2);
 
   beaconPositions.forEach((position, index) => {
     const point = worldToMap(position.x, position.z, mapSize);
@@ -8518,6 +8681,7 @@ function updateHud(dt) {
   const engine = clamp(91 + Math.round(Math.abs(player.speed) / 4), 0, 99);
   document.querySelector('.vehicle-bars .bar span').style.width = `${engine}%`;
   document.querySelector('.vehicle-bars .bar-label b').textContent = `${engine}%`;
+  updateMechanicShopPrompt();
   if (dt > 0) {
     drawMiniMap();
     if (worldMapOpen) drawWorldMap();
@@ -8600,6 +8764,7 @@ function animate(time) {
   updateAudio();
   updateWater(time);
   updateFoliageWind(time);
+  updateMechanicShopVisuals(time, dt);
   updateVisualPolish(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
   else updateCamera(dt);
