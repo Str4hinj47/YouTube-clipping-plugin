@@ -1892,7 +1892,7 @@ const PROGRESSION_CONFIG = {
 };
 
 const VEHICLE_CATALOG = [
-  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, vehicleValue: 2200, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
+  { style: 'sport', name: 'GOLF 6 STARTER', className: 'COMPACT HATCH', price: 0, vehicleValue: 2200, paint: '#202833', accent: '#6fa8ff', description: 'Your hand-built compact hatch starter.', power: 76, grip: 82, styleScore: 88, acceleration: 21, topSpeed: 36, brakePower: 37, turnRate: 1.98, turnSpeed: 16, offRoadTraction: .78 },
   { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, vehicleValue: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
   { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, vehicleValue: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78 },
   { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, vehicleValue: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6 },
@@ -1906,7 +1906,7 @@ const VEHICLE_CATALOG = [
 // vehicle catalog or progression IDs. Values are normalized for the game's
 // world scale rather than intended as literal kilograms or real-world units.
 const VEHICLE_PHYSICS_PROFILES = {
-  sport: { mass: 1.5, wheelbase: 2.65, steeringLock: .54, yawResponse: 8.2, lateralGrip: 1.0, suspension: .11, brakeBias: .64 },
+  sport: { mass: 1.32, wheelbase: 2.5, steeringLock: .58, yawResponse: 8.7, lateralGrip: 1.08, suspension: .13, brakeBias: .63 },
   hatch: { mass: 1.25, wheelbase: 2.5, steeringLock: .58, yawResponse: 8.8, lateralGrip: 1.1, suspension: .13, brakeBias: .62 },
   ev: { mass: 1.9, wheelbase: 2.7, steeringLock: .53, yawResponse: 8.6, lateralGrip: 1.08, suspension: .12, brakeBias: .65 },
   classic: { mass: 1.65, wheelbase: 2.75, steeringLock: .49, yawResponse: 6.9, lateralGrip: .82, suspension: .15, brakeBias: .59 },
@@ -2753,7 +2753,7 @@ async function loadBlenderAssets() {
   const fleetStyles = ['hatch', 'supercar', 'suv', 'pickup', 'wagon', 'classic', 'ev', 'sport'];
   const results = await Promise.allSettled([
     loadOneAsset('./assets/aurora_bay_environment.glb'),
-    loadOneAsset('./assets/midnight_gt.glb'),
+    loadOneAsset('./assets/golf6_starter.glb'),
     ...fleetStyles.map((style) => loadOneAsset(`./assets/fleet/${style}.glb`)),
     ...AUTHORED_REGION_ASSETS.map(({ url }) => loadOptionalAsset(url)),
   ]);
@@ -2778,12 +2778,12 @@ async function loadBlenderAssets() {
     replaceVehicleVisual(player.mesh, importedCar, 1);
     replaceVehicleVisual(policeVehicle, importedCar, .82);
   } else {
-    console.warn('Blender hero car unavailable; using procedural fallback.', carResult.reason);
+    console.warn('Blender starter car unavailable; using procedural fallback.', carResult.reason);
   }
   fleetStyles.forEach((style, index) => {
     const result = results[index + 2];
     if (result.status === 'fulfilled') {
-      fleetAssetScenes[style] = result.value.scene;
+      if (style !== PROGRESSION_CONFIG.starterStyle) fleetAssetScenes[style] = result.value.scene;
       [...traffic, ...urbanRouteTraffic, ...mountainTraffic, ...regionalTraffic].filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
         replaceVehicleVisual(vehicle.mesh, result.value.scene, .78);
       });

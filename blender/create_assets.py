@@ -373,6 +373,114 @@ def make_car(body_mat=PAINT, trim_mat=LIME, name="MIDNIGHT GT / Blender vehicle"
     return root
 
 
+def make_golf6_starter(body_mat=None, trim_mat=None, name="Golf 6 starter hatch / handmade Blender vehicle"):
+    """Build the starter as a hand-authored, logo-free Mk6 compact hatchback.
+
+    This is not the browser procedural car generator and does not use badges or
+    trademarked marks.  The proportions deliberately follow a late-2000s compact
+    five-door hatch: short front overhang, upright greenhouse, thick C-pillars,
+    almost vertical hatch glass, modest wheel/tire package, and practical bumpers.
+    """
+    body_mat = body_mat or material("Starter deep graphite paint", (.055, .07, .085), .78, .24)
+    trim_mat = trim_mat or material("Starter subtle blue trim", (.11, .28, .62), .35, .24, (.015, .075, .18), 1.1)
+    root = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(root)
+
+    # Main steel shell: compact hatchback proportions instead of a long sports coupe.
+    body_stations = [
+        (-1.98, .74, .42, .94), (-1.78, .91, .42, 1.08), (-1.38, 1.02, .42, 1.18),
+        (-.72, 1.06, .42, 1.22), (.08, 1.08, .42, 1.22), (.78, 1.06, .42, 1.18),
+        (1.34, 1.00, .42, 1.09), (1.76, .88, .42, 1.00), (1.94, .70, .43, .88),
+    ]
+    rounded_hull("golf6 compact rounded body shell", body_stations, body_mat, root)
+
+    # Hatchback-specific upright roof and rear quarter massing.
+    cube("golf6 flat roof panel", (0, 1.58, -.34), (1.58, .12, 1.78), body_mat, .07, root)
+    cube("golf6 rear hatch metal surround", (0, 1.16, -1.73), (1.52, .64, .28), body_mat, .06, root)
+    cube("golf6 lower tailgate skin", (0, .82, -1.92), (1.74, .42, .16), body_mat, .05, root)
+    cube("golf6 front hood slab with softened crown", (0, 1.10, 1.18), (1.72, .095, 1.12), body_mat, .075, root)
+    cube("golf6 front bumper painted cover", (0, .68, 1.92), (1.86, .34, .22), body_mat, .07, root)
+    cube("golf6 rear bumper painted cover", (0, .66, -2.02), (1.86, .32, .24), body_mat, .07, root)
+    cube("golf6 black lower front valance", (0, .49, 2.02), (1.74, .16, .14), BLACK_PLASTIC, .03, root)
+    cube("golf6 black rear lower valance", (0, .49, -2.09), (1.62, .16, .14), BLACK_PLASTIC, .03, root)
+
+    # Glasshouse with tall windshield, separate side windows, and thick rear pillar.
+    cabin_stations = [
+        (-1.34, .60, 1.02, 1.32), (-1.08, .72, 1.04, 1.58), (-.48, .78, 1.05, 1.72),
+        (.34, .77, 1.05, 1.72), (.96, .69, 1.04, 1.55), (1.32, .55, 1.02, 1.31),
+    ]
+    rounded_hull("golf6 continuous dark greenhouse glass", cabin_stations, GLASS, root)
+    cube("golf6 dark cabin interior volume", (0, 1.14, -.12), (1.28, .22, 1.9), INTERIOR, .035, root)
+    cube("golf6 upright rear hatch glass", (0, 1.32, -1.58), (1.28, .075, .72), GLASS, .03, root)
+    cube("golf6 windshield reflective pane", (0, 1.34, .92), (1.30, .075, .74), GLASS, .03, root)
+    cube("golf6 panoramic roof dark insert", (0, 1.665, -.24), (1.16, .035, .92), GLASS, .02, root)
+
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        # Pillars and beltline seals keep the greenhouse recognisably Mk6-hatch-like.
+        beam_between(f"{prefix} golf6 A pillar black", (side * .69, 1.05, .72), (side * .57, 1.66, .43), .082, BLACK_PLASTIC, root, .016)
+        beam_between(f"{prefix} golf6 B pillar black", (side * .82, 1.04, -.18), (side * .75, 1.70, -.18), .092, BLACK_PLASTIC, root, .016)
+        beam_between(f"{prefix} golf6 thick C pillar body color", (side * .74, 1.06, -.94), (side * .58, 1.58, -1.24), .17, body_mat, root, .025)
+        beam_between(f"{prefix} golf6 lower window rubber seal", (side * 1.02, 1.02, -1.18), (side * 1.02, 1.02, .62), .038, RUBBER, root, .006)
+        beam_between(f"{prefix} golf6 roof drip rail", (side * .82, 1.64, -1.18), (side * .70, 1.68, .54), .038, BLACK_PLASTIC, root, .008)
+
+        # Five-door shut lines and practical handles.
+        beam_between(f"{prefix} golf6 front door shut line", (side * 1.085, .72, .34), (side * 1.085, 1.10, .34), .018, RUBBER, root, .004)
+        beam_between(f"{prefix} golf6 rear door shut line", (side * 1.095, .72, -.58), (side * 1.095, 1.12, -.58), .018, RUBBER, root, .004)
+        beam_between(f"{prefix} golf6 hatch side shut line", (side * .86, .84, -1.44), (side * .86, 1.32, -1.73), .018, RUBBER, root, .004)
+        cube(f"{prefix} golf6 front flush door handle", (side * 1.12, 1.02, .08), (.038, .04, .24), CHROME, .008, root)
+        cube(f"{prefix} golf6 rear flush door handle", (side * 1.12, 1.02, -.78), (.038, .04, .24), CHROME, .008, root)
+        cylinder(f"{prefix} golf6 round fuel flap", (side * 1.11, .89, -1.10), .115, .02, body_mat, 24, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.006)
+
+        # Compact hatch mirrors, wheel arches, rocker plastics, and side molding.
+        mirror = uv_sphere(f"{prefix} golf6 compact mirror housing", (side * .94, 1.22, .58), (.18, .095, .115), body_mat, root)
+        mirror.rotation_euler[0] = -.08
+        uv_sphere(f"{prefix} golf6 mirror glass", (side * 1.07, 1.225, .58), (.016, .082, .074), GLASS, root)
+        beam_between(f"{prefix} golf6 mirror stalk", (side * .81, 1.13, .57), (side * .96, 1.19, .58), .04, BLACK_PLASTIC, root, .008)
+        torus(f"{prefix} golf6 front wheel arch plastic lip", (side * 1.075, .50, 1.18), .505, .038, BLACK_PLASTIC, (0, math.pi / 2, 0), root)
+        torus(f"{prefix} golf6 rear wheel arch plastic lip", (side * 1.075, .50, -1.26), .505, .038, BLACK_PLASTIC, (0, math.pi / 2, 0), root)
+        cube(f"{prefix} golf6 textured rocker skirt", (side * 1.065, .49, -.05), (.105, .145, 3.18), BLACK_PLASTIC, .025, root)
+        cube(f"{prefix} golf6 slim side rub strip", (side * 1.105, .81, -.25), (.036, .045, 2.18), BLACK_PLASTIC, .009, root)
+
+    # Nose: plain twin-bar grille, projector lamps and lower intakes, all badge-free.
+    cube("golf6 upper black grille opening", (0, .86, 1.965), (1.14, .14, .075), GRILLE, .024, root)
+    cube("golf6 grille upper chrome blade", (0, .915, 1.99), (1.08, .035, .035), CHROME, .006, root)
+    cube("golf6 grille lower chrome blade", (0, .805, 1.99), (1.08, .035, .035), CHROME, .006, root)
+    cube("golf6 lower honeycomb intake", (0, .58, 2.05), (1.42, .115, .07), GRILLE, .02, root)
+    for x in (-.48, -.24, 0, .24, .48):
+        cube("golf6 lower intake vertical rib", (x, .585, 2.085), (.026, .09, .035), BLACK_PLASTIC, .006, root)
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        cube(f"{prefix} golf6 rounded headlight housing", (side * .61, .93, 1.90), (.54, .16, .09), GRILLE, .032, root)
+        cylinder(f"{prefix} golf6 round headlamp projector", (side * .50, .94, 1.94), .105, .035, HEADLIGHT, 24, root, rotation=(math.pi / 2, 0, 0), smooth=True, bevel=.006)
+        cylinder(f"{prefix} golf6 inner headlamp reflector", (side * .70, .94, 1.94), .078, .03, HEADLIGHT, 20, root, rotation=(math.pi / 2, 0, 0), smooth=True, bevel=.006)
+        cube(f"{prefix} golf6 amber bumper side marker", (side * .91, .69, 1.96), (.10, .045, .035), INDICATOR, .01, root)
+
+    # Rear: wide hatch seam, simple lamps, rear wiper, blank plate recess, single exhaust.
+    cube("golf6 rear hatch shut seam top", (0, 1.535, -1.61), (1.34, .03, .035), RUBBER, .004, root)
+    cube("golf6 rear hatch center shut seam", (0, .96, -2.018), (1.48, .026, .035), RUBBER, .004, root)
+    cube("golf6 blank rear plate recess", (0, .78, -2.115), (.64, .20, .035), LICENSE_PLATE, .012, root)
+    cube("golf6 black rear plate pocket shadow", (0, .78, -2.135), (.74, .27, .025), GRILLE, .01, root)
+    beam_between("golf6 rear window wiper arm", (-.16, 1.41, -1.965), (.24, 1.33, -1.965), .028, BLACK_PLASTIC, root, .006)
+    cylinder("golf6 rear wiper pivot", (-.2, 1.405, -1.965), .035, .025, BLACK_PLASTIC, 16, root, rotation=(math.pi / 2, 0, 0), smooth=True, bevel=.004)
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        cube(f"{prefix} golf6 red tail lamp outer lens", (side * .68, .93, -2.075), (.34, .15, .055), TAIL, .02, root)
+        cube(f"{prefix} golf6 red tail lamp inner lens", (side * .42, .96, -2.085), (.20, .10, .046), TAIL, .014, root)
+        cube(f"{prefix} golf6 rear amber indicator", (side * .82, .83, -2.08), (.10, .045, .035), INDICATOR, .01, root)
+        cube(f"{prefix} golf6 reverse lamp", (side * .35, .82, -2.085), (.12, .045, .032), REVERSE, .01, root)
+    cylinder("golf6 single left exhaust tip", (-.48, .50, -2.16), .065, .16, CHROME, 18, root, rotation=(0, 0, 0), smooth=True, bevel=.01)
+    cube("golf6 small roof spoiler", (0, 1.67, -1.70), (1.42, .09, .18), body_mat, .025, root)
+    cube("golf6 high center brake light", (0, 1.61, -1.80), (.44, .035, .032), TAIL, .008, root)
+
+    # Handmade, asset-level wheel detail, not the game's procedural car mesh.
+    for side in (-1, 1):
+        make_wheel(root, side, 1.18, "compact")
+        make_wheel(root, side, -1.26, "compact")
+    orient_game_space_root(root)
+    return root
+
+
 FLEET_PROFILES = [
     ("hatch", "Metro Hatch", (.10, .42, .56), (.91, .94, .84)),
     ("supercar", "Veloce R", (.62, .08, .14), (.96, .82, 1.02)),
@@ -842,8 +950,10 @@ def main():
     os.makedirs(out, exist_ok=True)
     clear_scene()
     car = make_car()
+    starter = make_golf6_starter()
     environment = make_environment()
     export_collection(car, os.path.join(out, "midnight_gt.glb"))
+    export_collection(starter, os.path.join(out, "golf6_starter.glb"))
     export_collection(environment, os.path.join(out, "aurora_bay_environment.glb"))
     region_dir = os.path.join(out, "regions")
     os.makedirs(region_dir, exist_ok=True)
