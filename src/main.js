@@ -174,6 +174,9 @@ world.add(streamedWorld);
 const islandBoundary = new THREE.Group();
 islandBoundary.name = 'Outer island coastline and ocean';
 world.add(islandBoundary);
+const waterfrontDetails = new THREE.Group();
+waterfrontDetails.name = 'Aurora Bay animated waterfront details';
+world.add(waterfrontDetails);
 const roadFurniture = new THREE.Group();
 roadFurniture.name = 'Traffic signals and road signs';
 world.add(roadFurniture);
@@ -278,6 +281,38 @@ function createRoadSheenMaterial() {
   });
 }
 
+function createShoreFoamMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec3 vWorldPosition;
+      void main() {
+        float waveA = sin(vWorldPosition.x * .17 + uTime * .62) * .5 + .5;
+        float waveB = sin(vWorldPosition.x * .41 - uTime * .37 + vWorldPosition.z * .8) * .5 + .5;
+        float broken = smoothstep(.52, .9, waveA * .62 + waveB * .38);
+        float edge = 1.0 - smoothstep(.12, 1.45, abs(vWorldPosition.z + 100.0));
+        float alpha = (.035 + broken * .12) * edge;
+        vec3 foamColor = mix(vec3(.18, .52, .55), vec3(.62, .92, .84), broken);
+        gl_FragColor = vec4(foamColor, alpha);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+  });
+}
+
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
   grass: new THREE.MeshStandardMaterial({ color: 0x1a3a31, roughness: 1 }),
@@ -302,6 +337,7 @@ const mats = {
   ocean: createWaterMaterial(0x126176, 0x031d35, .96),
   shoreline: new THREE.MeshStandardMaterial({ color: 0x6d6754, roughness: .96, metalness: .02 }),
   waterLine: new THREE.MeshBasicMaterial({ color: 0x35a8ae, transparent: true, opacity: .33 }),
+  shoreFoam: createShoreFoamMaterial(),
   mountainGround: new THREE.MeshStandardMaterial({ color: 0x1b2929, roughness: 1 }),
   forestGround: new THREE.MeshStandardMaterial({ color: 0x18342b, roughness: 1 }),
   lakeGround: new THREE.MeshStandardMaterial({ color: 0x153039, roughness: .96 }),
@@ -490,6 +526,25 @@ function updateSky() {
   }
 }
 
+function createWaterfrontBuoy(x, z, seed = 1) {
+  const buoy = new THREE.Group();
+  buoy.name = 'Harbor navigation buoy';
+  buoy.position.set(x, -.02, z);
+  const core = seed % 2 ? polishMats.amberCore : polishMats.cyanCore;
+  addMesh(buoy, new THREE.CylinderGeometry(.11, .18, .5, 8), mats.buildingFrame, [0, .22, 0], { castShadow: true });
+  addMesh(buoy, new THREE.SphereGeometry(.2, 10, 6), core, [0, .56, 0]);
+  addMesh(buoy, new THREE.CylinderGeometry(.05, .05, .22, 8), core, [0, .82, 0]);
+  addMesh(buoy, new THREE.CircleGeometry(.7, 16), seed % 2 ? polishMats.amberGlow : polishMats.cyanGlow, [0, .015, 0], { rotation: [-Math.PI / 2, 0, 0] });
+  waterfrontDetails.add(buoy);
+  return buoy;
+}
+
+function buildWaterfrontDetails() {
+  const foam = addMesh(waterfrontDetails, new THREE.PlaneGeometry(270, 3.1, 72, 2), mats.shoreFoam, [0, -.045, -100], { rotation: [-Math.PI / 2, 0, 0] });
+  foam.renderOrder = 2;
+  [-112, -124, -136].forEach((z, index) => createWaterfrontBuoy(-98 + index * 66, z, index + 1));
+}
+
 function buildGroundAndWater() {
   const islandEdge = WORLD_LIMIT;
   const oceanEdge = WORLD_LIMIT + 2200;
@@ -522,12 +577,14 @@ function buildGroundAndWater() {
     addMesh(city, new THREE.BoxGeometry(.08, 1.05, .08), mats.sidewalkDark, [x, .72, -99.4]);
     addMesh(city, new THREE.BoxGeometry(2.8, .06, .05), mats.lamp, [x, 1.2, -99.4]);
   }
+  buildWaterfrontDetails();
 }
 
 function updateWater(time) {
   const waterTime = time * .001;
   mats.water.uniforms.uTime.value = waterTime;
   mats.ocean.uniforms.uTime.value = waterTime * .72;
+  mats.shoreFoam.uniforms.uTime.value = waterTime * 1.12;
 }
 
 function addRoadSheen(parent, geometry, position = [0, 0, 0], rotation = [0, 0, 0]) {
