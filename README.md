@@ -30,7 +30,7 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - The mountain pass is a two-lane road with right-hand opposing traffic, a center line, guardrails, switchbacks, and oncoming vehicles that make overtaking a deliberate risk.
 - Pinewatch Village adds a remote supply-delivery loop beyond the pass, with a depot, cabin drop, village buildings, and extra route rewards.
 - The HUD and both Garage interfaces show condition and the full-repair price. Repairs cost `$5` per missing condition point, are saved locally, and restore a disabled player car.
-- Red lights and stop signs can issue ordinary citations. Speed enforcement only happens at a randomly selected roadside radar location; a police unit appears there, follows briefly, and asks the player to pull over without starting a chase or raising a wanted level.
+- Red lights and stop signs are only camera-enforced at selected high-traffic Aurora Bay junctions, and only when nearby traffic provides a realistic witness context. Quiet intersections, villages, Pinewatch, and empty regional roads do not issue automatic fines. Speed enforcement only happens at a randomly selected roadside radar location; a police unit appears there, follows briefly, and asks the player to pull over without starting a chase or raising a wanted level.
 
 ## World layout
 

@@ -19,6 +19,9 @@ const randomFrom = (seed) => {
 const roadAxes = [-66, -22, 22, 66];
 const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
+// Only the busiest, most urban junctions have traffic cameras. Remote villages,
+// mountain roads, and empty regional junctions do not generate automatic fines.
+const trafficCameraIntersections = [[-66, -66], [22, -66], [-22, 22], [66, 66], [22, 22], [-66, 22]];
 const CITY_LIMIT = 116;
 const WORLD_LIMIT = 5000;
 const WORLD_SECTOR_SIZE = 500;
@@ -632,10 +635,22 @@ function createSpeedSign(x, z, limit = 45, rotation = 0) {
   addObstacle(x, z, .72, .72, 'speed-sign', group, true);
 }
 
+function createTrafficCamera(x, z, rotation = 0) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  const cameraX = 7.2;
+  const cameraZ = 7.2;
+  addMesh(group, new THREE.CylinderGeometry(.055, .08, 4.6, 7), mats.sidewalkDark, [cameraX, 2.3, cameraZ], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.44, .32, .7), mats.asphaltEdge, [cameraX, 4.65, cameraZ], { rotation: [0, rotation, 0], castShadow: true });
+  addMesh(group, new THREE.SphereGeometry(.075, 8, 6), mats.windowBlue, [cameraX, 4.62, cameraZ - .38], { castShadow: true });
+  roadFurniture.add(group);
+}
+
 function buildRoadInfrastructure() {
   const signalIntersections = [[-66, -66], [22, -66], [66, -22], [-22, 22], [66, 66], [-66, 66]];
   signalIntersections.forEach(([x, z], index) => createTrafficLight(x, z, index * 1.7));
   stopControlledIntersections.forEach(([x, z], index) => createStopSign(x + (index % 2 ? 5.8 : -5.8), z + (index % 2 ? -5.8 : 5.8), index % 2 ? Math.PI / 2 : 0));
+  trafficCameraIntersections.forEach(([x, z], index) => createTrafficCamera(x, z, index % 2 ? Math.PI / 2 : 0));
   [[-66, -44], [-22, 44], [22, -44], [66, 44], [44, 66], [-44, -66]].forEach(([x, z], index) => createSpeedSign(x, z, index % 2 ? 35 : 45, index % 2 ? Math.PI / 2 : 0));
 }
 
@@ -2895,6 +2910,16 @@ function getSpeedLimit(x, z) {
   return z < -72 ? 35 : 45;
 }
 
+function trafficCameraHasWitness(x, z) {
+  const camera = trafficCameraIntersections.some(([cameraX, cameraZ]) => Math.hypot(cameraX - x, cameraZ - z) < 1);
+  if (!camera) return false;
+  const nearbyTraffic = [...traffic, ...mountainTraffic, ...regionalTraffic].filter((vehicle) => {
+    if (vehicle.disabledTimer > 0 || !vehicle.mesh.visible || vehicle.currentSpeed < .5) return false;
+    return Math.hypot(vehicle.mesh.position.x - x, vehicle.mesh.position.z - z) < 62;
+  }).length;
+  return nearbyTraffic >= 2;
+}
+
 function recordTrafficViolation(label, fine, radarSite = null) {
   if (player.violationCooldown > 0) return;
   player.cash = Math.max(0, player.cash - fine);
@@ -2945,7 +2970,7 @@ function updateTrafficRules(previousPosition, dt, onRoad) {
     if (!crossed) continue;
     if (crossed.key !== player.lastSignalKey) {
       player.lastSignalKey = crossed.key;
-      if (crossed.state === 0 && speedKmh > 4) recordTrafficViolation('RED LIGHT', 70);
+      if (crossed.state === 0 && speedKmh > 4 && trafficCameraHasWitness(data.intersectionX, data.intersectionZ)) recordTrafficViolation('RED LIGHT', 70);
     }
   }
   stopControlledIntersections.forEach(([x, z]) => {
@@ -2966,7 +2991,7 @@ function updateTrafficRules(previousPosition, dt, onRoad) {
     }
     if (crossed) {
       const observation = player.stopObservations[key];
-      if (!observation?.stopped && speedKmh > 5) recordTrafficViolation('STOP SIGN', 50);
+      if (!observation?.stopped && speedKmh > 5 && trafficCameraHasWitness(x, z)) recordTrafficViolation('STOP SIGN', 50);
       delete player.stopObservations[key];
     }
   });
