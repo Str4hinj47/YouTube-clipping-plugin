@@ -2654,7 +2654,7 @@ function applyPaintToVehicleRoot(vehicleRoot, paint) {
     if (!object.isMesh || !object.material) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     const materialNames = materials.map((material) => material?.name || '').join(' ');
-    if (/(glass|window|wheel|tire|rubber|brake|disc|light|lamp|indicator|head|tail|chrome|trim|carbon|black)/i.test(`${object.name} ${materialNames}`)) return;
+    if (/(glass|window|wheel|tire|rubber|brake|caliper|disc|light|lamp|indicator|head|tail|chrome|trim|carbon|black|grille|plate|interior|plastic)/i.test(`${object.name} ${materialNames}`)) return;
     materials.forEach((material) => {
       if (material?.color) {
         material.color.set(normalizedPaint);
@@ -2691,11 +2691,12 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   vehicleRoot.userData.loadedBrakeLights = [];
   importedCar.traverse((object) => {
     if (!object.isMesh) return;
-    if (/(wheel|tire|hub)/i.test(object.name)) {
+    const importedName = (object.name || '').replace(/[_-]+/g, ' ');
+    if (/(wheel\s+(tire|hub|spoke)|tire\s+sidewall|rim\s+outer|machined\s+wheel)/i.test(importedName) && !/(spare|arch)/i.test(importedName)) {
       object.userData.physicsBasePosition = object.position.clone();
       vehicleRoot.userData.loadedWheels.push(object);
     }
-    if (/(brake|tail|rear.*light|light.*rear)/i.test(object.name)) vehicleRoot.userData.loadedBrakeLights.push(object);
+    if (/(?:brake|stop|tail)[\s_-]*(?:light|lamp)/i.test(importedName)) vehicleRoot.userData.loadedBrakeLights.push(object);
   });
   applyPaintToVehicleRoot(vehicleRoot, vehicleRoot.userData.paintColor);
 }

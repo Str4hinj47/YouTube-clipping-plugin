@@ -81,6 +81,41 @@ SIGN_RED = material("Road sign red", (.55, .03, .05), .15, .34, (.24, .005, .01)
 SIGN_WHITE = material("Road sign white", (.88, .9, .88), .12, .38)
 SIGN_GREEN = material("Traffic signal green", (.03, .48, .22), .08, .28, (.01, .2, .07), 2.5)
 SIGN_AMBER = material("Traffic signal amber", (.85, .4, .05), .08, .3, (.5, .12, .01), 2.2)
+# Automotive finish materials. They stay logo-free, but give the cars the
+# layered material breakup of a real production vehicle instead of one material
+# being stretched over every part.
+BLACK_PLASTIC = material("Textured black exterior plastic", (.012, .017, .021), .12, .42)
+CARBON = material("Forged carbon aero", (.018, .025, .03), .62, .28)
+CHROME = material("Brushed chrome", (.72, .78, .8), .92, .16)
+GRILLE = material("Satin black grille", (.008, .012, .016), .32, .3)
+INTERIOR = material("Dark interior", (.018, .025, .032), .0, .78)
+BRAKE_DISC = material("Ventilated brake disc", (.24, .27, .28), .78, .3)
+BRAKE_CALIPER = material("Brake caliper red", (.72, .035, .025), .42, .24, (.28, .008, .004), 1.4)
+INDICATOR = material("Amber indicator", (1.0, .34, .025), .08, .2, (.95, .12, .008), 5.0)
+REVERSE = material("Reverse lamp white", (.86, .95, 1.0), .08, .18, (.52, .75, .95), 4.0)
+LICENSE_PLATE = material("Blank license plate", (.72, .76, .72), .12, .36)
+
+
+def finish_mesh(obj, smooth=False, bevel=0.0):
+    """Give generated hard-surface parts clean normals and restrained edge radii."""
+    if obj.type != "MESH":
+        return obj
+    if smooth:
+        for polygon in obj.data.polygons:
+            polygon.use_smooth = True
+    if bevel:
+        modifier = obj.modifiers.new("manufactured edge radius", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 3
+        modifier.limit_method = "ANGLE"
+        modifier.angle_limit = math.radians(28)
+        modifier.harden_normals = True
+    normals = obj.modifiers.new("weighted production normals", "WEIGHTED_NORMAL")
+    try:
+        normals.keep_sharp = True
+    except AttributeError:
+        pass
+    return obj
 
 
 def cube(name, location, scale, mat, bevel=0.0, parent=None):
@@ -89,63 +124,252 @@ def cube(name, location, scale, mat, bevel=0.0, parent=None):
     obj.name = name
     obj.scale = (scale[0] / 2, scale[1] / 2, scale[2] / 2)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    if bevel:
-        modifier = obj.modifiers.new("small manufactured bevel", "BEVEL")
-        modifier.width = bevel
-        modifier.segments = 2
     obj.data.materials.append(mat)
+    finish_mesh(obj, bevel=bevel)
     if parent:
         obj.parent = parent
     return obj
 
 
-def cylinder(name, location, radius, depth, mat, vertices=12, parent=None):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth, location=location)
+def cylinder(name, location, radius, depth, mat, vertices=12, parent=None, rotation=None, smooth=True, bevel=0.0):
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=vertices,
+        radius=radius,
+        depth=depth,
+        location=location,
+        rotation=rotation or (0, 0, 0),
+    )
     obj = bpy.context.object
     obj.name = name
     obj.data.materials.append(mat)
+    finish_mesh(obj, smooth=smooth, bevel=bevel)
     if parent:
         obj.parent = parent
     return obj
 
 
+def uv_sphere(name, location, scale, mat, parent=None):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, location=location)
+    obj = bpy.context.object
+    obj.name = name
+    obj.scale = scale
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    obj.data.materials.append(mat)
+    finish_mesh(obj, smooth=True)
+    if parent:
+        obj.parent = parent
+    return obj
+
+
+def torus(name, location, major_radius, minor_radius, mat, rotation=(0, 0, 0), parent=None):
+    bpy.ops.mesh.primitive_torus_add(
+        major_radius=major_radius,
+        minor_radius=minor_radius,
+        major_segments=32,
+        minor_segments=10,
+        location=location,
+        rotation=rotation,
+    )
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.materials.append(mat)
+    finish_mesh(obj, smooth=True)
+    if parent:
+        obj.parent = parent
+    return obj
+
+
+def orient_game_space_root(root):
+    """Convert the generator's X/Y-height/Z-forward convention to Blender Z-up."""
+    root.rotation_euler[0] = math.pi / 2
+    return root
+
+
+def mesh_object(name, vertices, faces, mat, parent=None, smooth=False, bevel=0.0):
+    mesh = bpy.data.meshes.new(f"{name} mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.data.materials.append(mat)
+    finish_mesh(obj, smooth=smooth, bevel=bevel)
+    if parent:
+        obj.parent = parent
+    return obj
+
+
+def beam_between(name, start, end, thickness, mat, parent=None, bevel=0.0):
+    start = Vector(start)
+    end = Vector(end)
+    direction = end - start
+    length = max(direction.length, .001)
+    obj = cube(name, (start + end) / 2, (thickness, thickness, length), mat, bevel, parent)
+    obj.rotation_mode = "QUATERNION"
+    obj.rotation_quaternion = direction.to_track_quat("Z", "Y")
+    return obj
+
+
+def rounded_hull(name, stations, mat, parent=None):
+    """Loft a softly rounded automotive shell through front-to-rear stations."""
+    vertices = []
+    ring_size = 13
+    for z, width, bottom, top in stations:
+        cross_section = [
+            (-width * .70, bottom),
+            (-width * .92, bottom + .045),
+            (-width, bottom + .18),
+            (-width * .98, bottom + .43),
+            (-width * .82, top - .13),
+            (-width * .46, top - .025),
+            (0, top),
+            (width * .46, top - .025),
+            (width * .82, top - .13),
+            (width * .98, bottom + .43),
+            (width, bottom + .18),
+            (width * .92, bottom + .045),
+            (width * .70, bottom),
+        ]
+        vertices.extend((x, y, z) for x, y in cross_section)
+    faces = []
+    for station_index in range(len(stations) - 1):
+        current = station_index * ring_size
+        following = (station_index + 1) * ring_size
+        for point_index in range(ring_size):
+            next_point = (point_index + 1) % ring_size
+            # Reverse the winding so the outside of both shoulders faces out.
+            faces.append((following + point_index, following + next_point, current + next_point, current + point_index))
+    faces.append(tuple(range(ring_size - 1, -1, -1)))
+    end = (len(stations) - 1) * ring_size
+    faces.append(tuple(end + point_index for point_index in range(ring_size)))
+    return mesh_object(name, vertices, faces, mat, parent, smooth=True, bevel=.018)
+
+
+def make_wheel(root, side, z, wheel_style="sport"):
+    """Build a production-style wheel with sidewall, rotor, caliper, hub, and spokes."""
+    x = side * 1.15
+    side_name = "left" if side < 0 else "right"
+    tire = cylinder(
+        f"{side_name} wheel tire",
+        (x, .49, z),
+        .48,
+        .31,
+        RUBBER,
+        32,
+        root,
+        rotation=(0, math.pi / 2, 0),
+        smooth=True,
+        bevel=.035,
+    )
+    # The name is intentionally kept compatible with the runtime wheel animation.
+    tire.name = f"{side_name} wheel tire"
+    outer_x = x + side * .17
+    torus(f"{side_name} tire sidewall bead", (outer_x, .49, z), .365, .045, RUBBER, (0, math.pi / 2, 0), root)
+    cylinder(f"{side_name} ventilated brake disc", (outer_x + side * .012, .49, z), .365, .035, BRAKE_DISC, 32, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.008)
+    cylinder(f"{side_name} machined wheel hub", (outer_x + side * .04, .49, z), .31, .055, RIM, 32, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.012)
+    cylinder(f"{side_name} wheel center cap", (outer_x + side * .082, .49, z), .09, .065, CHROME, 20, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.01)
+    for spoke_index in range(5):
+        angle = (spoke_index / 5) * math.tau + math.pi / 2
+        spoke_y = .49 + math.sin(angle) * .16
+        spoke_z = z + math.cos(angle) * .16
+        spoke = cube(f"{side_name} wheel spoke {spoke_index + 1}", (outer_x + side * .085, spoke_y, spoke_z), (.045, .065, .27), RIM, .012, root)
+        spoke.rotation_euler[0] = angle
+    caliper = cube(f"{side_name} brake caliper", (outer_x + side * .055, .62, z + .16), (.075, .15, .28), BRAKE_CALIPER, .025, root)
+    caliper.rotation_euler[0] = -.14
+    # Subtle center groove makes the tire read as a manufactured compound, not a black cylinder.
+    torus(f"{side_name} rim outer lip", (outer_x + side * .11, .49, z), .285, .018, CHROME, (0, math.pi / 2, 0), root)
+    return tire
+
+
 def make_car(body_mat=PAINT, trim_mat=LIME, name="MIDNIGHT GT / Blender vehicle"):
+    """Build a smooth, generic performance coupe with real automotive part breakup.
+
+    The silhouette is intentionally logo-free and not a one-to-one brand copy, but
+    the proportions, panel gaps, glazing, lighting, brakes, wheel arches, and aero
+    surfaces are based on production sports coupes rather than stacked primitives.
+    """
     root = bpy.data.objects.new(name, None)
     bpy.context.collection.objects.link(root)
-    cube("lower aerodynamic body", (0, .62, 0), (2.25, .48, 4.35), body_mat, .12, root)
-    cube("long bonnet", (0, .86, 1.35), (2.08, .24, 1.4), body_mat, .08, root)
-    cube("rear deck", (0, .84, -1.48), (2.05, .23, 1.05), body_mat, .06, root)
-    # Trapezoid cabin mesh, with the same hard-surface silhouette as the in-browser preview.
-    vertices = [(-.86, .87, -.9), (.86, .87, -.9), (-.72, 1.74, -.34), (.72, 1.74, -.34),
-                (-.72, 1.74, .72), (.72, 1.74, .72), (-.86, .87, .9), (.86, .87, .9)]
-    faces = [(0, 1, 3, 2), (2, 3, 5, 4), (4, 5, 7, 6), (0, 2, 4, 6), (1, 7, 5, 3)]
-    mesh = bpy.data.meshes.new("GT cabin mesh")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.materials.append(GLASS)
-    cabin = bpy.data.objects.new("smoked glass cabin", mesh)
-    bpy.context.collection.objects.link(cabin)
-    cabin.parent = root
-    cube("left side skirt", (-1.1, .47, 0), (.11, .2, 3.65), trim_mat, .025, root)
-    cube("right side skirt", (1.1, .47, 0), (.11, .2, 3.65), trim_mat, .025, root)
-    cube("rear diffuser", (0, .48, -2.16), (1.76, .12, .14), trim_mat, .02, root)
-    for x in (-.71, .71):
-        cube("white LED headlight", (x, .78, 2.16), (.28, .15, .08), HEADLIGHT, .02, root)
-        cube("red tail light", (x, .76, -2.16), (.3, .14, .08), TAIL, .02, root)
-    for x in (-1.14, 1.14):
-        for z in (1.35, -1.35):
-            bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=.46, depth=.3, location=(x, .46, z), rotation=(0, 0, math.pi / 2))
-            tire = bpy.context.object
-            tire.name = "wheel tire"
-            tire.data.materials.append(RUBBER)
-            tire.parent = root
-            bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=.24, depth=.315, location=(x, .46, z), rotation=(0, 0, math.pi / 2))
-            rim = bpy.context.object
-            rim.name = "machined wheel hub"
-            rim.data.materials.append(RIM)
-            rim.parent = root
-    cube("rear wing", (0, 1.2, -2.03), (1.7, .09, .13), trim_mat, .02, root)
-    cube("wing left support", (-.73, 1.09, -2.03), (.08, .25, .08), RUBBER, .01, root)
-    cube("wing right support", (.73, 1.09, -2.03), (.08, .25, .08), RUBBER, .01, root)
+
+    body_stations = [
+        (-2.25, .72, .43, .85), (-2.14, .93, .42, .94), (-1.84, 1.075, .42, 1.00),
+        (-1.35, 1.13, .43, 1.04), (-.65, 1.15, .43, 1.055), (.2, 1.16, .43, 1.06),
+        (1.02, 1.13, .43, 1.04), (1.62, 1.07, .42, 1.00), (2.08, .94, .42, .94),
+        (2.25, .76, .43, .84),
+    ]
+    rounded_hull("sculpted one-piece body shell", body_stations, body_mat, root)
+
+    # Separate hood/deck surfaces and lower fascias create believable part lines.
+    cube("front hood skin", (0, 1.02, 1.38), (1.88, .075, 1.18), body_mat, .075, root)
+    cube("rear deck skin", (0, .98, -1.53), (1.84, .075, .84), body_mat, .065, root)
+    cube("front bumper fascia", (0, .64, 2.17), (1.98, .28, .22), BLACK_PLASTIC, .075, root)
+    cube("rear bumper fascia", (0, .64, -2.13), (1.98, .27, .22), BLACK_PLASTIC, .075, root)
+    cube("front carbon splitter", (0, .52, 2.27), (1.92, .09, .22), CARBON, .025, root)
+    cube("rear diffuser center", (0, .52, -2.25), (1.72, .12, .18), CARBON, .025, root)
+
+    # A closed glass volume gives the cabin continuous reflections; pillars and seals
+    # are layered over it to keep the silhouette clean from every camera angle.
+    cabin_stations = [
+        (-1.16, .62, .94, 1.40), (-.92, .75, .95, 1.66), (-.18, .80, .96, 1.78),
+        (.58, .77, .95, 1.72), (1.04, .64, .94, 1.42),
+    ]
+    rounded_hull("continuous smoked glass cabin", cabin_stations, GLASS, root)
+    cube("dark cabin interior", (0, 1.05, -.05), (1.34, .12, 1.7), INTERIOR, .04, root)
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        beam_between(f"{prefix} A pillar", (side * .68, 1.02, .97), (side * .57, 1.65, .59), .075, BLACK_PLASTIC, root, .018)
+        beam_between(f"{prefix} B pillar", (side * .78, 1.03, .12), (side * .72, 1.70, .08), .072, BLACK_PLASTIC, root, .016)
+        beam_between(f"{prefix} C pillar", (side * .65, 1.02, -.82), (side * .53, 1.42, -.93), .082, BLACK_PLASTIC, root, .018)
+        beam_between(f"{prefix} lower window seal", (side * 1.03, .99, -.8), (side * 1.03, .99, .72), .035, RUBBER, root, .008)
+        mirror = uv_sphere(f"{prefix} aerodynamic mirror housing", (side * .91, 1.23, .67), (.22, .12, .13), body_mat, root)
+        mirror.rotation_euler[0] = -.14
+        uv_sphere(f"{prefix} mirror glass", (side * 1.075, 1.235, .67), (.018, .095, .085), GLASS, root)
+        beam_between(f"{prefix} mirror stalk", (side * .8, 1.12, .68), (side * .96, 1.2, .68), .045, BLACK_PLASTIC, root, .01)
+
+        # Wheel-arch bead and lower side sill sit outside the body shell.
+        torus(f"{prefix} front fender arch bead", (side * 1.145, .51, 1.35), .535, .045, BLACK_PLASTIC, (0, math.pi / 2, 0), root)
+        torus(f"{prefix} rear fender arch bead", (side * 1.145, .51, -1.35), .535, .045, BLACK_PLASTIC, (0, math.pi / 2, 0), root)
+        cube(f"{prefix} aerodynamic side sill", (side * 1.105, .51, 0), (.11, .18, 3.48), trim_mat, .028, root)
+        cube(f"{prefix} side intake", (side * 1.14, .72, .35), (.055, .22, .56), GRILLE, .018, root)
+        cube(f"{prefix} side intake blade", (side * 1.175, .73, .35), (.03, .08, .4), trim_mat, .01, root)
+        beam_between(f"{prefix} door shut line", (side * 1.155, .82, -.76), (side * 1.155, .82, .58), .018, RUBBER, root, .004)
+        cube(f"{prefix} flush door handle", (side * 1.165, 1.0, .08), (.035, .035, .27), CHROME, .008, root)
+        cylinder(f"{prefix} fuel door", (side * 1.16, .86, -.72), .13, .022, body_mat, 24, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.008)
+
+    # Hood shut lines, front grille, and intake vanes.
+    for side in (-1, 1):
+        beam_between("hood shut line", (side * .45, 1.062, .72), (side * .45, 1.062, 1.95), .017, RUBBER, root, .004)
+    cube("upper front grille surround", (0, .77, 2.24), (1.12, .2, .07), GRILLE, .03, root)
+    cube("lower front intake surround", (0, .62, 2.285), (1.44, .13, .06), GRILLE, .022, root)
+    for index in range(5):
+        x = -.46 + index * .23
+        cube("front grille horizontal vane", (x, .77, 2.285), (.028, .13, .04), CHROME, .008, root)
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        cube(f"{prefix} headlight smoked housing", (side * .67, .91, 2.15), (.54, .17, .095), GRILLE, .035, root)
+        cube(f"{prefix} headlight projector", (side * .67, .92, 2.17), (.28, .105, .045), HEADLIGHT, .018, root)
+        cube(f"{prefix} white LED headlight", (side * .67, .86, 2.215), (.44, .035, .028), HEADLIGHT, .012, root)
+        cube(f"{prefix} amber front indicator", (side * .92, .84, 2.19), (.12, .045, .035), INDICATOR, .012, root)
+
+    # Rear lighting and the blank, logo-free plate recess.
+    cube("rear tail light dark housing", (0, .86, -2.15), (1.72, .16, .08), GRILLE, .03, root)
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        cube(f"{prefix} red tail light", (side * .63, .88, -2.205), (.52, .07, .055), TAIL, .018, root)
+        cube(f"{prefix} rear indicator", (side * .92, .84, -2.2), (.11, .045, .035), INDICATOR, .012, root)
+    cube("rear center reverse lamp", (0, .84, -2.21), (.28, .045, .035), REVERSE, .012, root)
+    cube("blank rear license plate", (0, .69, -2.235), (.62, .22, .035), LICENSE_PLATE, .018, root)
+    cube("rear plate shadow recess", (0, .68, -2.255), (.72, .27, .025), GRILLE, .012, root)
+    for side in (-1, 1):
+        cylinder(f"{('left' if side < 0 else 'right')} exhaust tip", (side * .55, .57, -2.27), .085, .18, CHROME, 16, root, rotation=(0, 0, 0), smooth=True, bevel=.012)
+
+    cube("rear spoiler blade", (0, 1.19, -2.03), (1.62, .095, .14), trim_mat, .025, root)
+    beam_between("left spoiler support", (-.68, 1.04, -2.03), (-.68, 1.18, -2.03), .07, CARBON, root, .012)
+    beam_between("right spoiler support", (.68, 1.04, -2.03), (.68, 1.18, -2.03), .07, CARBON, root, .012)
+
+    for side in (-1, 1):
+        make_wheel(root, side, 1.35)
+        make_wheel(root, side, -1.35)
+    orient_game_space_root(root)
     return root
 
 
@@ -157,6 +381,7 @@ FLEET_PROFILES = [
     ("wagon", "Grand Tourer", (.42, .18, .12), (1.04, 1.03, 1.10)),
     ("classic", "Cinder Classic", (.55, .12, .06), (1.10, 1.02, 1.05)),
     ("ev", "Pulse EV", (.32, .48, .44), (1.02, .98, 1.00)),
+    ("sport", "Midnight GT", (.08, .12, .55), (1.0, 1.0, 1.0)),
 ]
 
 
@@ -164,44 +389,51 @@ def make_car_variant(style, display_name, color, scale):
     body = material(f"{display_name} paint", color, .82, .2)
     trim = material(f"{display_name} trim", (.68, 1.0, .18), .36, .2, (.35, .95, .08), 1.8)
     root = make_car(body, trim, f"{display_name} / logo-free Blender vehicle")
-    # Fine body seams and aero details are deliberately generic, without badges or logos.
-    for x in (-1.08, 1.08):
-        cube("precise door shut line", (x, .78, -.2), (.025, .02, 1.4), RUBBER, .005, root)
-        cube("flush door handle", (x, .98, .22), (.035, .035, .28), RIM, .005, root)
+    # Fine body seams are deliberately generic, without badges or logos.
+    for side in (-1, 1):
+        prefix = "left" if side < 0 else "right"
+        cube(f"{prefix} precision door crease", (side * 1.17, .74, -.08), (.022, .024, 1.36), RUBBER, .004, root)
+        cube(f"{prefix} lower door crease", (side * 1.17, .61, -.18), (.018, .018, 1.25), trim, .003, root)
     if style == "hatch":
-        cube("upright hatch glass", (0, 1.25, -1.18), (1.5, .06, .72), GLASS, .02, root)
-        cube("compact roof spoiler", (0, 1.52, -1.77), (1.58, .1, .18), trim, .02, root)
-        cube("hatch lower bumper", (0, .55, -2.12), (1.95, .18, .2), RUBBER, .02, root)
+        cube("upright hatch glass", (0, 1.28, -1.18), (1.42, .06, .68), GLASS, .025, root)
+        cube("compact roof spoiler", (0, 1.55, -1.77), (1.55, .1, .18), trim, .025, root)
+        cube("hatch lower bumper", (0, .57, -2.12), (1.86, .18, .2), BLACK_PLASTIC, .03, root)
     elif style == "supercar":
-        cube("carbon front splitter", (0, .49, 2.2), (2.1, .08, .3), RUBBER, .02, root)
-        cube("left aero fin", (-1.0, .62, .45), (.12, .28, 2.6), trim, .02, root)
-        cube("right aero fin", (1.0, .62, .45), (.12, .28, 2.6), trim, .02, root)
-        cube("low rear lip", (0, 1.02, -2.1), (1.5, .08, .12), trim, .015, root)
+        cube("carbon front splitter extension", (0, .49, 2.33), (2.08, .07, .28), CARBON, .02, root)
+        beam_between("left supercar aero blade", (-1.02, .64, .1), (-1.02, .64, 1.25), .12, trim, root, .02)
+        beam_between("right supercar aero blade", (1.02, .64, .1), (1.02, .64, 1.25), .12, trim, root, .02)
+        cube("low rear diffuser lip", (0, .6, -2.27), (1.55, .08, .13), trim, .018, root)
+        for side in (-1, 1):
+            cylinder(f"{('left' if side < 0 else 'right')} supercar exhaust", (side * .35, .61, -2.31), .075, .16, CHROME, 16, root, smooth=True, bevel=.01)
     elif style == "suv":
-        cube("left roof rail", (-.72, 1.95, 0), (.1, .1, 2.9), RIM, .02, root)
-        cube("right roof rail", (.72, 1.95, 0), (.1, .1, 2.9), RIM, .02, root)
-        cube("front bull bar", (0, .63, 2.18), (2.15, .22, .16), RUBBER, .03, root)
-        cylinder("rear spare tire", (0, 1.0, -2.22), .48, .18, RUBBER, 16, root)
+        beam_between("left roof rail", (-.72, 1.78, -1.18), (-.72, 1.78, 1.18), .085, CHROME, root, .018)
+        beam_between("right roof rail", (.72, 1.78, -1.18), (.72, 1.78, 1.18), .085, CHROME, root, .018)
+        cube("front bull bar", (0, .67, 2.23), (2.08, .2, .14), BLACK_PLASTIC, .04, root)
+        cylinder("rear spare tire", (0, 1.0, -2.22), .48, .18, RUBBER, 24, root, smooth=True, bevel=.025)
+        torus("rear spare wheel bead", (0, 1.0, -2.32), .34, .04, RIM, (0, 0, 0), root)
     elif style == "pickup":
-        cube("pickup bed left wall", (-.92, 1.02, -1.2), (.16, .48, 1.55), body, .03, root)
-        cube("pickup bed right wall", (.92, 1.02, -1.2), (.16, .48, 1.55), body, .03, root)
-        cube("pickup bed floor", (0, .82, -1.2), (1.75, .08, 1.55), RUBBER, .02, root)
-        cube("pickup tailgate", (0, 1.02, -1.98), (1.9, .5, .14), body, .03, root)
+        cube("pickup bed left wall", (-.92, 1.03, -1.2), (.16, .48, 1.55), body, .045, root)
+        cube("pickup bed right wall", (.92, 1.03, -1.2), (.16, .48, 1.55), body, .045, root)
+        cube("pickup bed floor", (0, .82, -1.2), (1.75, .08, 1.55), CARBON, .025, root)
+        cube("pickup tailgate", (0, 1.02, -1.98), (1.9, .5, .14), body, .045, root)
+        beam_between("pickup left bed rail", (-.88, 1.3, -1.2), (-.88, 1.3, .05), .065, CHROME, root, .012)
+        beam_between("pickup right bed rail", (.88, 1.3, -1.2), (.88, 1.3, .05), .065, CHROME, root, .012)
     elif style == "wagon":
-        cube("wagon long cargo roof", (0, 1.27, -.62), (1.75, .34, 1.75), body, .05, root)
-        cube("wagon panoramic roof", (0, 1.47, -.55), (1.5, .045, 1.2), GLASS, .02, root)
-        cube("wagon roof rail left", (-.71, 1.68, -.52), (.06, .06, 1.65), RIM, .01, root)
-        cube("wagon roof rail right", (.71, 1.68, -.52), (.06, .06, 1.65), RIM, .01, root)
+        cube("wagon long cargo roof", (0, 1.27, -.62), (1.75, .34, 1.75), body, .065, root)
+        cube("wagon panoramic roof", (0, 1.47, -.55), (1.5, .045, 1.2), GLASS, .025, root)
+        beam_between("wagon roof rail left", (-.71, 1.68, -1.22), (-.71, 1.68, .18), .06, CHROME, root, .012)
+        beam_between("wagon roof rail right", (.71, 1.68, -1.22), (.71, 1.68, .18), .06, CHROME, root, .012)
     elif style == "classic":
-        cube("classic hood scoop", (0, 1.08, 1.2), (.72, .2, .52), body, .05, root)
-        cube("classic chrome front bumper", (0, .62, 2.2), (2.34, .15, .16), RIM, .025, root)
-        cube("classic chrome rear bumper", (0, .62, -2.2), (2.34, .15, .16), RIM, .025, root)
-        cylinder("left side exhaust", (-1.12, .48, -.1), .07, 2.0, RIM, 8, root)
-        cylinder("right side exhaust", (1.12, .48, -.1), .07, 2.0, RIM, 8, root)
+        cube("classic hood scoop", (0, 1.08, 1.2), (.72, .2, .52), body, .06, root)
+        cube("classic chrome front bumper", (0, .62, 2.2), (2.28, .15, .16), CHROME, .035, root)
+        cube("classic chrome rear bumper", (0, .62, -2.2), (2.28, .15, .16), CHROME, .035, root)
+        cylinder("left side exhaust", (-1.12, .48, -.1), .07, 2.0, CHROME, 12, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.012)
+        cylinder("right side exhaust", (1.12, .48, -.1), .07, 2.0, CHROME, 12, root, rotation=(0, math.pi / 2, 0), smooth=True, bevel=.012)
     elif style == "ev":
-        cube("EV panoramic roof", (0, 1.38, -.1), (1.58, .06, 2.0), GLASS, .02, root)
-        cube("EV front light bar", (0, .82, 2.17), (1.45, .08, .06), trim, .02, root)
-        cube("EV flush front panel", (0, .76, 1.82), (1.55, .12, .12), body, .02, root)
+        cube("EV panoramic roof", (0, 1.38, -.1), (1.58, .06, 2.0), GLASS, .025, root)
+        cube("EV front light bar", (0, .87, 2.19), (1.45, .08, .06), trim, .02, root)
+        cube("EV flush front panel", (0, .76, 1.82), (1.55, .12, .12), body, .025, root)
+        beam_between("EV rear light bar", (-.7, .88, -2.21), (.7, .88, -2.21), .04, TAIL, root, .012)
     root.scale = scale
     return root
 
@@ -396,7 +628,7 @@ def make_pinewatch_cabin(name, location, width, depth, height, rotation, parent)
     cabin.location = location
     cabin.rotation_euler[1] = rotation
     cube("mountain cabin body", (0, height / 2, 0), (width, height, depth), CABIN_WOOD, .08, cabin)
-    bpy.ops.mesh.primitive_cone_add(vertices=4, radius=max(width, depth) * .72, depth=height * .56, location=(0, height + height * .23, 0), rotation=(0, 0, math.pi / 4))
+    bpy.ops.mesh.primitive_cone_add(vertices=4, radius1=max(width, depth) * .72, radius2=0, depth=height * .56, location=(0, height + height * .23, 0), rotation=(0, 0, math.pi / 4))
     roof = bpy.context.object
     roof.name = "mountain cabin pitched roof"
     roof.data.materials.append(CABIN_ROOF)
@@ -435,7 +667,7 @@ def make_regional_kit(slug, display_name, biome):
         start = Vector(path[index - 1])
         end = Vector(path[index])
         flat = Vector((end.x - start.x, 0, end.z - start.z))
-        length = max(.001, flat.length())
+        length = max(.001, flat.length)
         heading = math.atan2(flat.x, flat.z)
         tangent = flat.normalized()
         normal = Vector((tangent.z, 0, -tangent.x))
@@ -481,6 +713,7 @@ def make_regional_kit(slug, display_name, biome):
     label = bpy.data.objects.new(f"{display_name} marker", None)
     bpy.context.collection.objects.link(label)
     label.parent = root
+    orient_game_space_root(root)
     return root
 
 
@@ -494,7 +727,7 @@ def make_mountain_extension(root):
         start = Vector(points[index - 1])
         end = Vector(points[index])
         flat = Vector((end.x - start.x, 0, end.z - start.z))
-        length = flat.length()
+        length = flat.length
         heading = math.atan2(flat.x, flat.z)
         tangent = flat.normalized()
         normal = Vector((tangent.z, 0, -tangent.x))
@@ -578,13 +811,27 @@ def make_environment():
     make_aurora_spire("HARBOR LINK landmark", (-4, 0, 91), 24, LIME, 3, root)
     make_harbor_gateway("AURORA HARBOR gateway", (0, 0, -95), root)
     make_mountain_extension(root)
+    orient_game_space_root(root)
     return root
 
 
 def export_collection(obj, filepath):
+    # Blender is Z-up, while the source coordinates above deliberately use
+    # game-space Y-up/Z-forward values so they match the browser scene. Flatten
+    # the hierarchy while preserving world matrices so the GLB keeps that
+    # conversion instead of dropping the empty root's rotation on export.
+    bpy.context.view_layer.update()
+    descendants = list(obj.children_recursive)
+    world_matrices = [(child, child.matrix_world.copy()) for child in descendants]
+    for child, matrix in world_matrices:
+        child.parent = None
+        child.matrix_world = matrix
+    obj.location = (0, 0, 0)
+    obj.rotation_euler = (0, 0, 0)
+    obj.scale = (1, 1, 1)
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
-    for child in obj.children_recursive:
+    for child in descendants:
         child.select_set(True)
     bpy.context.view_layer.objects.active = obj
     bpy.ops.export_scene.gltf(filepath=filepath, export_format="GLB", use_selection=True, export_apply=True)

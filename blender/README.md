@@ -3,7 +3,7 @@
 The game scene is built around a stylized but detailed Blender art direction: hard-surface cars with authored body kits, wheels and lighting, modular buildings, faceted trees, emissive glass, and cyan/lime night lighting. `create_assets.py` is the source file for the two authored GLB bundles used by the prototype:
 
 - `midnight_gt.glb` — the player coupe, wheels, lights, spoiler, and underglow.
-- `fleet/*.glb` — seven fictional, logo-free road-car variants with distinct hard-surface silhouettes and detail packages.
+- `fleet/*.glb` — eight fictional, logo-free road-car variants with distinct hard-surface silhouettes and production-style detail packages.
 - `aurora_bay_environment.glb` — a reusable block of roads, detailed facade kits, trees, lights, the Pulse Station, Aurora Spire skyline set, illuminated harbor gateway, and the Pinewatch mountain-pass/village extension.
 - `regions/*.glb` — six modular sector kits for Northstar Outpost, Redwood Valley, Lake Aurora, Cinder Flats, Eastgate, and Southern Crossroads. They are authored as reusable Blender chunks rather than one monolithic 10 km file, so the browser can stream regional content near the player.
 
