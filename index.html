@@ -30,6 +30,7 @@
         </div>
         <div class="session-status"><i></i><span>LIVE SESSION</span><b id="session-clock">00:00</b></div>
         <div class="top-actions">
+          <button class="icon-button phone-toggle" id="phone-toggle" type="button" aria-label="Open phone"><span aria-hidden="true">✆</span><b class="phone-unread-badge" id="phone-unread-badge" hidden>0</b></button>
           <button class="icon-button" id="sound-toggle" type="button" aria-label="Toggle sound">◒</button>
           <button class="profile-pill" id="garage-open" type="button" aria-label="Open garage"><span class="avatar">M</span><span class="profile-copy"><b>MILES</b><small>RANK 04</small></span><span class="chevron">⌄</span></button>
         </div>
@@ -92,6 +93,30 @@
         </div>
       </section>
 
+      <section class="phone-overlay" id="phone-overlay" aria-hidden="true">
+        <div class="phone-shell" role="dialog" aria-modal="false" aria-labelledby="phone-heading">
+          <header class="phone-header">
+            <div><span class="eyebrow"><span class="eyebrow-dot phone-dot"></span> SECURE DEVICE // FIELD LINE</span><h2 id="phone-heading">THE <b>PHONE.</b></h2></div>
+            <div class="phone-header-actions"><span class="phone-signal"><i></i><i></i><i></i><b>ENCRYPTED</b></span><button class="phone-close" id="phone-close" type="button" aria-label="Close phone">×</button></div>
+          </header>
+          <div class="phone-meta"><span><small>INBOX</small><b id="phone-inbox-count">0 THREADS</b></span><span><small>NETWORK</small><b>CARTEL OPERATIONS</b></span><span class="phone-meta-hint"><span class="keycap">P</span> CLOSE PHONE</span></div>
+          <div class="phone-body">
+            <aside class="phone-thread-list" id="phone-thread-list" aria-label="Phone inbox"></aside>
+            <article class="phone-thread-detail" id="phone-thread-detail">
+              <div class="phone-empty-state" id="phone-empty-state"><span class="phone-empty-icon">✆</span><b>NO SECURE TRAFFIC</b><p>Mission contacts will reach this line when a contract opens.</p></div>
+              <div class="phone-message-detail" id="phone-message-detail" hidden>
+                <div class="phone-detail-topline"><span class="phone-category" id="phone-detail-category">MISSION</span><span class="phone-detail-time" id="phone-detail-time">NOW</span></div>
+                <h3 id="phone-detail-subject">MISSION UPDATE</h3>
+                <div class="phone-detail-sender"><span class="phone-contact-avatar">M</span><span><b id="phone-detail-sender">MARA // OPERATIONS</b><small>FICTIONAL CARTEL CONTACT NETWORK</small></span></div>
+                <p class="phone-detail-body" id="phone-detail-body"></p>
+                <div class="phone-detail-status"><span>THREAD STATUS</span><b id="phone-detail-status">UNREAD</b></div>
+              </div>
+            </article>
+          </div>
+          <footer class="phone-footer"><span><span class="keycap">P</span> PHONE</span><span><span class="keycap">ESC</span> CLOSE</span><button id="phone-mark-all" type="button">MARK ALL READ</button><span class="phone-footer-note">NO REAL CONTACTS // FICTIONAL NETWORK</span></footer>
+        </div>
+      </section>
+
       <section class="vehicle-panel glass-panel hud-layer">
         <div class="vehicle-topline"><span class="eyebrow">PERSONAL VEHICLE</span><span class="vehicle-id">NL—07</span></div>
         <div class="vehicle-name">MIDNIGHT <b>GT</b></div>
@@ -111,6 +136,7 @@
         <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
         <div class="control-row"><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
         <div class="control-row"><span class="keycap">M</span><span class="control-label">MAP</span></div>
+        <div class="control-row"><span class="keycap">P</span><span class="control-label">PHONE</span></div>
         <div class="control-row"><span class="keycap">V</span><span class="control-label">DELIVERY</span></div>
         <div class="control-row muted"><span class="keycap">G</span><span class="control-label">GARAGE</span><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
       </section>
@@ -127,7 +153,7 @@
           <p>Take a breath. Your route and progress are safe.</p>
           <div class="pause-actions"><button class="pause-primary" id="resume-button" type="button">RESUME RUN <span>↗</span></button><button class="pause-secondary" id="pause-restart" type="button">RESET VEHICLE</button><button class="pause-secondary" id="main-menu-button" type="button">MAIN MENU</button></div>
           <div class="pause-settings"><div><small>RENDER QUALITY</small><b id="quality-label">HIGH</b></div><button class="pause-secondary" id="quality-toggle" type="button">CHANGE</button><div><small>PROGRESS</small><b>LOCAL SAVE</b></div><button class="pause-secondary danger" id="reset-save" type="button">CLEAR SAVE</button></div>
-          <div class="pause-footer"><span><span class="keycap">P</span> PAUSE</span><span><span class="keycap">ESC</span> CLOSE</span><span class="pause-version">NEONLINE 0.4 // BUILD 275BC9C</span></div>
+          <div class="pause-footer"><span><span class="keycap">P</span> PHONE</span><span><span class="keycap">ESC</span> CLOSE / PAUSE</span><span class="pause-version">NEONLINE 0.4 // BUILD 275BC9C</span></div>
         </div>
       </section>
 
@@ -212,7 +238,7 @@
                   <div class="settings-row"><div><b>TOUCH CONTROLS</b><small>Show mobile driving controls on touch devices</small></div><button class="settings-action static" type="button">AUTO</button></div>
                   <div class="settings-row"><div><b>LOCAL PROGRESS</b><small>Cash, cars, upgrades, routes, and safehouses</small></div><button class="settings-action danger" id="menu-settings-reset" type="button">CLEAR SAVE</button></div>
                 </div>
-                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>V</b> DELIVERY</span><span><b>G</b> GARAGE</span></div></div>
+                <div class="controls-guide"><div class="menu-section-heading"><span>DRIVE DECK</span><small>KEYBOARD // GAMEPAD READY</small></div><div class="guide-grid"><span><b>WASD</b> DRIVE</span><span><b>SPACE</b> HANDBRAKE</span><span><b>C</b> CAMERA</span><span><b>V</b> DELIVERY</span><span><b>P</b> PHONE</span><span><b>G</b> GARAGE</span></div></div>
               </section>
             </main>
           </div>
@@ -249,6 +275,7 @@
       <div class="mobile-controls" id="mobile-controls" aria-label="Touch driving controls">
         <div class="mobile-steer" id="mobile-steer"><span class="steer-ring"></span><span class="steer-knob" id="steer-knob"></span></div>
         <div class="mobile-action-cluster"><button class="mobile-action gas" id="mobile-gas" type="button">▲<small>GO</small></button><button class="mobile-action brake" id="mobile-brake" type="button">▼<small>BRAKE</small></button><button class="mobile-action handbrake" id="mobile-handbrake" type="button">◼<small>HANDBRAKE</small></button></div>
+        <button class="mobile-phone" id="mobile-phone" type="button" aria-label="Open phone"><span>✆</span><b class="phone-unread-badge" id="mobile-phone-unread-badge" hidden>0</b><small>PHONE</small></button>
         <button class="mobile-pause" id="mobile-pause" type="button">Ⅱ</button>
       </div>
 

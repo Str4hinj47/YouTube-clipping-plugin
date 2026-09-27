@@ -2444,6 +2444,11 @@ let menuPage = 'home';
 let activeSaveSlot = 1;
 let worldBuilt = false;
 let saveSelectOpen = false;
+let phoneOpen = false;
+let phoneMessages = [];
+let phoneMessageSequence = 0;
+let phoneSelectedMessageId = '';
+let phoneNotificationTimer = null;
 let menuShowcaseIndex = 0;
 let menuShowcaseElapsed = 0;
 let menuShowcaseTransition = 1;
@@ -2587,6 +2592,9 @@ function resetProgressStateToDefaults() {
   player.stopObservations = {};
   player.upgrades = { engine: 0, grip: 0 };
   player.collectedCaches = [];
+  phoneMessages = [];
+  phoneMessageSequence = 0;
+  phoneSelectedMessageId = '';
 }
 
 function saveProgress() {
@@ -2606,6 +2614,7 @@ function saveProgress() {
       cacheIds: player.collectedCaches,
       waterRecoveryPending: player.waterRecoveryPending,
       waterBody: player.waterBody,
+      phoneMessages,
       updatedAt: Date.now(),
       saveSlot: activeSaveSlot,
     };
@@ -2655,6 +2664,25 @@ function loadProgress(slot = latestSaveSlot()) {
       player.recoveryCost = vehicleRecoveryCost();
     }
     if (Array.isArray(saved.cacheIds)) player.collectedCaches = saved.cacheIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
+    if (Array.isArray(saved.phoneMessages)) {
+      phoneMessages = saved.phoneMessages
+        .filter((message) => message && typeof message.subject === 'string' && typeof message.body === 'string')
+        .slice(0, 24)
+        .map((message, index) => ({
+          id: String(message.id || `saved-${index}`),
+          key: typeof message.key === 'string' ? message.key : '',
+          missionId: typeof message.missionId === 'string' ? message.missionId : '',
+          kind: typeof message.kind === 'string' ? message.kind : 'mission',
+          sender: typeof message.sender === 'string' ? message.sender : 'THE CARTEL',
+          subject: message.subject,
+          body: message.body,
+          category: typeof message.category === 'string' ? message.category : 'MISSION',
+          status: typeof message.status === 'string' ? message.status : 'SECURE',
+          timestamp: Number(message.timestamp) || Date.now(),
+          unread: Boolean(message.unread),
+        }));
+      phoneMessageSequence = phoneMessages.reduce((highest, message) => Math.max(highest, Number(String(message.id).replace(/\D/g, '')) || 0), 0);
+    }
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
     });
@@ -2664,6 +2692,172 @@ function loadProgress(slot = latestSaveSlot()) {
     return false;
   }
 }
+
+const PHONE_MAX_MESSAGES = 24;
+
+function escapePhoneHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function phoneTimeLabel(timestamp) {
+  const date = new Date(Number(timestamp) || Date.now());
+  const age = Math.max(0, Date.now() - date.getTime());
+  if (age < 60 * 1000) return 'JUST NOW';
+  if (age < 60 * 60 * 1000) return `${Math.floor(age / 60000)}M AGO`;
+  if (age < 24 * 60 * 60 * 1000) return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase();
+}
+
+function updatePhoneUnreadBadge() {
+  const unread = phoneMessages.filter((message) => message.unread).length;
+  document.querySelectorAll('.phone-unread-badge').forEach((badge) => {
+    badge.textContent = unread > 9 ? '9+' : String(unread);
+    badge.hidden = unread === 0;
+  });
+  const inboxCount = document.querySelector('#phone-inbox-count');
+  if (inboxCount) inboxCount.textContent = `${phoneMessages.length} ${phoneMessages.length === 1 ? 'THREAD' : 'THREADS'}`;
+  const phoneToggle = document.querySelector('#phone-toggle');
+  if (phoneToggle) phoneToggle.classList.toggle('has-unread', unread > 0);
+}
+
+function renderPhone() {
+  const list = document.querySelector('#phone-thread-list');
+  const detail = document.querySelector('#phone-message-detail');
+  const empty = document.querySelector('#phone-empty-state');
+  if (!list || !detail || !empty) {
+    updatePhoneUnreadBadge();
+    return;
+  }
+  if (!phoneMessages.length) {
+    phoneSelectedMessageId = '';
+    list.innerHTML = '<div class="phone-list-empty"><span>INBOX CLEAR</span><small>Mission traffic will appear here.</small></div>';
+    detail.hidden = true;
+    empty.hidden = false;
+    updatePhoneUnreadBadge();
+    return;
+  }
+  const selected = phoneMessages.find((message) => message.id === phoneSelectedMessageId) || phoneMessages[0];
+  phoneSelectedMessageId = selected.id;
+  list.innerHTML = phoneMessages.map((message) => `
+    <button class="phone-thread-card ${message.id === selected.id ? 'selected' : ''} ${message.unread ? 'unread' : ''}" data-phone-id="${escapePhoneHtml(message.id)}" type="button">
+      <span class="phone-thread-card-topline"><b>${escapePhoneHtml(message.category || 'MISSION')}</b><time>${escapePhoneHtml(phoneTimeLabel(message.timestamp))}</time></span>
+      <strong>${escapePhoneHtml(message.subject)}</strong>
+      <span class="phone-thread-card-sender">${escapePhoneHtml(message.sender)}${message.unread ? '<i>NEW</i>' : ''}</span>
+      <p>${escapePhoneHtml(message.body)}</p>
+    </button>`).join('');
+  detail.hidden = false;
+  empty.hidden = true;
+  document.querySelector('#phone-detail-category').textContent = messageCategory(selected);
+  document.querySelector('#phone-detail-time').textContent = phoneTimeLabel(selected.timestamp);
+  document.querySelector('#phone-detail-subject').textContent = selected.subject;
+  document.querySelector('#phone-detail-sender').textContent = selected.sender;
+  document.querySelector('#phone-detail-body').textContent = selected.body;
+  document.querySelector('#phone-detail-status').textContent = selected.unread ? 'UNREAD // TAP THREAD TO CLEAR' : (selected.status || 'READ // SECURE');
+  updatePhoneUnreadBadge();
+}
+
+function messageCategory(message) {
+  return String(message?.category || 'MISSION').toUpperCase();
+}
+
+function addPhoneMessage(details = {}, options = {}) {
+  const {
+    persist = true,
+    notify = true,
+  } = options;
+  const key = typeof details.key === 'string' ? details.key : '';
+  if (key && phoneMessages.some((message) => message.key === key)) return false;
+  const message = {
+    id: `phone-${Date.now()}-${phoneMessageSequence += 1}`,
+    key,
+    missionId: typeof details.missionId === 'string' ? details.missionId : '',
+    kind: typeof details.kind === 'string' ? details.kind : 'mission',
+    sender: typeof details.sender === 'string' ? details.sender : 'MARA // OPERATIONS',
+    subject: typeof details.subject === 'string' ? details.subject : 'MISSION UPDATE',
+    body: typeof details.body === 'string' ? details.body : 'A new secure update is waiting on your line.',
+    category: typeof details.category === 'string' ? details.category : 'MISSION',
+    status: typeof details.status === 'string' ? details.status : 'SECURE',
+    timestamp: Number(details.timestamp) || Date.now(),
+    unread: details.unread !== false,
+  };
+  phoneMessages = [message, ...phoneMessages].slice(0, PHONE_MAX_MESSAGES);
+  phoneSelectedMessageId = phoneOpen ? message.id : (phoneSelectedMessageId || message.id);
+  renderPhone();
+  const phoneToggle = document.querySelector('#phone-toggle');
+  if (phoneToggle) {
+    phoneToggle.classList.add('phone-new');
+    window.clearTimeout(phoneNotificationTimer);
+    phoneNotificationTimer = window.setTimeout(() => phoneToggle.classList.remove('phone-new'), 900);
+  }
+  if (persist && !starterMenuOpen) saveProgress();
+  if (notify && !phoneOpen && !starterMenuOpen) {
+    showToast('NEW SECURE MESSAGE', message.subject, 'PHONE // P');
+  }
+  return true;
+}
+
+function queueMissionAvailability(mission, route = 'city') {
+  if (!mission) return;
+  const cycle = route === 'city' ? player.completedDeliveries : 'network';
+  addPhoneMessage({
+    key: `available:${route}:${cycle}:${mission.id}`,
+    missionId: mission.id,
+    kind: 'availability',
+    category: 'AVAILABLE',
+    sender: route === 'mountain' ? 'JUNO // PINEWATCH LINE' : 'MARA // OPERATIONS',
+    subject: `CONTRACT OPEN // ${mission.title}`,
+    body: route === 'mountain'
+      ? `${mission.copy} The Pinewatch depot is live. Bring the case to the cabin before the ${mission.deadline}-second window closes.`
+      : `${mission.copy} Pickup: ${currentCargoPickupSpot().label}. Drop: ${currentCargoDropoffSpot().label}. Deadline: ${mission.deadline} seconds.`,
+    status: `OPEN // ${mission.deadline} SEC WINDOW`,
+  }, { persist: false, notify: false });
+}
+
+function selectPhoneMessage(id, markRead = true) {
+  const message = phoneMessages.find((entry) => entry.id === id);
+  if (!message) return;
+  phoneSelectedMessageId = message.id;
+  if (markRead && message.unread) {
+    message.unread = false;
+    if (!starterMenuOpen) saveProgress();
+  }
+  renderPhone();
+}
+
+function markAllPhoneMessagesRead() {
+  const changed = phoneMessages.some((message) => message.unread);
+  phoneMessages.forEach((message) => { message.unread = false; });
+  if (changed && !starterMenuOpen) saveProgress();
+  renderPhone();
+}
+
+function setPhoneOpen(open) {
+  if (open && starterMenuOpen) return;
+  if (open && garageOpen) setGarageOpen(false);
+  if (open && worldMapOpen) setWorldMapOpen(false);
+  if (open && gamePaused) setPauseOpen(false);
+  phoneOpen = open;
+  const overlay = document.querySelector('#phone-overlay');
+  if (overlay) {
+    overlay.classList.toggle('open', open);
+    overlay.setAttribute('aria-hidden', String(!open));
+  }
+  if (open) {
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    touchSteer = 0;
+    Object.assign(gamepadState, { forward: false, back: false, handbrake: false, steer: 0 });
+    renderPhone();
+    ensureAudio();
+  } else if (soundOn) {
+    ensureAudio();
+  }
+}
+
 activeSaveSlot = latestSaveSlot() || 1;
 loadProgress(activeSaveSlot);
 spawnPlayerAtHome();
@@ -2880,6 +3074,7 @@ const cargoRun = {
   outcomeTitle: '',
   outcomeCopy: '',
   outcomeTimer: 0,
+  deadlineWarningSent: false,
   lastPayout: 0,
   lastEarlyBonus: 0,
   lastExposurePenalty: 0,
@@ -2920,9 +3115,21 @@ function startCargoRun(route, mission) {
     outcomeTitle: '',
     outcomeCopy: '',
     outcomeTimer: 0,
+    deadlineWarningSent: false,
     lastPayout: 0,
     lastEarlyBonus: 0,
     lastExposurePenalty: 0,
+  });
+  const pickupLabel = route === 'city' ? currentCargoPickupSpot().label : 'PINEWATCH DEPOT';
+  const dropoffLabel = route === 'city' ? currentCargoDropoffSpot().label : 'CABIN DROP';
+  addPhoneMessage({
+    missionId: mission.id,
+    kind: 'accepted',
+    category: 'ACCEPTED',
+    sender: 'MARA // OPERATIONS',
+    subject: `CASE ACCEPTED // ${mission.title}`,
+    body: `Pickup confirmed at ${pickupLabel}. Deliver to ${dropoffLabel} before the ${mission.deadline}-second window closes. Keep the case sealed and the line legal.`,
+    status: `LIVE // ${mission.deadline} SEC WINDOW`,
   });
   return true;
 }
@@ -2947,6 +3154,15 @@ function failCargoRun(title, copy, reward = 'NO PAYOUT') {
   cargoRun.outcomeTimer = 4.2;
   if (cargoRun.route === 'city') deliveryState = 'failed';
   if (cargoRun.route === 'mountain') mountainDeliveryState = 'failed';
+  addPhoneMessage({
+    missionId: cargoRun.missionId,
+    kind: 'failed',
+    category: 'COMPROMISED',
+    sender: 'MARA // OPERATIONS',
+    subject: `RUN FAILED // ${title}`,
+    body: `${copy} The case is written off. Exposure reached ${Math.round(cargoRun.exposure)}%. No payout was issued.`,
+    status: 'FAILED // NO PAYOUT',
+  });
   showToast(title, copy, reward);
 }
 
@@ -2958,6 +3174,15 @@ function completeCargoRun(mission) {
   cargoRun.lastPayout = payout.payout;
   cargoRun.lastEarlyBonus = payout.earlyBonus;
   cargoRun.lastExposurePenalty = payout.exposurePenalty;
+  addPhoneMessage({
+    missionId: mission.id,
+    kind: 'success',
+    category: 'DELIVERED',
+    sender: 'MARA // SETTLEMENT',
+    subject: `DELIVERY CONFIRMED // ${mission.title}`,
+    body: `Clean work. The case reached ${cargoRun.route === 'mountain' ? 'the cabin drop' : 'the remote handoff'} in ${cargoRun.elapsed.toFixed(1)} seconds. Settlement: $${payout.payout}. Keep the line open for the next contract.`,
+    status: `PAID // +$${payout.payout}`,
+  }, { persist: false });
   player.rep += mission.rep;
   player.cash += payout.payout;
   registerDeliveryCompletion();
@@ -3003,6 +3228,7 @@ function clearCargoRun() {
     outcomeTitle: '',
     outcomeCopy: '',
     outcomeTimer: 0,
+    deadlineWarningSent: false,
     lastPayout: 0,
     lastEarlyBonus: 0,
     lastExposurePenalty: 0,
@@ -3011,6 +3237,22 @@ function clearCargoRun() {
 
 function currentCityDeliveryMission() {
   return CITY_DELIVERY_MISSIONS[cityDeliveryMissionIndex] || CITY_DELIVERY_MISSIONS[0];
+}
+
+function updateCargoDeadlineWarning(mission) {
+  if (!cargoRun.active || cargoRun.deadlineWarningSent || !mission) return;
+  const secondsRemaining = Math.max(0, cargoRun.deadline - cargoRun.elapsed);
+  if (secondsRemaining > Math.max(6, mission.deadline * .28)) return;
+  cargoRun.deadlineWarningSent = true;
+  addPhoneMessage({
+    missionId: mission.id,
+    kind: 'deadline',
+    category: 'DEADLINE',
+    sender: 'MARA // OPERATIONS',
+    subject: `DEADLINE WARNING // ${mission.title}`,
+    body: `The handoff window is closing. Approximately ${Math.ceil(secondsRemaining)} seconds remain. Keep the case moving and avoid any stop that is not required by the road.`,
+    status: `URGENT // ${Math.ceil(secondsRemaining)} SEC LEFT`,
+  });
 }
 
 function setCityDeliveryMission(index) {
@@ -3024,9 +3266,11 @@ function setCityDeliveryMission(index) {
   deliveryStartMarker.position.copy(deliveryStart);
   deliveryTargetMarker.position.copy(deliveryTarget);
   updateCargoPickupVisuals();
+  queueMissionAvailability(currentCityDeliveryMission(), 'city');
 }
 
 setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
+queueMissionAvailability(MOUNTAIN_CARGO_MISSION, 'mountain');
 
 const mountainDeliveryStart = mountainVillagePosition.clone();
 const mountainDeliveryTarget = mountainVillageDropPosition.clone();
@@ -3118,6 +3362,7 @@ function updateDelivery(time, dt) {
   if (deliveryState === 'active' && cargoRun.active && cargoRun.route === 'city') {
     cargoRun.elapsed += dt;
     deliveryTime = cargoRun.elapsed;
+    updateCargoDeadlineWarning(mission);
     if (cargoRun.elapsed >= cargoRun.deadline) {
       failCargoRun('DEADLINE MISSED', 'The unmarked cargo window closed before you reached the drop.', 'NO PAYOUT');
     } else if (player.position.distanceTo(deliveryTarget) < 7.4) {
@@ -3187,6 +3432,7 @@ function updateMountainDelivery(time, dt) {
   if (mountainDeliveryState === 'active' && cargoRun.active && cargoRun.route === 'mountain') {
     cargoRun.elapsed += dt;
     mountainDeliveryTime = cargoRun.elapsed;
+    updateCargoDeadlineWarning(MOUNTAIN_CARGO_MISSION);
     if (cargoRun.elapsed >= cargoRun.deadline) {
       failCargoRun('DEADLINE MISSED', 'The mountain drop window closed before the case reached the cabin.', 'NO PAYOUT');
     } else if (player.position.distanceTo(mountainDeliveryTarget) < 7.4) {
@@ -3969,6 +4215,7 @@ function setStarterMenuOpen(open) {
     if (garageOpen) setGarageOpen(false);
     if (gamePaused) setPauseOpen(false);
     if (worldMapOpen) setWorldMapOpen(false);
+    if (phoneOpen) setPhoneOpen(false);
     Object.keys(input).forEach((key) => { input[key] = false; });
     touchSteer = 0;
     world.visible = true;
@@ -3988,6 +4235,7 @@ function setStarterMenuOpen(open) {
     ensureAudio();
     if (audioState.master && audioState.context) audioState.master.gain.setTargetAtTime(soundOn ? .2 : 0, audioState.context.currentTime, .08);
   } else {
+    if (phoneOpen) setPhoneOpen(false);
     setSaveSelectOpen(false);
     world.visible = true;
     menuGarage.visible = false;
@@ -4228,7 +4476,7 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
-  if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen) {
+  if (starterMenuOpen || garageOpen || gamePaused || worldMapOpen || phoneOpen) {
     audioState.engineGain.gain.setTargetAtTime(0, now, .08);
     audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
     audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
@@ -4293,22 +4541,24 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (event.code === 'Escape' && !event.repeat) {
-    if (worldMapOpen) setWorldMapOpen(false);
+    if (phoneOpen) setPhoneOpen(false);
+    else if (worldMapOpen) setWorldMapOpen(false);
     else if (garageOpen) setGarageOpen(false);
     else if (gamePaused) setPauseOpen(false);
     else setPauseOpen(true);
     return;
   }
+  if (event.code === 'KeyP' && !event.repeat) {
+    if (!garageOpen && !worldMapOpen && !gamePaused) setPhoneOpen(!phoneOpen);
+    return;
+  }
   if (event.code === 'KeyM' && !event.repeat) {
+    if (phoneOpen) return;
     if (worldMapOpen) setWorldMapOpen(false);
     else if (!garageOpen && !gamePaused) setWorldMapOpen(true);
     return;
   }
-  if (worldMapOpen) return;
-  if (event.code === 'KeyP' && !event.repeat) {
-    setPauseOpen(!gamePaused);
-    return;
-  }
+  if (worldMapOpen || phoneOpen) return;
   if (event.code === 'KeyG' && !event.repeat) {
     if (!gamePaused) setGarageOpen(!garageOpen);
     return;
@@ -4391,6 +4641,7 @@ function setupMobileControls() {
     button.addEventListener('pointerleave', release);
   });
   document.querySelector('#mobile-pause').addEventListener('click', () => setPauseOpen(!gamePaused));
+  document.querySelector('#mobile-phone').addEventListener('click', () => setPhoneOpen(!phoneOpen));
 }
 setupMobileControls();
 
@@ -4409,6 +4660,16 @@ function toggleSound() {
 }
 
 document.querySelector('#sound-toggle').addEventListener('click', toggleSound);
+document.querySelector('#phone-toggle').addEventListener('click', () => setPhoneOpen(!phoneOpen));
+document.querySelector('#phone-close').addEventListener('click', () => setPhoneOpen(false));
+document.querySelector('#phone-overlay').addEventListener('click', (event) => {
+  if (event.target.id === 'phone-overlay') setPhoneOpen(false);
+});
+document.querySelector('#phone-thread-list').addEventListener('click', (event) => {
+  const thread = event.target.closest('[data-phone-id]');
+  if (thread) selectPhoneMessage(thread.dataset.phoneId);
+});
+document.querySelector('#phone-mark-all').addEventListener('click', markAllPhoneMessagesRead);
 document.querySelector('#map-expand').addEventListener('click', () => setWorldMapOpen(!worldMapOpen));
 document.querySelector('#world-map-close').addEventListener('click', () => setWorldMapOpen(false));
 document.querySelector('#world-map-close-button').addEventListener('click', () => setWorldMapOpen(false));
@@ -5757,9 +6018,9 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen) sessionSeconds += dt;
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen) sessionSeconds += dt;
   updateGamepad();
-  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen) {
+  if (!starterMenuOpen && !garageOpen && !gamePaused && !worldMapOpen && !phoneOpen) {
     updatePlayer(dt);
     updateWorldStreaming();
     updateTrafficSignals(time);

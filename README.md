@@ -17,12 +17,14 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **C** — follow / high camera
 - **V** — accept a hot-cargo delivery at the active city pickup waypoint (one of three fixed underpass/alley locations)
 - **G** — open the in-game garage, repair damage, buy performance upgrades, or respray the car
-- **P / Escape** — pause, open settings, or return to the full title menu
+- **P** — open/close the secure in-game phone; opening it suppresses driving and shows the cartel mission inbox
+- **Escape** — pause the run, close the phone/map/garage, or return through the active overlay
 - **Title menu** — an automatic world-tour slideshow with one shot per region, Continue (latest save), Play (choose among local saves or start a new slot), Market, Garage, and Settings
 - **M** — open/close the full city map; the map pauses the drive while you plan
+- **Touch** — use the mobile PHONE button beside the pause control to open the same inbox
 - **R** — reset vehicle
 - **Gamepad / touch controls** — supported on compatible devices
-- **Local saves** — Play exposes three local save slots; Continue loads the most recently updated profile
+- **Local saves** — Play exposes three local save slots; Continue loads the most recently updated profile. Each slot also persists its fictional cartel phone inbox, read/unread state, and mission contacts.
 
 ## Road consequences
 
@@ -33,7 +35,7 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - City courier work uses a two-step route: collect the unmarked cargo at one of exactly three recurring pickup spots (an underpass or one of two dark alleys), then follow the active minimap waypoint to a randomly selected remote dropoff outside Aurora Bay.
 - Homes are available in the Garage safehouse section. The Pinewatch Shack is owned for free; additional Pinewatch, Aurora Bay, and remote houses can be purchased, selected as the spawn point, and persisted in the local save.
 - Courier work is a repeatable mission progression rather than a single route: the city rotates through six named delivery jobs with recurring pickup locations, randomized remote destinations, deadlines, and rewards, while Pinewatch remains a separate mountain run.
-- City and Pinewatch jobs now carry fictional unmarked contraband. Each run has a hard deadline: delivering early adds a cash bonus, while missing the window loses the payout.
+- City and Pinewatch jobs now carry fictional unmarked contraband. Each run has a hard deadline: delivering early adds a cash bonus, while missing the window loses the payout. The fictional cartel contact network sends phone messages when contracts open, cases are accepted, deadlines get tight, deliveries settle successfully, or a run is failed/compromised.
 - Speed above the posted limit, red lights, stop signs, collisions, water loss, and vehicle damage raise a mission-only exposure meter. Higher exposure makes an existing radar roadside inspection more likely to bust the run; there is no global heat or pursuit loop.
 - The delivery HUD, full map, and roadside notifications show the countdown, estimated payout, and current exposure tier. Driving legally and smoothly protects the cargo, while taking a faster line creates a deliberate risk-versus-reward decision.
 - Completed deliveries are saved locally and grant the next vehicle automatically at the configurable milestones in `PROGRESSION_CONFIG` inside `src/main.js`. Change `starterStyle` or the `vehicleUnlocks` delivery counts there to rebalance the career without rewriting the mission logic.
