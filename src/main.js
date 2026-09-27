@@ -234,10 +234,49 @@ function createWaterMaterial(surfaceColor, deepColor, opacity = .94) {
   });
 }
 
+function createRoadSheenMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      void main() {
+        vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+        float grazing = 1.0 - abs(dot(normalize(vWorldNormal), viewDirection));
+        float shimmer = sin(vWorldPosition.x * .075 + vWorldPosition.z * .021 + uTime * .32) * .5 + .5;
+        float brokenHighlight = sin(vWorldPosition.x * .19 - vWorldPosition.z * .043 - uTime * .22) * .5 + .5;
+        float intensity = .022 + shimmer * .018 + grazing * .018 + smoothstep(.72, .98, brokenHighlight) * .022;
+        vec3 sheen = mix(vec3(.045, .12, .15), vec3(.22, .48, .5), shimmer * .42 + grazing * .32);
+        gl_FragColor = vec4(sheen, intensity);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
+}
+
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
   grass: new THREE.MeshStandardMaterial({ color: 0x1a3a31, roughness: 1 }),
-  asphalt: new THREE.MeshStandardMaterial({ color: 0x17212a, roughness: 0.84, metalness: 0.12 }),
+  asphalt: new THREE.MeshPhysicalMaterial({ color: 0x17212a, roughness: .76, metalness: .12, clearcoat: .28, clearcoatRoughness: .18 }),
+  roadSheen: createRoadSheenMaterial(),
   asphaltEdge: new THREE.MeshStandardMaterial({ color: 0x202c34, roughness: .9, metalness: .08 }),
   sidewalk: new THREE.MeshStandardMaterial({ color: 0x5b6567, roughness: .92 }),
   sidewalkDark: new THREE.MeshStandardMaterial({ color: 0x3b484c, roughness: .9, metalness: .04 }),
@@ -263,7 +302,7 @@ const mats = {
   ruralGround: new THREE.MeshStandardMaterial({ color: 0x304334, roughness: 1 }),
   mountainRock: new THREE.MeshStandardMaterial({ color: 0x26353a, roughness: .96, flatShading: true }),
   mountainRockLit: new THREE.MeshStandardMaterial({ color: 0x3c4c4b, roughness: .92, flatShading: true }),
-  mountainRoad: new THREE.MeshStandardMaterial({ color: 0x1a242c, roughness: .9, metalness: .08 }),
+  mountainRoad: new THREE.MeshPhysicalMaterial({ color: 0x1a242c, roughness: .8, metalness: .08, clearcoat: .2, clearcoatRoughness: .22 }),
   mountainShoulder: new THREE.MeshStandardMaterial({ color: 0x68736e, roughness: .96 }),
   guardrail: new THREE.MeshStandardMaterial({ color: 0x859494, roughness: .5, metalness: .65 }),
   cabinWood: new THREE.MeshStandardMaterial({ color: 0x684d3e, roughness: .88 }),
@@ -275,6 +314,7 @@ const mats = {
   cache: new THREE.MeshStandardMaterial({ color: 0x5ce3d1, emissive: 0x198f91, emissiveIntensity: 3.8, transparent: true, opacity: .95 }),
   indicator: new THREE.MeshStandardMaterial({ color: 0xffa13a, emissive: 0xe26012, emissiveIntensity: 1.2, transparent: true, opacity: .18 }),
 };
+const roadSheenMeshes = [];
 
 // A small shared visual language keeps the authored GLB, procedural fallback, and
 // streamed roadside kits in the same cool-night palette without adding a texture
@@ -481,8 +521,16 @@ function updateWater(time) {
   mats.ocean.uniforms.uTime.value = waterTime * .72;
 }
 
+function addRoadSheen(parent, geometry, position = [0, 0, 0], rotation = [0, 0, 0]) {
+  const sheen = addMesh(parent, geometry, mats.roadSheen, position, { rotation });
+  sheen.renderOrder = 1;
+  roadSheenMeshes.push(sheen);
+  return sheen;
+}
+
 function updateVisualPolish(time) {
   const seconds = time * .001;
+  mats.roadSheen.uniforms.uTime.value = seconds;
   polishPulseMeshes.forEach(({ material, baseOpacity, phase }) => {
     material.opacity = baseOpacity * (.84 + Math.sin(seconds * 2.1 + phase) * .16);
   });
@@ -494,6 +542,7 @@ function updateVisualPolish(time) {
 function buildRoads() {
   for (const x of roadAxes) {
     addMesh(city, new THREE.PlaneGeometry(9.6, 230), mats.asphalt, [x, -.035, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+    addRoadSheen(city, new THREE.PlaneGeometry(9.18, 230), [x, .012, 0], [-Math.PI / 2, 0, 0]);
     addMesh(city, new THREE.BoxGeometry(.55, .035, 230), mats.asphaltEdge, [x - 5.02, -.005, 0], { receiveShadow: true });
     addMesh(city, new THREE.BoxGeometry(.55, .035, 230), mats.asphaltEdge, [x + 5.02, -.005, 0], { receiveShadow: true });
     for (let z = -106; z <= 106; z += 8) {
@@ -508,6 +557,7 @@ function buildRoads() {
   }
   for (const z of roadAxes) {
     addMesh(city, new THREE.PlaneGeometry(230, 9.6), mats.asphalt, [0, -.034, z], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+    addRoadSheen(city, new THREE.PlaneGeometry(230, 9.18), [0, .012, z], [-Math.PI / 2, 0, 0]);
     addMesh(city, new THREE.BoxGeometry(230, .035, .55), mats.asphaltEdge, [0, -.004, z - 5.02], { receiveShadow: true });
     addMesh(city, new THREE.BoxGeometry(230, .035, .55), mats.asphaltEdge, [0, -.004, z + 5.02], { receiveShadow: true });
     for (let x = -106; x <= 106; x += 8) {
@@ -538,6 +588,7 @@ function addUrbanRoadNetwork() {
     const points = route.map(([x, z]) => new THREE.Vector3(x, .02, z));
     addMountainPathRibbon(points, 12.8, mats.asphaltEdge, 0, cityEnhancements);
     addMountainPathRibbon(points, 10.4, mats.asphalt, .035, cityEnhancements);
+    addMountainPathRibbon(points, 10.08, mats.roadSheen, .052, cityEnhancements);
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
@@ -2103,7 +2154,11 @@ function addMountainPathRibbon(points, width, material, yLift = .02, parent = mo
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   const ribbon = new THREE.Mesh(geometry, material);
-  ribbon.receiveShadow = true;
+  ribbon.receiveShadow = material !== mats.roadSheen;
+  if (material === mats.roadSheen) {
+    ribbon.renderOrder = 1;
+    roadSheenMeshes.push(ribbon);
+  }
   parent.add(ribbon);
   return ribbon;
 }
@@ -2111,6 +2166,7 @@ function addMountainPathRibbon(points, width, material, yLift = .02, parent = mo
 function addMountainRoadDetails() {
   addMountainPathRibbon(mountainRoadPoints, 10.6, mats.mountainShoulder, 0);
   addMountainPathRibbon(mountainRoadPoints, 8.8, mats.mountainRoad, .045);
+  addMountainPathRibbon(mountainRoadPoints, 8.52, mats.roadSheen, .064);
   for (let index = 1; index < mountainRoadPoints.length; index += 1) {
     const start = mountainRoadPoints[index - 1];
     const end = mountainRoadPoints[index];
@@ -2498,6 +2554,7 @@ function addRegionalRoadNetwork() {
     const points = regionalRouteVector(route);
     addMountainPathRibbon(points, 14.2, mats.mountainShoulder, 0, regionalRoadGroup);
     addMountainPathRibbon(points, 11.4, mats.mountainRoad, .05, regionalRoadGroup);
+    addMountainPathRibbon(points, 11.08, mats.roadSheen, .068, regionalRoadGroup);
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
