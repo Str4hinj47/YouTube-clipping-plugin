@@ -3243,9 +3243,24 @@ function selectedHomeEntry() {
   return HOME_CATALOG.find((home) => home.id === player.selectedHome) || HOME_CATALOG[0];
 }
 
+function isSafeResumePosition(x, z) {
+  if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
+  if (waterBodyAt(x, z)) return false;
+  const clearance = 1.16 + .6;
+  for (const obstacle of staticObstacles) {
+    if (obstacle.type === 'lake-water' || obstacle.broken) continue;
+    if (Math.abs(x - obstacle.x) < obstacle.halfX + clearance && Math.abs(z - obstacle.z) < obstacle.halfZ + clearance) return false;
+  }
+  return true;
+}
+
 function spawnPlayerAtHome(forceHome = false) {
   const home = selectedHomeEntry();
-  const hasResume = !forceHome && Array.isArray(player.resumePosition) && player.resumePosition.length >= 3;
+  const resume = Array.isArray(player.resumePosition) && player.resumePosition.length >= 3 ? player.resumePosition.slice(0, 3) : null;
+  // Older saves could store a position inside a building or off the drivable
+  // world (pre-fix camera bug let players "park" anywhere). Only resume there
+  // if the spot is actually clear; otherwise fall back to the safehouse.
+  const hasResume = !forceHome && resume && resume.every(Number.isFinite) && isSafeResumePosition(resume[0], resume[2]);
   if (hasResume) {
     player.position.set(...player.resumePosition.slice(0, 3));
     player.heading = Number.isFinite(player.resumeHeading) ? player.resumeHeading : (home.heading || 0);
@@ -6094,7 +6109,10 @@ function renderSaveSlots() {
     return `<article class="save-slot-card ${saved ? 'filled' : 'empty'} ${isLatest ? 'latest' : ''}">
       <div class="save-slot-mark"><span>0${slot}</span><i></i></div>
       <div class="save-slot-copy"><div><b>SAVE SLOT ${slot}</b><small>${saved ? (isLatest ? 'LATEST SAVE' : 'LOCAL PROFILE') : 'AVAILABLE'}</small></div><strong>${details}</strong><p>${saved ? formatSaveStamp(saved) : 'Your progress, cars, homes, and deliveries will be stored here.'}</p></div>
-      <button class="save-slot-action ${saved ? '' : 'new'}" data-save-slot="${slot}" data-save-action="${saved ? 'load' : 'new'}" type="button">${saved ? 'LOAD SAVE' : 'START NEW RUN'} <span>↗</span></button>
+      <div class="save-slot-buttons">
+        <button class="save-slot-action ${saved ? '' : 'new'}" data-save-slot="${slot}" data-save-action="${saved ? 'load' : 'new'}" type="button">${saved ? 'LOAD SAVE' : 'START NEW RUN'} <span>↗</span></button>
+        ${saved ? `<button class="save-slot-action overwrite" data-save-slot="${slot}" data-save-action="overwrite" type="button">NEW RUN // OVERWRITE <span>↺</span></button>` : ''}
+      </div>
     </article>`;
   }).join('');
 }
@@ -6787,7 +6805,9 @@ document.querySelector('#save-select-overlay').addEventListener('click', (event)
 document.querySelector('#save-slot-list').addEventListener('click', (event) => {
   const button = event.target.closest('[data-save-slot]');
   if (!button) return;
-  activateSaveSlot(button.dataset.saveSlot, button.dataset.saveAction === 'new');
+  const action = button.dataset.saveAction;
+  if (action === 'overwrite' && !window.confirm(`Overwrite save slot ${button.dataset.saveSlot} with a new run? This cannot be undone.`)) return;
+  activateSaveSlot(button.dataset.saveSlot, action === 'new' || action === 'overwrite');
 });
 document.querySelectorAll('.showcase-dot').forEach((dot) => {
   dot.addEventListener('click', () => {
