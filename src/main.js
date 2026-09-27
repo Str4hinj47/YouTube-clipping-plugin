@@ -584,6 +584,129 @@ let driftScore = 0;
 let collisionCooldown = 0;
 let toastTimeout;
 
+const audioState = {
+  context: null,
+  master: null,
+  engineOsc: null,
+  engineHarmonic: null,
+  engineFilter: null,
+  engineGain: null,
+  harmonicGain: null,
+  roadNoiseGain: null,
+  nitroOsc: null,
+  nitroGain: null,
+  initialized: false,
+};
+
+function ensureAudio() {
+  if (!soundOn) return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  if (!audioState.initialized) {
+    const context = new AudioContext();
+    const master = context.createGain();
+    master.gain.value = .28;
+    master.connect(context.destination);
+
+    const engineFilter = context.createBiquadFilter();
+    engineFilter.type = 'lowpass';
+    engineFilter.frequency.value = 720;
+    engineFilter.Q.value = .8;
+    const engineGain = context.createGain();
+    engineGain.gain.value = .018;
+    engineFilter.connect(engineGain);
+    engineGain.connect(master);
+
+    const engineOsc = context.createOscillator();
+    engineOsc.type = 'sawtooth';
+    engineOsc.frequency.value = 48;
+    engineOsc.connect(engineFilter);
+    engineOsc.start();
+
+    const engineHarmonic = context.createOscillator();
+    engineHarmonic.type = 'triangle';
+    engineHarmonic.frequency.value = 96;
+    const harmonicGain = context.createGain();
+    harmonicGain.gain.value = .012;
+    engineHarmonic.connect(harmonicGain);
+    harmonicGain.connect(master);
+    engineHarmonic.start();
+
+    const noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i += 1) noiseData[i] = (Math.random() * 2 - 1) * .35;
+    const roadNoise = context.createBufferSource();
+    roadNoise.buffer = noiseBuffer;
+    roadNoise.loop = true;
+    const roadFilter = context.createBiquadFilter();
+    roadFilter.type = 'bandpass';
+    roadFilter.frequency.value = 720;
+    roadFilter.Q.value = .45;
+    const roadNoiseGain = context.createGain();
+    roadNoiseGain.gain.value = 0;
+    roadNoise.connect(roadFilter);
+    roadFilter.connect(roadNoiseGain);
+    roadNoiseGain.connect(master);
+    roadNoise.start();
+
+    const nitroOsc = context.createOscillator();
+    nitroOsc.type = 'square';
+    nitroOsc.frequency.value = 170;
+    const nitroGain = context.createGain();
+    nitroGain.gain.value = 0;
+    nitroOsc.connect(nitroGain);
+    nitroGain.connect(master);
+    nitroOsc.start();
+
+    Object.assign(audioState, { context, master, engineOsc, engineHarmonic, engineFilter, engineGain, harmonicGain, roadNoiseGain, nitroOsc, nitroGain, initialized: true });
+  }
+  if (audioState.context.state === 'suspended') audioState.context.resume();
+}
+
+function updateAudio() {
+  if (!audioState.initialized || !audioState.context) return;
+  const now = audioState.context.currentTime;
+  const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
+  const nitroActive = input.nitro && input.forward && player.nitro > 0 && player.speed > 4;
+  audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (input.forward ? 15 : 0), now, .045);
+  audioState.engineHarmonic.frequency.setTargetAtTime(96 + speedRatio * 360, now, .045);
+  audioState.engineFilter.frequency.setTargetAtTime(520 + speedRatio * 820, now, .08);
+  audioState.engineGain.gain.setTargetAtTime(.012 + speedRatio * .072 + (input.forward ? .024 : 0), now, .08);
+  audioState.harmonicGain.gain.setTargetAtTime(.008 + speedRatio * .028, now, .08);
+  audioState.roadNoiseGain.gain.setTargetAtTime(speedRatio * (isOnRoad(player.position.x, player.position.z) ? .045 : .075), now, .12);
+  audioState.nitroOsc.frequency.setTargetAtTime(170 + speedRatio * 240, now, .04);
+  audioState.nitroGain.gain.setTargetAtTime(nitroActive ? .045 : 0, now, .06);
+  audioState.master.gain.setTargetAtTime(soundOn ? .28 : 0, now, .08);
+}
+
+function playTone(frequency, duration = .18, volume = .08, type = 'sine', slide = 0) {
+  if (!soundOn || !audioState.initialized || !audioState.context) return;
+  const context = audioState.context;
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.frequency.linearRampToValueAtTime(Math.max(24, frequency + slide), now + duration);
+  gain.gain.setValueAtTime(.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + .015);
+  gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
+  oscillator.connect(gain);
+  gain.connect(audioState.master);
+  oscillator.start(now);
+  oscillator.stop(now + duration + .025);
+}
+
+function playImpact(trafficHit = false) {
+  playTone(trafficHit ? 92 : 65, .22, .13, 'sawtooth', -38);
+  playTone(trafficHit ? 180 : 125, .1, .07, 'square', -80);
+}
+
+function playBeacon() {
+  playTone(440, .16, .07, 'sine', 150);
+  window.setTimeout(() => playTone(660, .22, .055, 'sine', 180), 95);
+}
+
 function setInput(code, value) {
   if (code === 'KeyW' || code === 'ArrowUp') input.forward = value;
   if (code === 'KeyS' || code === 'ArrowDown') input.back = value;
@@ -593,6 +716,7 @@ function setInput(code, value) {
   if (code === 'Space') input.handbrake = value;
 }
 window.addEventListener('keydown', (event) => {
+  ensureAudio();
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   if (event.code === 'KeyC' && !event.repeat) {
     cameraMode = (cameraMode + 1) % 2;
@@ -602,12 +726,17 @@ window.addEventListener('keydown', (event) => {
   setInput(event.code, true);
 });
 window.addEventListener('keyup', (event) => setInput(event.code, false));
+window.addEventListener('pointerdown', () => ensureAudio(), { passive: true });
 window.addEventListener('blur', () => Object.keys(input).forEach((key) => { input[key] = false; }));
 
 document.querySelector('#sound-toggle').addEventListener('click', (event) => {
   soundOn = !soundOn;
   event.currentTarget.textContent = soundOn ? '◒' : '◑';
   event.currentTarget.style.color = soundOn ? '' : 'var(--orange)';
+  if (soundOn) ensureAudio();
+  if (audioState.master && audioState.context) {
+    audioState.master.gain.setTargetAtTime(soundOn ? .28 : 0, audioState.context.currentTime, .08);
+  }
 });
 document.querySelector('#map-expand').addEventListener('click', () => {
   const panel = document.querySelector('.map-panel');
@@ -734,6 +863,7 @@ function updatePlayer(dt) {
   if (staticHit || trafficHit) {
     if (collisionCooldown <= 0) {
       player.speed *= trafficHit ? -.28 : -.22;
+      playImpact(trafficHit);
       showToast(trafficHit ? 'TRAFFIC CONTACT' : 'BODYWORK CONTACT', trafficHit ? 'Give the lanes a little room' : 'Concrete wins every time', 'SLOW DOWN');
       collisionCooldown = .75;
     } else {
@@ -807,6 +937,7 @@ function updateBeacons(time, dt) {
     data.label.material.opacity = active ? 1 : .28;
     data.beam.material.opacity = active ? .94 : .35;
     if (active && distance < 7.2) {
+      playBeacon();
       routeStep += 1;
       player.rep += 120;
       player.cash += 80;
@@ -934,6 +1065,7 @@ function animate(time) {
   sessionSeconds += dt;
   updatePlayer(dt);
   updateTraffic(dt);
+  updateAudio();
   updateBeacons(time, dt);
   updateCamera(dt);
   hudAccumulator += dt;
