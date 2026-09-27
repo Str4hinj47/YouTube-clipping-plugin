@@ -148,6 +148,9 @@ world.add(fallbackBase);
 const mountainExpansion = new THREE.Group();
 mountainExpansion.name = 'Blender-authored mountain pass and village extension';
 world.add(mountainExpansion);
+const mountainRoadForest = new THREE.Group();
+mountainRoadForest.name = 'Mountain pass roadside conifer dressing';
+world.add(mountainRoadForest);
 const pinewatchExpansion = new THREE.Group();
 pinewatchExpansion.name = 'Pinewatch small-town expansion details';
 world.add(pinewatchExpansion);
@@ -2316,6 +2319,54 @@ function createMountainRock(x, z, radius, height, material = mats.mountainRock, 
   return rock;
 }
 
+function createMountainPine(x, z, scale = 1, seed = 1) {
+  const group = new THREE.Group();
+  group.name = `Mountain roadside pine ${seed}`;
+  group.position.set(x, mountainRoadHeightAt(x, z) - .02, z);
+  group.rotation.y = randomFrom(seed * 1.9) * Math.PI * 2;
+  group.scale.setScalar(scale);
+  const trunkHeight = 1.35;
+  const trunk = addMesh(group, new THREE.CylinderGeometry(.12, .2, trunkHeight, 7), mats.treeTrunk, [0, trunkHeight / 2, 0], { castShadow: true });
+  trunk.castShadow = true;
+  const foliage = randomFrom(seed + 8) > .48 ? mats.treeLeaf : mats.treeLeafDark;
+  addMesh(group, new THREE.ConeGeometry(1.05, 2.2, 8), foliage, [0, 1.7, 0], { castShadow: true });
+  addMesh(group, new THREE.ConeGeometry(.82, 1.8, 8), foliage, [0, 2.75, 0], { castShadow: true });
+  addMesh(group, new THREE.ConeGeometry(.56, 1.35, 8), foliage, [0, 3.65, 0], { castShadow: true });
+  mountainRoadForest.add(group);
+  return group;
+}
+
+function buildMountainRoadForest() {
+  let seed = 1200;
+  for (let index = 1; index < mountainRoadPoints.length; index += 1) {
+    const start = mountainRoadPoints[index - 1];
+    const end = mountainRoadPoints[index];
+    const segment = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+    const length = segment.length();
+    if (length < 1) continue;
+    const tangent = segment.normalize();
+    const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+    for (let distance = 7; distance < length - 2; distance += 11 + randomFrom(seed++) * 4) {
+      const center = start.clone().lerp(end, distance / length);
+      const villageDistance = Math.hypot(center.x - mountainVillagePosition.x, center.z - mountainVillagePosition.z);
+      // Keep Pinewatch open and small-scale; the heavier tree wall belongs on the pass.
+      const nearVillage = villageDistance < 52;
+      for (const side of [-1, 1]) {
+        const outerOffset = nearVillage ? 18 + randomFrom(seed++) * 6 : 10.5 + randomFrom(seed++) * 11;
+        const treePosition = center.clone().addScaledVector(normal, side * outerOffset);
+        if (Math.hypot(treePosition.x - mountainVillagePosition.x, treePosition.z - mountainVillagePosition.z) < 34) continue;
+        const treeScale = nearVillage ? .72 + randomFrom(seed++) * .28 : .82 + randomFrom(seed++) * .58;
+        createMountainPine(treePosition.x, treePosition.z, treeScale, seed++);
+      }
+      if (!nearVillage && randomFrom(seed++) > .46) {
+        const outerOffset = 25 + randomFrom(seed++) * 12;
+        const treePosition = center.clone().addScaledVector(normal, (randomFrom(seed++) > .5 ? 1 : -1) * outerOffset);
+        createMountainPine(treePosition.x, treePosition.z, .72 + randomFrom(seed++) * .4, seed++);
+      }
+    }
+  }
+}
+
 function createMountainCabin(x, z, width, depth, height, rotation = 0, seed = 1, parent = mountainExpansion) {
   const groundHeight = mountainRoadHeightAt(x, z);
   const group = new THREE.Group();
@@ -2561,6 +2612,7 @@ function buildMountainWorld() {
     createMountainRock(x, z, 3 + randomFrom(index + 840) * 7, 5 + randomFrom(index + 860) * 13, mats.mountainRock, index + 100);
   }
   addMountainRoadDetails();
+  buildMountainRoadForest();
   const village = new THREE.Group();
   village.name = 'Pinewatch mountain village';
   mountainExpansion.add(village);
