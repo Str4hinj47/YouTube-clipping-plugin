@@ -278,6 +278,8 @@ const mats = {
   asphalt: new THREE.MeshPhysicalMaterial({ color: 0x17212a, roughness: .76, metalness: .12, clearcoat: .28, clearcoatRoughness: .18 }),
   roadSheen: createRoadSheenMaterial(),
   asphaltEdge: new THREE.MeshStandardMaterial({ color: 0x202c34, roughness: .9, metalness: .08 }),
+  buildingFrame: new THREE.MeshPhysicalMaterial({ color: 0x18252e, roughness: .58, metalness: .42, clearcoat: .18, clearcoatRoughness: .2 }),
+  buildingRoof: new THREE.MeshStandardMaterial({ color: 0x1b262c, roughness: .72, metalness: .24 }),
   sidewalk: new THREE.MeshStandardMaterial({ color: 0x5b6567, roughness: .92 }),
   sidewalkDark: new THREE.MeshStandardMaterial({ color: 0x3b484c, roughness: .9, metalness: .04 }),
   lane: new THREE.MeshBasicMaterial({ color: 0xb9c49d }),
@@ -619,12 +621,76 @@ function createWindow(parent, x, y, z, width, depth, material, rotation = [0, 0,
   return addMesh(parent, new THREE.BoxGeometry(width, .45, depth), material, [x, y, z], { rotation });
 }
 
+function addBuildingFacadeKit(group, width, depth, height, floors, architectureStyle, trimMaterial, seed) {
+  const frontZ = depth / 2 + .09;
+  const frameHeight = Math.max(2.8, height - .55);
+  const frontBays = Math.max(2, Math.min(7, Math.floor(width / 3.8)));
+  const sideBays = Math.max(2, Math.min(5, Math.floor(depth / 4.1)));
+  const frameInset = width / 2 - .72;
+  for (let bay = 0; bay < frontBays; bay += 1) {
+    const x = -frameInset + bay * ((frameInset * 2) / Math.max(1, frontBays - 1));
+    addMesh(group, new THREE.BoxGeometry(.075, frameHeight, .1), mats.buildingFrame, [x, frameHeight / 2 + .25, frontZ], { castShadow: true });
+    if (architectureStyle % 3 === 0) {
+      addMesh(group, new THREE.BoxGeometry(.035, frameHeight * .72, .035), trimMaterial, [x, frameHeight * .47 + .25, frontZ + .065]);
+    }
+  }
+  for (let bay = 0; bay < sideBays; bay += 1) {
+    const windowZ = -depth / 2 + 1.4 + bay * ((depth - 2.8) / Math.max(1, sideBays - 1));
+    addMesh(group, new THREE.BoxGeometry(.1, frameHeight, .075), mats.buildingFrame, [width / 2 + .09, frameHeight / 2 + .25, windowZ], { castShadow: true });
+  }
+  const bandStep = architectureStyle % 2 === 0 ? 2 : 3;
+  for (let floor = bandStep; floor < floors; floor += bandStep) {
+    const y = 1.35 + floor * 3.05;
+    addMesh(group, new THREE.BoxGeometry(width * .91, .075, .12), mats.buildingFrame, [0, y, frontZ], { castShadow: true });
+    if (architectureStyle === 2 || architectureStyle === 5) {
+      addMesh(group, new THREE.BoxGeometry(width * .65, .035, .04), trimMaterial, [0, y + .055, frontZ + .07]);
+    }
+  }
+  const entranceWidth = Math.min(2.3, Math.max(1.4, width * .17));
+  addMesh(group, new THREE.BoxGeometry(entranceWidth, 1.9, .08), mats.glass, [0, .98, frontZ + .015], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(entranceWidth + .22, .1, .13), mats.buildingFrame, [0, 1.98, frontZ + .02], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(entranceWidth + .58, .12, .76), trimMaterial, [0, 2.06, depth / 2 + .42], { castShadow: true });
+  if (architectureStyle === 1 || architectureStyle === 4) {
+    const balconyWidth = Math.min(4.2, Math.max(2.7, width * .28));
+    const balconyX = architectureStyle === 1 ? -width * .21 : width * .2;
+    const balconyCount = Math.max(1, Math.floor((floors - 1) / 2));
+    for (let balcony = 0; balcony < balconyCount; balcony += 1) {
+      const y = 3.12 + balcony * 6.1;
+      if (y > height - 1.1) break;
+      addMesh(group, new THREE.BoxGeometry(balconyWidth, .1, 1.08), mats.buildingFrame, [balconyX, y, depth / 2 + .49], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(balconyWidth, .075, .07), trimMaterial, [balconyX, y + .63, depth / 2 + 1.02], { castShadow: true });
+      for (const side of [-1, 1]) {
+        addMesh(group, new THREE.BoxGeometry(.06, .58, .06), mats.buildingFrame, [balconyX + side * (balconyWidth / 2 - .04), y + .31, depth / 2 + 1.02], { castShadow: true });
+      }
+    }
+  }
+  const roofY = height + .18;
+  addMesh(group, new THREE.BoxGeometry(width + .18, .16, .16), mats.buildingFrame, [0, roofY, depth / 2], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width + .18, .16, .16), mats.buildingFrame, [0, roofY, -depth / 2], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.16, .16, depth), mats.buildingFrame, [width / 2, roofY, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.16, .16, depth), mats.buildingFrame, [-width / 2, roofY, 0], { castShadow: true });
+  const utilityCount = 1 + Math.floor(randomFrom(seed * 3.1) * 3);
+  for (let unit = 0; unit < utilityCount; unit += 1) {
+    const utilityWidth = .9 + randomFrom(seed + unit * 13) * .65;
+    const utilityDepth = .7 + randomFrom(seed + unit * 17) * .5;
+    const utilityX = -width * .25 + randomFrom(seed + unit * 19) * width * .5;
+    const utilityZ = -depth * .22 + randomFrom(seed + unit * 23) * depth * .44;
+    addMesh(group, new THREE.BoxGeometry(utilityWidth, .52, utilityDepth), mats.buildingRoof, [utilityX, height + .48, utilityZ], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(utilityWidth * .72, .045, utilityDepth * .72), trimMaterial, [utilityX, height + .76, utilityZ]);
+  }
+  if (architectureStyle === 0 || architectureStyle === 5) {
+    const mastX = architectureStyle === 0 ? -width * .28 : width * .27;
+    addMesh(group, new THREE.CylinderGeometry(.045, .06, 1.35, 6), mats.buildingFrame, [mastX, height + 1.14, depth * .12], { castShadow: true });
+    addMesh(group, new THREE.SphereGeometry(.12, 8, 6), trimMaterial, [mastX, height + 1.84, depth * .12]);
+  }
+}
+
 function createBuilding(x, z, width, depth, height, colorIndex, seed) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
   group.name = `Blender building ${seed}`;
   const palette = [0x253c4a, 0x30434b, 0x3d3d4c, 0x24484b, 0x4b3f4b, 0x35455b];
-  const bodyMat = new THREE.MeshStandardMaterial({ color: palette[colorIndex % palette.length], roughness: .88, metalness: .08 });
+  const bodyMat = new THREE.MeshPhysicalMaterial({ color: palette[colorIndex % palette.length], roughness: .8, metalness: .1, clearcoat: .12, clearcoatRoughness: .28 });
   addMesh(group, new THREE.BoxGeometry(width, height, depth), bodyMat, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
   addMesh(group, new THREE.BoxGeometry(width + .16, .11, depth + .16), mats.sidewalkDark, [0, height + .07, 0], { castShadow: true });
   const architectureStyle = Math.abs(Math.floor(seed)) % 6;
@@ -651,7 +717,6 @@ function createBuilding(x, z, width, depth, height, colorIndex, seed) {
     addMesh(group, new THREE.BoxGeometry(width * .12, height * .58, .18), trimMaterial, [-width / 2 - .09, height * .39, -depth * .24], { castShadow: true });
   }
   const windowMats = [mats.windowCyan, mats.windowPurple, mats.windowAmber, mats.windowBlue];
-  const chosenWindow = windowMats[colorIndex % windowMats.length];
   const floors = Math.max(2, Math.floor(height / 3.1));
   const frontCols = Math.max(2, Math.floor(width / 2.7));
   const sideCols = Math.max(2, Math.floor(depth / 2.7));
@@ -661,17 +726,22 @@ function createBuilding(x, z, width, depth, height, colorIndex, seed) {
       const windowX = -width / 2 + 1.35 + col * ((width - 2.2) / Math.max(1, frontCols - 1));
       const lit = randomFrom(seed * 9 + floor * 31 + col * 17) > .27;
       if (lit) {
-        createWindow(group, windowX, y, depth / 2 + .025, .72, .035, chosenWindow);
-        if (randomFrom(seed + floor * 8 + col) > .35) createWindow(group, windowX, y, -depth / 2 - .025, .72, .035, chosenWindow);
+        const frontWindow = windowMats[(colorIndex + floor + col + Math.floor(seed)) % windowMats.length];
+        createWindow(group, windowX, y, depth / 2 + .025, .72, .035, frontWindow);
+        if (randomFrom(seed + floor * 8 + col) > .35) {
+          const rearWindow = windowMats[(colorIndex + floor + col + 1 + Math.floor(seed / 3)) % windowMats.length];
+          createWindow(group, windowX, y, -depth / 2 - .025, .72, .035, rearWindow);
+        }
       }
     }
     for (let col = 0; col < sideCols; col += 1) {
       const windowZ = -depth / 2 + 1.35 + col * ((depth - 2.2) / Math.max(1, sideCols - 1));
       if (randomFrom(seed * 4 + floor * 18 + col * 5) > .34) {
-        createWindow(group, width / 2 + .025, y, windowZ, .035, .72, windowMats[(colorIndex + 1) % windowMats.length], [0, Math.PI / 2, 0]);
+        createWindow(group, width / 2 + .025, y, windowZ, .035, .72, windowMats[(colorIndex + floor + col + 1) % windowMats.length], [0, Math.PI / 2, 0]);
       }
     }
   }
+  addBuildingFacadeKit(group, width, depth, height, floors, architectureStyle, trimMaterial, seed);
   if (randomFrom(seed * 1.7) > .28) {
     addMesh(group, new THREE.BoxGeometry(width * .28, .45, depth * .24), mats.sidewalkDark, [width * .17, height + .32, -depth * .12], { castShadow: true });
     addMesh(group, new THREE.CylinderGeometry(.055, .055, 1.2, 6), mats.lamp, [width * .17, height + 1.1, -depth * .12]);
@@ -712,6 +782,43 @@ function createBuildingAccent(x, z, width, depth, height, style = 0, seed = 1) {
   } else {
     addMesh(group, new THREE.BoxGeometry(width * .2, .12, depth * .9), trim, [-width * .28, height * .74, 0], { castShadow: true });
     addMesh(group, new THREE.BoxGeometry(width * .42, .1, depth * .24), mats.sidewalkDark, [width * .18, height + .46, depth * .14], { castShadow: true });
+  }
+  // The imported environment supplies the primary massing; this deterministic facade
+  // kit gives each block a readable night face without replacing authored landmarks.
+  const windowMats = [mats.windowCyan, mats.windowPurple, mats.windowAmber, mats.windowBlue];
+  const accentFloors = Math.max(2, Math.floor(height / 3.1));
+  const accentColumns = Math.max(3, Math.min(6, Math.floor(width / 3.4)));
+  for (let floor = 0; floor < accentFloors; floor += 1) {
+    const y = 1.32 + floor * 3.05;
+    for (let column = 0; column < accentColumns; column += 1) {
+      const windowX = -width / 2 + 1.25 + column * ((width - 2.1) / Math.max(1, accentColumns - 1));
+      if (randomFrom(seed * 2.7 + floor * 19 + column * 7) > .24) {
+        const material = windowMats[(style + floor + column) % windowMats.length];
+        createWindow(group, windowX, y, depth / 2 + .245, .7, .045, material);
+      }
+    }
+    if (floor > 0 && floor % (style % 2 ? 2 : 3) === 0) {
+      addMesh(group, new THREE.BoxGeometry(width * .84, .055, .1), mats.buildingFrame, [0, y - .48, depth / 2 + .27], { castShadow: true });
+    }
+  }
+  for (let column = 0; column < accentColumns; column += 1) {
+    const x = -width / 2 + 1.1 + column * ((width - 2.2) / Math.max(1, accentColumns - 1));
+    addMesh(group, new THREE.BoxGeometry(.06, Math.max(2.4, height - .55), .08), mats.buildingFrame, [x, Math.max(1.4, height / 2), depth / 2 + .29], { castShadow: true });
+  }
+  const roofUnitCount = 1 + (seed % 3);
+  for (let unit = 0; unit < roofUnitCount; unit += 1) {
+    const unitX = -width * .26 + unit * (width * .24);
+    addMesh(group, new THREE.BoxGeometry(1.05 + (unit % 2) * .35, .42, .72), mats.buildingRoof, [unitX, height + .42, -depth * .12 + (unit % 2) * .28], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.7, .035, .48), trim, [unitX, height + .65, -depth * .12 + (unit % 2) * .28]);
+  }
+  if (style % 3 === 1 && height > 11) {
+    const balconyWidth = Math.min(3.8, width * .28);
+    for (let balcony = 0; balcony < Math.max(1, Math.floor((accentFloors - 1) / 2)); balcony += 1) {
+      const y = 3.05 + balcony * 6.1;
+      if (y > height - 1) break;
+      addMesh(group, new THREE.BoxGeometry(balconyWidth, .08, .88), mats.buildingFrame, [width * .18, y, depth / 2 + .47], { castShadow: true });
+      addMesh(group, new THREE.BoxGeometry(balconyWidth, .06, .06), trim, [width * .18, y + .58, depth / 2 + .9], { castShadow: true });
+    }
   }
   cityEnhancements.add(group);
   return group;
