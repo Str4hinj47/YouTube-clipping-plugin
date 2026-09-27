@@ -858,9 +858,12 @@ def make_mountain_extension(root):
             for side in (-1, 1):
                 post = center + normal * (side * 5.35)
                 cylinder("mountain guardrail post", post, .055, 1.1, GUARDRAIL, 6, root)
-    for index, (x, z, radius, height) in enumerate(((106, 165, 45, 62), (176, 153, 52, 76), (192, 88, 42, 58),
-                                                      (118, 79, 36, 47), (57, 184, 36, 48), (214, 190, 38, 54),
-                                                      (82, 121, 25, 34), (170, 208, 44, 64))):
+    # Ridge rocks must clear the pass ribbon and Pinewatch Village (136, 68) by at
+    # least their base radius, otherwise the safehouse spawn ends up inside rock.
+    # src/main.js AUTHORED_RIDGE_POSITIONS mirrors these X/Z values.
+    for index, (x, z, radius, height) in enumerate(((85, 215, 45, 62), (235, 155, 52, 76), (217, 72, 42, 58),
+                                                      (195, 35, 36, 47), (57, 184, 36, 48), (214, 190, 38, 54),
+                                                      (40, 150, 25, 34), (170, 208, 44, 64))):
         make_mountain_rock(f"mountain ridge {index:02d}", (x, height / 2 - .12, z), radius, height,
                            MOUNTAIN_ROCK_LIT if index % 2 else MOUNTAIN_ROCK, root)
     cabins = ((136, 68, 7.2, 5.2, 4.8, -.25), (151, 65, 6.4, 5.0, 4.3, .5),

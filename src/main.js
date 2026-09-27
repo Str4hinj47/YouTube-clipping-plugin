@@ -2616,6 +2616,10 @@ const AUTHORED_REGION_ASSETS = [
   { type: 'rural', url: './assets/regions/southern_crossroads.glb' },
 ];
 const authoredRegionScenes = new Map();
+// X/Z for the eight authored "mountain ridge NN" rocks in aurora_bay_environment.glb.
+// Every entry clears the mountain pass ribbon and Pinewatch Village by at least
+// the rock's base radius (see blender/create_assets.py make_mountain_extension).
+const AUTHORED_RIDGE_POSITIONS = [[85, 215], [235, 155], [217, 72], [195, 35], [57, 184], [214, 190], [40, 150], [170, 208]];
 
 function prepareImportedModel(root) {
   root.traverse((object) => {
@@ -2764,6 +2768,14 @@ async function loadBlenderAssets() {
     let importedMountainExtension = false;
     importedEnvironment.traverse((object) => {
       if (/mountain|pinewatch|guardrail/i.test(object.name || '')) importedMountainExtension = true;
+      const ridgeMatch = /mountain[ _]ridge[ _](\d+)/i.exec(object.name || '');
+      if (ridgeMatch) {
+        // The authored ridge rocks were exported straddling the mountain pass
+        // and Pinewatch Village, so the safehouse spawn sat inside solid rock.
+        // Push them out to the ranges around the pass instead.
+        const relocated = AUTHORED_RIDGE_POSITIONS[Number(ridgeMatch[1])];
+        if (relocated) object.position.set(relocated[0], object.position.y, relocated[1]);
+      }
     });
     city.visible = false;
     fallbackBase.visible = false;
@@ -3247,6 +3259,9 @@ function spawnPlayerAtHome(forceHome = false) {
   stopPlayerPhysics();
   player.mesh.position.copy(player.position);
   player.mesh.rotation.set(0, player.heading, 0);
+  // Teleports must move the camera with the car; never let it ease in from
+  // wherever it was (menu showcase, previous safehouse, the lake...).
+  if (!starterMenuOpen) snapCameraToPlayer();
   return home;
 }
 
@@ -3366,10 +3381,8 @@ function addPinewatchRoad(points) {
 function buildMountainWorld() {
   initializeMountainRoadMetrics();
   addMesh(mountainExpansion, new THREE.PlaneGeometry(520, 520), mats.mountainGround, [0, -.24, 50], { receiveShadow: true });
-  const ridges = [
-    [106, 165, 45, 62], [176, 153, 52, 76], [192, 88, 42, 58], [118, 79, 36, 47],
-    [57, 184, 36, 48], [214, 190, 38, 54], [82, 121, 25, 34], [170, 208, 44, 64],
-  ];
+  const ridgeSizes = [[45, 62], [52, 76], [42, 58], [36, 47], [36, 48], [38, 54], [25, 34], [44, 64]];
+  const ridges = AUTHORED_RIDGE_POSITIONS.map(([x, z], index) => [x, z, ...ridgeSizes[index]]);
   ridges.forEach(([x, z, radius, height], index) => createMountainRock(x, z, radius, height, index % 2 ? mats.mountainRockLit : mats.mountainRock, index + 40));
   for (let index = 0; index < 22; index += 1) {
     const angle = randomFrom(index + 800) * Math.PI * 2;
@@ -5777,6 +5790,7 @@ function recoverVehicle() {
   stopPlayerPhysics();
   player.mesh.position.copy(player.position);
   player.mesh.rotation.y = player.heading;
+  snapCameraToPlayer();
   clearVisibleVehicleDamage(player.mesh);
   saveProgress();
   updateGarageUi();
@@ -6216,6 +6230,7 @@ function setStarterMenuOpen(open) {
     endRadarStop();
     player.mesh.position.copy(player.position);
     player.mesh.rotation.y = player.heading;
+    snapCameraToPlayer();
     lastStreamSectorKey = '';
     updateWorldStreaming(true);
     gamePaused = false;
@@ -8099,6 +8114,22 @@ function updateBeacons(time, dt) {
   document.querySelector('#mission-description').textContent = routeStep < beaconPositions.length ? 'Cruise to the next beacon. Keep your lines clean.' : 'Every street in Aurora Bay is open. Make your own route.';
 }
 
+function snapCameraToPlayer() {
+  // Used whenever the run (re)starts: the title menu leaves the camera on an
+  // aerial showcase shot, and easing down from there reads as "falling from
+  // the sky" on slow frames. Jump straight to the follow position instead.
+  const offset = cameraMode === 0 ? new THREE.Vector3(0, 5.15, -10.8) : new THREE.Vector3(0, 10.8, -14.8);
+  offset.applyAxisAngle(Y_AXIS, player.heading);
+  camera.position.copy(player.position).add(offset);
+  const lookTarget = player.position.clone().addScaledVector(new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading)), cameraMode === 0 ? 3.1 : 2.2);
+  lookTarget.y = player.position.y + (cameraMode === 0 ? 1.05 : .2);
+  camera.lookAt(lookTarget);
+  camera.rotation.z = 0;
+  camera.fov = 55;
+  camera.updateProjectionMatrix();
+  drivingPresentation.cameraShake = 0;
+}
+
 function updateCamera(dt) {
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
   const right = new THREE.Vector3(Math.cos(player.heading), 0, -Math.sin(player.heading));
@@ -8111,7 +8142,9 @@ function updateCamera(dt) {
   camera.position.lerp(targetPosition, 1 - Math.exp(-5.5 * dt));
   const lookLead = cameraMode === 0 ? 3.1 + Math.abs(player.speed) * .055 : 2.2;
   const lookTarget = player.position.clone().add(forward.multiplyScalar(lookLead));
-  lookTarget.y = cameraMode === 0 ? 1.05 : .2;
+  // Aim relative to the car, not at an absolute world height: safehouses on the
+  // mountain sit ~18 m up, and an absolute target aimed the camera at the valley floor.
+  lookTarget.y = player.position.y + (cameraMode === 0 ? 1.05 : .2);
   camera.lookAt(lookTarget);
   camera.rotation.z = damp(camera.rotation.z, -drivingPresentation.bodyRoll * .22, 7, dt);
   drivingPresentation.cameraShake = damp(drivingPresentation.cameraShake, 0, 9, dt);
