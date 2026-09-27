@@ -671,16 +671,58 @@ function trafficHeading(vertical, direction) {
 
 function updateTrafficVehicleIndicators(vehicle) {
   const blink = Math.sin(performance.now() * .011) > 0;
+  const hazard = vehicle.hazardTimer > 0;
   let side = null;
-  if (vehicle.turning) side = vehicle.turning.turn < 0 ? 'left' : 'right';
-  else if (vehicle.laneChanging) side = vehicle.laneChanging.targetLaneSide < 0 ? 'left' : 'right';
+  if (!hazard && vehicle.turning) side = vehicle.turning.turn < 0 ? 'left' : 'right';
+  else if (!hazard && vehicle.laneChanging) side = vehicle.laneChanging.targetLaneSide < 0 ? 'left' : 'right';
   ['left', 'right'].forEach((key) => {
-    const active = side === key && blink;
+    const active = (hazard || side === key) && blink;
     vehicle.mesh.userData.indicators?.[key]?.forEach((lamp) => {
       lamp.material.opacity = active ? .98 : .15;
       lamp.material.emissiveIntensity = active ? 5.5 : .55;
     });
   });
+}
+
+function registerTrafficIncident(vehicle, impactSpeed, playerInvolved = false, impactOrigin = player.position) {
+  if (!vehicle || vehicle.incidentCooldown > 0) return;
+  vehicle.incidentCooldown = 1.05;
+  const damage = clamp(Math.abs(impactSpeed) * (playerInvolved ? 2.1 : 1.55) + (playerInvolved ? 4 : 2), 6, 48);
+  vehicle.health = clamp(vehicle.health - damage, 0, 100);
+  vehicle.currentSpeed = 0;
+  vehicle.laneChanging = null;
+  vehicle.turning = null;
+  vehicle.stopWait = 0;
+  vehicle.hazardTimer = Math.max(vehicle.hazardTimer, vehicle.health < 25 ? 6.5 : 4.2);
+  if (vehicle.health < 25) vehicle.disabledTimer = Math.max(vehicle.disabledTimer, 5.5);
+  else vehicle.disabledTimer = Math.max(vehicle.disabledTimer, 1.35);
+  const dx = vehicle.mesh.position.x - impactOrigin.x;
+  const dz = vehicle.mesh.position.z - impactOrigin.z;
+  const distance = Math.sqrt(dx * dx + dz * dz) || 1;
+  vehicle.mesh.position.x += dx / distance * .45;
+  vehicle.mesh.position.z += dz / distance * .45;
+}
+
+function respawnTrafficVehicle(vehicle) {
+  vehicle.turnCount += 1;
+  vehicle.vertical = vehicle.turnCount % 2 === 0 ? vehicle.vertical : !vehicle.vertical;
+  vehicle.axis = roadAxes[Math.abs(Math.floor(vehicle.routeSeed + vehicle.turnCount)) % roadAxes.length];
+  vehicle.direction = randomFrom(vehicle.routeSeed + vehicle.turnCount * 2.7) > .5 ? 1 : -1;
+  vehicle.laneSide = randomFrom(vehicle.routeSeed + vehicle.turnCount * 3.1) > .5 ? 1 : -1;
+  vehicle.lane = trafficLaneOffset(vehicle.vertical, vehicle.direction, vehicle.laneSide);
+  vehicle.heading = trafficHeading(vehicle.vertical, vehicle.direction);
+  const edge = vehicle.direction > 0 ? -108 : 108;
+  vehicle.mesh.position.set(vehicle.vertical ? vehicle.axis + vehicle.lane : edge, .02, vehicle.vertical ? edge : vehicle.axis + vehicle.lane);
+  vehicle.mesh.rotation.y = vehicle.heading;
+  vehicle.currentSpeed = vehicle.cruiseSpeed;
+  vehicle.health = 100;
+  vehicle.disabledTimer = 0;
+  vehicle.hazardTimer = 0;
+  vehicle.incidentCooldown = 1.2;
+  vehicle.stopKey = '';
+  vehicle.stopWait = 0;
+  vehicle.turning = null;
+  vehicle.laneChanging = null;
 }
 
 function createTraffic() {
@@ -699,7 +741,7 @@ function createTraffic() {
     car.rotation.y = heading;
     actors.add(car);
     const cruiseSpeed = 7 + randomFrom(i + 40) * 7;
-    traffic.push({ mesh: car, vertical, axis, laneSide, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0, routeSeed: i * 19.7 + 3, turnCount: 0, turnDecisionKey: '', turnDecision: 0, turning: null, laneChanging: null, passTimer: 0 });
+    traffic.push({ mesh: car, vertical, axis, laneSide, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0, routeSeed: i * 19.7 + 3, turnCount: 0, turnDecisionKey: '', turnDecision: 0, turning: null, laneChanging: null, passTimer: 0, health: 100, disabledTimer: 0, hazardTimer: 0, incidentCooldown: 0 });
   }
 }
 
@@ -883,6 +925,13 @@ const player = {
   selectedStyle: 'sport',
   ownedCars: ['sport'],
   paint: '#303fca',
+  condition: 100,
+  disabledTimer: 0,
+  speedingTime: 0,
+  violationCooldown: 0,
+  trafficViolations: 0,
+  lastSignalKey: '',
+  stopObservations: {},
   upgrades: { engine: 0, nitro: 0, grip: 0 },
   collectedCaches: [],
 };
@@ -972,6 +1021,7 @@ function saveProgress() {
       selectedStyle: player.selectedStyle,
       ownedCars: player.ownedCars,
       paint: player.paint,
+      condition: player.condition,
       upgrades: player.upgrades,
       raceBest,
       cacheIds: player.collectedCaches,
@@ -994,6 +1044,7 @@ function loadProgress() {
     }
     if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
     if (typeof saved.paint === 'string' && /^#[0-9a-f]{6}$/i.test(saved.paint)) player.paint = saved.paint;
+    if (Number.isFinite(saved.condition)) player.condition = clamp(saved.condition, 1, 100);
     if (Array.isArray(saved.cacheIds)) player.collectedCaches = saved.cacheIds.map((id) => Number(id)).filter((id) => Number.isInteger(id));
     if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
       player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
@@ -1339,7 +1390,7 @@ function updatePolice(time, dt) {
     policeSiren.visible = false;
   }
   const heat = document.querySelector('#heat-readout');
-  heat.classList.toggle('hot', policeState === 'active');
+  heat.classList.toggle('hot', wantedLevel > 0);
   document.querySelector('#heat-level').textContent = String(wantedLevel).padStart(2, '0');
 }
 
@@ -1359,6 +1410,73 @@ function paintName(paint) {
     '#141a24': 'OBSIDIAN',
   };
   return names[paint.toLowerCase()] || 'CUSTOM FINISH';
+}
+
+function vehicleRepairCost() {
+  return Math.ceil(Math.max(0, 100 - player.condition) * 5);
+}
+
+function updateDamageUi() {
+  const percent = Math.round(player.condition);
+  const percentText = `${percent}%`;
+  const conditionPercent = document.querySelector('#condition-percent');
+  const conditionFill = document.querySelector('#condition-fill');
+  if (conditionPercent) conditionPercent.textContent = percentText;
+  if (conditionFill) conditionFill.style.width = `${percent}%`;
+  document.querySelectorAll('.condition-bar').forEach((element) => element.classList.toggle('critical', percent < 35));
+  document.querySelectorAll('.garage-condition').forEach((block) => {
+    const percentElement = block.querySelector('b');
+    const fillElement = block.querySelector('em');
+    if (percentElement) percentElement.textContent = percentText;
+    if (fillElement) fillElement.style.width = `${percent}%`;
+    block.classList.toggle('critical', percent < 35);
+  });
+  const menuPercent = document.querySelector('#menu-condition-percent');
+  const menuFill = document.querySelector('#menu-condition-fill');
+  if (menuPercent) menuPercent.textContent = percentText;
+  if (menuFill) menuFill.style.width = `${percent}%`;
+  const menuCondition = document.querySelector('.menu-condition-block');
+  if (menuCondition) menuCondition.classList.toggle('critical', percent < 35);
+  const repairCost = vehicleRepairCost();
+  document.querySelectorAll('[data-repair-cost]').forEach((element) => { element.textContent = repairCost ? `$${repairCost}` : 'READY'; });
+  document.querySelectorAll('[data-repair-action]').forEach((button) => {
+    button.disabled = !repairCost || player.cash < repairCost;
+    button.classList.toggle('ready', !repairCost);
+  });
+}
+
+function applyVehicleDamage(amount, source = 'impact') {
+  if (amount <= 0 || player.disabledTimer > 0) return;
+  player.condition = clamp(player.condition - amount, 1, 100);
+  saveProgress();
+  updateGarageUi();
+  if (player.condition <= 8) {
+    player.disabledTimer = 2.8;
+    player.speed = 0;
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    showToast('VEHICLE DISABLED', 'Open the Garage and repair the damaged ride', 'REPAIR REQUIRED');
+  } else if (amount >= 10) {
+    showToast('BODYWORK DAMAGED', `${Math.round(player.condition)}% condition remaining`, source.toUpperCase());
+  }
+}
+
+function repairVehicle() {
+  const cost = vehicleRepairCost();
+  if (!cost) {
+    showToast('VEHICLE HEALTHY', 'No repair work is currently required', 'READY TO DRIVE');
+    return;
+  }
+  if (player.cash < cost) {
+    showToast('REPAIR FUNDS TOO LOW', `You need $${cost.toLocaleString('en-US')} for a full repair`, 'EARN MORE CASH');
+    return;
+  }
+  player.cash -= cost;
+  player.condition = 100;
+  player.disabledTimer = 0;
+  saveProgress();
+  updateGarageUi();
+  playTone(320, .18, .08, 'sine', 180);
+  showToast('REPAIRS COMPLETE', 'Bodywork and drivetrain restored', `$${cost.toLocaleString('en-US')}`);
 }
 
 function updateMenuCash() {
@@ -1529,6 +1647,7 @@ function updateGarageUi() {
   });
   updateMenuCash();
   updateMenuVehicleUi();
+  updateDamageUi();
   renderMarket();
   renderOwnedGarage();
 }
@@ -1662,6 +1781,13 @@ function resetSavedProgress() {
   player.ownedCars = ['sport'];
   player.selectedStyle = 'sport';
   player.paint = '#303fca';
+  player.condition = 100;
+  player.disabledTimer = 0;
+  player.speedingTime = 0;
+  player.violationCooldown = 0;
+  player.trafficViolations = 0;
+  player.lastSignalKey = '';
+  player.stopObservations = {};
   player.upgrades = { engine: 0, nitro: 0, grip: 0 };
   player.nitro = 76;
   raceBest = 102.8;
@@ -1992,6 +2118,9 @@ document.querySelector('#garage-next').addEventListener('click', () => scrollOwn
 document.querySelectorAll('[data-paint-group] .paint-swatch').forEach((button) => {
   button.addEventListener('click', () => applyPlayerPaint(button.dataset.paint));
 });
+document.querySelectorAll('[data-repair-action]').forEach((button) => {
+  button.addEventListener('click', repairVehicle);
+});
 document.querySelector('#menu-sound-toggle').addEventListener('click', toggleSound);
 document.querySelector('#menu-settings-sound').addEventListener('click', toggleSound);
 document.querySelector('#menu-settings-quality').addEventListener('click', () => {
@@ -2034,10 +2163,85 @@ function isOnRoad(x, z) {
   return roadAxes.some((axis) => Math.abs(x - axis) < 5.2 || Math.abs(z - axis) < 5.2);
 }
 
-function resolveStaticCollisions() {
+function recordTrafficViolation(label, fine) {
+  if (player.violationCooldown > 0) return;
+  player.cash = Math.max(0, player.cash - fine);
+  player.trafficViolations += 1;
+  player.speedingTime = 0;
+  player.violationCooldown = 7;
+  wantedLevel = Math.min(3, wantedLevel + 1);
+  saveProgress();
+  updateGarageUi();
+  playTone(180, .18, .08, 'square', -55);
+  showToast('TRAFFIC CITATION', `${label} violation recorded`, `-$${fine}`);
+  if (player.trafficViolations >= 2 && policeState === 'idle') startPoliceChase();
+}
+
+function crossingRoadAxis(previous, current, axis, vertical) {
+  const before = vertical ? previous.z - axis : previous.x - axis;
+  const after = vertical ? current.z - axis : current.x - axis;
+  return before * after <= 0 && Math.abs(after - before) > .01;
+}
+
+function updateTrafficRules(previousPosition, dt, onRoad) {
+  const speedKmh = Math.abs(player.speed) * 3.1;
+  const speedLimit = player.position.z < -72 ? 35 : 45;
+  if (onRoad && speedKmh > speedLimit + 10) {
+    player.speedingTime += dt;
+    if (player.speedingTime > 1.8 && player.violationCooldown <= 0) recordTrafficViolation(`OVER LIMIT ${speedLimit}`, 45);
+  } else {
+    player.speedingTime = Math.max(0, player.speedingTime - dt * 1.8);
+  }
+  if (!onRoad) {
+    player.lastSignalKey = '';
+    player.stopObservations = {};
+    return;
+  }
+  for (const signal of trafficSignals) {
+    const data = signal.userData;
+    const vertical = Math.abs(previousPosition.x - data.intersectionX) < 4.8 && Math.abs(player.position.x - data.intersectionX) < 4.8;
+    const horizontal = Math.abs(previousPosition.z - data.intersectionZ) < 4.8 && Math.abs(player.position.z - data.intersectionZ) < 4.8;
+    const crossed = vertical && crossingRoadAxis(previousPosition, player.position, data.intersectionZ, true)
+      ? { key: `${data.intersectionX}:${data.intersectionZ}:v:${Math.sign(player.position.z - previousPosition.z)}`, state: data.northSouthState }
+      : horizontal && crossingRoadAxis(previousPosition, player.position, data.intersectionX, false)
+        ? { key: `${data.intersectionX}:${data.intersectionZ}:h:${Math.sign(player.position.x - previousPosition.x)}`, state: data.eastWestState }
+        : null;
+    if (!crossed) continue;
+    if (crossed.key !== player.lastSignalKey) {
+      player.lastSignalKey = crossed.key;
+      if (crossed.state === 0 && speedKmh > 4) recordTrafficViolation('RED LIGHT', 70);
+    }
+  }
+  stopControlledIntersections.forEach(([x, z]) => {
+    const vertical = Math.abs(player.position.x - x) < 4.8;
+    const horizontal = Math.abs(player.position.z - z) < 4.8;
+    const key = `${x}:${z}`;
+    const crossed = (vertical && Math.abs(previousPosition.x - x) < 4.8 && crossingRoadAxis(previousPosition, player.position, z, true))
+      || (horizontal && Math.abs(previousPosition.z - z) < 4.8 && crossingRoadAxis(previousPosition, player.position, x, false));
+    const nearStopLine = vertical
+      ? Math.abs(player.position.z - z) < 12
+      : horizontal && Math.abs(player.position.x - x) < 12;
+    if (nearStopLine && !crossed) {
+      const observation = player.stopObservations[key] || { stopped: false };
+      if (speedKmh < 2) observation.stopped = true;
+      player.stopObservations[key] = observation;
+    } else if (!vertical && !horizontal) {
+      delete player.stopObservations[key];
+    }
+    if (crossed) {
+      const observation = player.stopObservations[key];
+      if (!observation?.stopped && speedKmh > 5) recordTrafficViolation('STOP SIGN', 50);
+      delete player.stopObservations[key];
+    }
+  });
+}
+
+function resolveStaticCollisions(impactSpeed = 0) {
   const radius = 1.16;
   let hit = false;
   let breakable = false;
+  let impactType = '';
+  let strongestObstacle = null;
   for (const obstacle of staticObstacles) {
     if (obstacle.broken) continue;
     const minX = obstacle.x - obstacle.halfX;
@@ -2073,16 +2277,18 @@ function resolveStaticCollisions() {
     player.position.x += normalX * penetration;
     player.position.z += normalZ * penetration;
     hit = true;
+    if (!strongestObstacle || obstacle.breakable || obstacle.type === 'landmark') strongestObstacle = obstacle;
+    impactType = obstacle.type;
     if (obstacle.breakable) {
       obstacle.broken = true;
       breakable = true;
       if (obstacle.object) obstacle.object.visible = false;
     }
   }
-  return { hit, breakable };
+  return { hit, breakable, impactType, obstacle: strongestObstacle, impactSpeed: Math.abs(impactSpeed) };
 }
 
-function resolveTrafficCollisions() {
+function resolveTrafficCollisions(impactSpeed = 0) {
   const radius = 3.0;
   for (const vehicle of traffic) {
     const dx = player.position.x - vehicle.mesh.position.x;
@@ -2092,7 +2298,8 @@ function resolveTrafficCollisions() {
     const distance = Math.sqrt(distanceSq) || 1;
     player.position.x += (dx / distance) * (radius - distance);
     player.position.z += (dz / distance) * (radius - distance);
-    return true;
+    registerTrafficIncident(vehicle, Math.abs(impactSpeed) + vehicle.currentSpeed, true);
+    return { hit: true, trafficHit: true, vehicle, impactSpeed: Math.abs(impactSpeed) + vehicle.currentSpeed };
   }
   if (policeState === 'active' && policeVehicle.visible) {
     const dx = player.position.x - policeVehicle.position.x;
@@ -2102,10 +2309,10 @@ function resolveTrafficCollisions() {
       const distance = Math.sqrt(distanceSq) || 1;
       player.position.x += (dx / distance) * (radius - distance);
       player.position.z += (dz / distance) * (radius - distance);
-      return true;
+      return { hit: true, trafficHit: true, policeHit: true, impactSpeed: Math.abs(impactSpeed) + 10 };
     }
   }
-  return false;
+  return { hit: false, trafficHit: false, policeHit: false, impactSpeed: 0 };
 }
 
 function districtAt(x, z) {
@@ -2133,6 +2340,15 @@ function updatePlayerLighting(steering) {
 
 function updatePlayer(dt) {
   collisionCooldown = Math.max(0, collisionCooldown - dt);
+  player.violationCooldown = Math.max(0, player.violationCooldown - dt);
+  if (player.disabledTimer > 0 || player.condition <= 8) {
+    player.disabledTimer = Math.max(0, player.disabledTimer - dt);
+    player.speed = damp(player.speed, 0, 8, dt);
+    player.mesh.position.copy(player.position);
+    updatePlayerLighting(0);
+    setBrakeLights(player.mesh, true);
+    return;
+  }
   const throttle = input.forward || gamepadState.forward ? 1 : 0;
   const braking = input.back || gamepadState.back ? 1 : 0;
   const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
@@ -2164,16 +2380,22 @@ function updatePlayer(dt) {
   }
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
   const movement = forward.clone().multiplyScalar(player.speed * dt);
+  const previousPosition = player.position.clone();
   player.position.add(movement);
   player.distance += Math.abs(player.speed * dt);
-  const staticCollision = resolveStaticCollisions();
-  const trafficHit = resolveTrafficCollisions();
+  updateTrafficRules(previousPosition, dt, onRoad);
+  const impactSpeed = Math.abs(player.speed);
+  const staticCollision = resolveStaticCollisions(impactSpeed);
+  const trafficCollision = resolveTrafficCollisions(impactSpeed);
+  const trafficHit = trafficCollision.hit;
   if (staticCollision.hit || trafficHit) {
     if (collisionCooldown <= 0) {
       player.speed *= trafficHit ? -.28 : -.22;
       playImpact(trafficHit);
       const furnitureHit = staticCollision.breakable && !trafficHit;
-      showToast(trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficHit ? 'Give the lanes a little room' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : 'SLOW DOWN');
+      const damage = clamp(impactSpeed * (trafficHit ? 1.35 : furnitureHit ? .58 : .92) + (trafficCollision.policeHit ? 7 : 0), 2, 36);
+      applyVehicleDamage(damage, trafficCollision.policeHit ? 'POLICE IMPACT' : furnitureHit ? 'ROAD FURNITURE' : 'COLLISION');
+      showToast(trafficCollision.policeHit ? 'POLICE CONTACT' : trafficHit ? 'TRAFFIC CONTACT' : furnitureHit ? 'ROAD FURNITURE HIT' : 'BODYWORK CONTACT', trafficCollision.policeHit ? 'The patrol is not going to forget that' : trafficHit ? 'Vehicle incident logged' : furnitureHit ? 'Sign or signal knocked out' : 'Concrete wins every time', furnitureHit ? 'OBJECT BROKEN' : `-${Math.round(damage)} CONDITION`);
       collisionCooldown = .75;
     } else {
       player.speed = damp(player.speed, 0, 3.5, dt);
@@ -2358,7 +2580,7 @@ function trafficIntersectionOccupied(vehicle, key) {
     const intersection = other.turning?.intersection;
     if (intersection && `${intersection.x}:${intersection.z}` === key) return true;
     const [x, z] = key.split(':').map(Number);
-    return other.currentSpeed > 1 && Math.abs(other.mesh.position.x - x) < 3.5 && Math.abs(other.mesh.position.z - z) < 3.5;
+    return (other.disabledTimer > 0 || other.currentSpeed > 1) && Math.abs(other.mesh.position.x - x) < 3.5 && Math.abs(other.mesh.position.z - z) < 3.5;
   });
 }
 
@@ -2484,6 +2706,16 @@ function trafficTargetSpeed(vehicle, dt) {
 
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
+    vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
+    vehicle.hazardTimer = Math.max(0, vehicle.hazardTimer - dt);
+    if (vehicle.disabledTimer > 0) {
+      vehicle.disabledTimer = Math.max(0, vehicle.disabledTimer - dt);
+      vehicle.currentSpeed = 0;
+      setBrakeLights(vehicle.mesh, true);
+      updateTrafficVehicleIndicators(vehicle);
+      if (vehicle.disabledTimer <= 0) respawnTrafficVehicle(vehicle);
+      continue;
+    }
     if (vehicle.turning) {
       advanceTrafficTurn(vehicle, dt);
       updateTrafficVehicleIndicators(vehicle);
@@ -2521,6 +2753,33 @@ function updateTraffic(dt) {
     const wheelSpin = vehicle.currentSpeed * dt * .95;
     vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
     vehicle.mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
+  }
+}
+
+function resolveTrafficVehicleCollisions() {
+  for (let first = 0; first < traffic.length; first += 1) {
+    const a = traffic[first];
+    if (a.disabledTimer > 0) continue;
+    for (let second = first + 1; second < traffic.length; second += 1) {
+      const b = traffic[second];
+      if (b.disabledTimer > 0 || a.incidentCooldown > 0 || b.incidentCooldown > 0) continue;
+      const dx = a.mesh.position.x - b.mesh.position.x;
+      const dz = a.mesh.position.z - b.mesh.position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq >= 2.65 * 2.65) continue;
+      const distance = Math.sqrt(distanceSq) || 1;
+      const crossingOrOpposing = a.vertical !== b.vertical || a.direction !== b.direction;
+      const relativeSpeed = Math.abs(a.currentSpeed - b.currentSpeed) + (crossingOrOpposing ? Math.min(a.currentSpeed, b.currentSpeed) : 0);
+      if (relativeSpeed < 1.2) continue;
+      const aPosition = a.mesh.position.clone();
+      const bPosition = b.mesh.position.clone();
+      a.mesh.position.x += dx / distance * .48;
+      a.mesh.position.z += dz / distance * .48;
+      b.mesh.position.x -= dx / distance * .48;
+      b.mesh.position.z -= dz / distance * .48;
+      registerTrafficIncident(a, relativeSpeed, false, bPosition);
+      registerTrafficIncident(b, relativeSpeed, false, aPosition);
+    }
   }
 }
 
@@ -2693,6 +2952,7 @@ function animate(time) {
     updatePlayer(dt);
     updateTrafficSignals(time);
     updateTraffic(dt);
+    resolveTrafficVehicleCollisions();
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
     updatePolice(time, dt);

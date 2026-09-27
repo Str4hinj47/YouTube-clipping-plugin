@@ -19,12 +19,19 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 - **E** — start or rematch Midnight Sprint when near the orange gate
 - **V** — accept a courier delivery at the blue depot
 - **X** — trigger a Night Patrol pursuit
-- **G** — open the in-game garage and buy performance upgrades or respray the car
+- **G** — open the in-game garage, repair damage, buy performance upgrades, or respray the car
 - **P / Escape** — pause, open settings, or return to the full title menu
 - **Title menu** — Play, Market (buy and select cars), Garage (respray and upgrades), and Settings
 - **M** — expand/collapse the map
 - **R** — reset vehicle
 - **Gamepad / touch controls** — supported on compatible devices
+
+## Road consequences
+
+- Crashes reduce the active vehicle's condition. Hard impacts can temporarily disable the player car or leave traffic vehicles stopped in the lane with hazards flashing.
+- Disabled traffic clears after a short roadside incident window and respawns at the edge of the city. Traffic-to-traffic impacts are resolved separately from player collisions, so pileups can briefly slow an intersection.
+- The HUD and both Garage interfaces show condition and the full-repair price. Repairs cost `$5` per missing condition point, are saved locally, and restore a disabled player car.
+- Driving through a red light or stop sign, or holding more than 10 km/h over the displayed limit, issues a citation and fine. Repeated violations raise HEAT and can call in Night Patrol.
 
 ## Art pipeline
 
