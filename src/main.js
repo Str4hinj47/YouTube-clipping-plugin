@@ -14,6 +14,7 @@ const randomFrom = (seed) => {
   return x - Math.floor(x);
 };
 const roadAxes = [-66, -22, 22, 66];
+const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
 const WORLD_LIMIT = 116;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -419,7 +420,15 @@ function createTrafficLight(x, z, offset = 0) {
     addMesh(group, new THREE.SphereGeometry(.105, 10, 10), yellow, [poleX, 3.82, poleZ - 3.64]),
     addMesh(group, new THREE.SphereGeometry(.105, 10, 10), green, [poleX, 3.46, poleZ - 3.64]),
   ];
-  group.userData = { housing, lamps, materials: [red, yellow, green], offset };
+  group.userData = {
+    housing,
+    lamps,
+    materials: [red, yellow, green],
+    offset,
+    intersectionX: x,
+    intersectionZ: z,
+    state: 2,
+  };
   roadFurniture.add(group);
   trafficSignals.push(group);
   addObstacle(x + poleX, z + poleZ, .7, .7, 'traffic-light', group, true);
@@ -452,8 +461,7 @@ function createSpeedSign(x, z, limit = 45, rotation = 0) {
 function buildRoadInfrastructure() {
   const signalIntersections = [[-66, -66], [22, -66], [66, -22], [-22, 22], [66, 66], [-66, 66]];
   signalIntersections.forEach(([x, z], index) => createTrafficLight(x, z, index * 1.7));
-  const stopIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
-  stopIntersections.forEach(([x, z], index) => createStopSign(x + (index % 2 ? 5.8 : -5.8), z + (index % 2 ? -5.8 : 5.8), index % 2 ? Math.PI / 2 : 0));
+  stopControlledIntersections.forEach(([x, z], index) => createStopSign(x + (index % 2 ? 5.8 : -5.8), z + (index % 2 ? -5.8 : 5.8), index % 2 ? Math.PI / 2 : 0));
   [[-66, -44], [-22, 44], [22, -44], [66, 44], [44, 66], [-44, -66]].forEach(([x, z], index) => createSpeedSign(x, z, index % 2 ? 35 : 45, index % 2 ? Math.PI / 2 : 0));
 }
 
@@ -463,6 +471,8 @@ function updateTrafficSignals(time) {
     if (!group.userData.lamps) return;
     const phase = (time * .001 + group.userData.offset) % 12;
     const state = phase < 5.8 ? 2 : phase < 7.0 ? 1 : 0;
+    group.userData.state = state;
+    group.userData.phase = phase;
     group.userData.materials.forEach((material, index) => {
       const active = index === state;
       material.opacity = active ? .98 : .24;
@@ -483,14 +493,14 @@ const CAR_PROFILES = {
 };
 
 const VEHICLE_CATALOG = [
-  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94 },
-  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76 },
-  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91 },
-  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98 },
-  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84 },
-  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82 },
-  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79 },
-  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97 },
+  { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72, nitroBoost: 31 },
+  { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84, nitroBoost: 27 },
+  { style: 'ev', name: 'PULSE EV', className: 'ELECTRIC SPORT', price: 420, paint: '#5ce3d1', accent: '#d6fa6a', description: 'Instant torque for clean lines.', power: 82, grip: 84, styleScore: 91, acceleration: 26, topSpeed: 41, brakePower: 36, turnRate: 1.92, turnSpeed: 17, offRoadTraction: .78, nitroBoost: 29 },
+  { style: 'classic', name: 'CINDER CLASSIC', className: 'GRAND TOURER', price: 560, paint: '#f0e6cf', accent: '#ff9d50', description: 'Old soul. Long, smooth corners.', power: 74, grip: 64, styleScore: 98, acceleration: 17, topSpeed: 31, brakePower: 27, turnRate: 1.42, turnSpeed: 20, offRoadTraction: .6, nitroBoost: 25 },
+  { style: 'wagon', name: 'GRAND TOURER', className: 'TOURING WAGON', price: 680, paint: '#496f9a', accent: '#d6fa6a', description: 'Room for the long way home.', power: 78, grip: 79, styleScore: 84, acceleration: 19, topSpeed: 35, brakePower: 32, turnRate: 1.58, turnSpeed: 18, offRoadTraction: .74, nitroBoost: 28 },
+  { style: 'suv', name: 'TRAIL SCOUT', className: 'ADVENTURE SUV', price: 820, paint: '#6d8b75', accent: '#ff9d50', description: 'High stance. No road required.', power: 81, grip: 86, styleScore: 82, acceleration: 18, topSpeed: 33, brakePower: 39, turnRate: 1.48, turnSpeed: 19, offRoadTraction: .94, nitroBoost: 26 },
+  { style: 'pickup', name: 'HARBOR UTILITY', className: 'UTILITY PICKUP', price: 950, paint: '#c36b48', accent: '#5ce3d1', description: 'Heavy work, neon nights.', power: 89, grip: 61, styleScore: 79, acceleration: 16, topSpeed: 30, brakePower: 38, turnRate: 1.28, turnSpeed: 21, offRoadTraction: .86, nitroBoost: 24 },
+  { style: 'supercar', name: 'VELOCE R', className: 'SUPER COUPE', price: 1400, paint: '#8e72c9', accent: '#ff5b9c', description: 'Low, loud, and fictional.', power: 98, grip: 90, styleScore: 97, acceleration: 27, topSpeed: 48, brakePower: 35, turnRate: 1.9, turnSpeed: 16, offRoadTraction: .56, nitroBoost: 37 },
 ];
 const fleetAssetScenes = {};
 
@@ -504,6 +514,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   root.userData.paintMaterials = [];
   root.userData.indicators = { left: [], right: [] };
   root.userData.headlights = [];
+  root.userData.brakeLights = [];
+  root.userData.loadedBrakeLights = [];
   const bodyMaterial = new THREE.MeshPhysicalMaterial({ color, metalness: .75, roughness: .23, clearcoat: 1, clearcoatRoughness: .13 });
   root.userData.paintMaterials.push(bodyMaterial);
   const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x101720, metalness: .65, roughness: .23 });
@@ -532,7 +544,8 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   addMesh(root, new THREE.BoxGeometry(1.76, .12, .14), accentMaterial, [0, .48, -2.16], { castShadow: true });
   for (const x of [-.71, .71]) {
     addMesh(root, new THREE.BoxGeometry(.28, .15, .08), headMaterial, [x, .78, 2.16]);
-    addMesh(root, new THREE.BoxGeometry(.3, .14, .08), tailMaterial, [x, .76, -2.16]);
+    const tail = addMesh(root, new THREE.BoxGeometry(.3, .14, .08), tailMaterial.clone(), [x, .76, -2.16]);
+    root.userData.brakeLights.push(tail);
   }
   const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x080d12, metalness: .15, roughness: .8 });
   const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xaeb8bf, metalness: .87, roughness: .2 });
@@ -614,6 +627,22 @@ function createCar(color = 0x7a9bff, accent = 0xd6fa6a, playerCar = false, style
   return root;
 }
 
+function setBrakeLights(vehicleRoot, active) {
+  vehicleRoot.userData.brakeLights?.forEach((lamp) => {
+    lamp.material.opacity = active ? 1 : 0.72;
+    lamp.material.emissiveIntensity = active ? 7 : 3.4;
+  });
+  vehicleRoot.userData.loadedBrakeLights?.forEach((lamp) => {
+    const materials = Array.isArray(lamp.material) ? lamp.material : [lamp.material];
+    materials.forEach((material) => {
+      if (!material) return;
+      if (material.emissive) material.emissiveIntensity = active ? 6.5 : 2.2;
+      if (material.color) material.color.set(active ? 0xff293e : 0xb91c31);
+      material.needsUpdate = true;
+    });
+  });
+}
+
 function createTraffic() {
   const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f, 0x7c6bf2, 0xc44966];
   const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv'];
@@ -628,7 +657,8 @@ function createTraffic() {
     const heading = vertical ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
     car.rotation.y = heading;
     actors.add(car);
-    traffic.push({ mesh: car, vertical, axis, lane, speed: 7 + randomFrom(i + 40) * 7, direction, heading });
+    const cruiseSpeed = 7 + randomFrom(i + 40) * 7;
+    traffic.push({ mesh: car, vertical, axis, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0 });
   }
 }
 
@@ -687,8 +717,11 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   vehicleRoot.add(importedCar);
   vehicleRoot.userData.loadedModel = importedCar;
   vehicleRoot.userData.loadedWheels = [];
+  vehicleRoot.userData.loadedBrakeLights = [];
   importedCar.traverse((object) => {
-    if (object.isMesh && /(wheel|tire|hub)/i.test(object.name)) vehicleRoot.userData.loadedWheels.push(object);
+    if (!object.isMesh) return;
+    if (/(wheel|tire|hub)/i.test(object.name)) vehicleRoot.userData.loadedWheels.push(object);
+    if (/(brake|tail|rear.*light|light.*rear)/i.test(object.name)) vehicleRoot.userData.loadedBrakeLights.push(object);
   });
   applyPaintToVehicleRoot(vehicleRoot, vehicleRoot.userData.paintColor);
 }
@@ -882,6 +915,7 @@ let garageOpen = false;
 let gamePaused = false;
 let starterMenuOpen = true;
 let menuPage = 'home';
+let garageCarouselIndex = 0;
 let qualityMode = 'HIGH';
 const upgradeConfig = {
   engine: { costs: [240, 420, 700] },
@@ -1364,6 +1398,32 @@ function renderMarket() {
   }).join('');
 }
 
+function renderOwnedGarage() {
+  const carousel = document.querySelector('#owned-car-carousel');
+  if (!carousel) return;
+  const ownedVehicles = VEHICLE_CATALOG.filter((vehicle) => player.ownedCars.includes(vehicle.style));
+  const count = document.querySelector('#owned-fleet-count');
+  if (count) count.textContent = String(ownedVehicles.length);
+  if (garageCarouselIndex >= ownedVehicles.length) garageCarouselIndex = 0;
+  carousel.innerHTML = ownedVehicles.map((vehicle) => {
+    const selected = vehicle.style === player.selectedStyle;
+    return `<button class="owned-car-card ${selected ? 'selected' : ''}" data-owned-style="${vehicle.style}" style="--thumb-paint:${vehicle.paint};--thumb-accent:${vehicle.accent}" type="button">
+      <span class="owned-car-thumb"></span><span class="owned-car-copy"><b>${vehicle.name}</b><small>${vehicle.className}</small></span>${selected ? '<span class="owned-car-check">ACTIVE</span>' : ''}
+    </button>`;
+  }).join('');
+  const selectedCard = carousel.querySelector('.owned-car-card.selected');
+  if (selectedCard && garageCarouselIndex === 0) selectedCard.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function scrollOwnedGarage(direction) {
+  const carousel = document.querySelector('#owned-car-carousel');
+  if (!carousel) return;
+  const cards = carousel.querySelectorAll('.owned-car-card');
+  if (!cards.length) return;
+  garageCarouselIndex = (garageCarouselIndex + direction + cards.length) % cards.length;
+  cards[garageCarouselIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+}
+
 function applyPlayerVehicleStyle(style, announce = true) {
   if (!player.ownedCars.includes(style)) return false;
   const vehicle = vehicleCatalogEntry(style);
@@ -1429,6 +1489,7 @@ function updateGarageUi() {
   updateMenuCash();
   updateMenuVehicleUi();
   renderMarket();
+  renderOwnedGarage();
 }
 
 function setMenuPage(page) {
@@ -1881,6 +1942,12 @@ document.querySelector('#market-grid').addEventListener('click', (event) => {
   const button = event.target.closest('[data-market-style]');
   if (button) purchaseMarketVehicle(button.dataset.marketStyle);
 });
+document.querySelector('#owned-car-carousel').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-owned-style]');
+  if (button) applyPlayerVehicleStyle(button.dataset.ownedStyle);
+});
+document.querySelector('#garage-prev').addEventListener('click', () => scrollOwnedGarage(-1));
+document.querySelector('#garage-next').addEventListener('click', () => scrollOwnedGarage(1));
 document.querySelectorAll('[data-paint-group] .paint-swatch').forEach((button) => {
   button.addEventListener('click', () => applyPlayerPaint(button.dataset.paint));
 });
@@ -2029,26 +2096,30 @@ function updatePlayer(dt) {
   const braking = input.back || gamepadState.back ? 1 : 0;
   const steering = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + touchSteer + gamepadState.steer, -1, 1);
   const onRoad = isOnRoad(player.position.x, player.position.z);
+  const vehicleSpec = vehicleCatalogEntry();
   const engineLevel = player.upgrades.engine;
   const nitroCapacity = 100 + player.upgrades.nitro * 12;
   const engineMultiplier = 1 + engineLevel * .1;
   const gripMultiplier = 1 + player.upgrades.grip * .1;
   const usingNitro = (input.nitro || gamepadState.nitro) && throttle && player.nitro > 0 && player.speed > 4;
   const handbraking = input.handbrake && Math.abs(player.speed) > 6;
-  const acceleration = (onRoad ? 22 : 14) * engineMultiplier;
+  const acceleration = (onRoad ? vehicleSpec.acceleration : vehicleSpec.acceleration * vehicleSpec.offRoadTraction) * engineMultiplier;
+  const nitroPower = vehicleSpec.nitroBoost + engineLevel * 3;
+  const normalTopSpeed = vehicleSpec.topSpeed + engineLevel * 2;
+  const nitroTopSpeed = normalTopSpeed + 14 + player.upgrades.nitro * 1.5;
 
-  if (throttle) player.speed += (acceleration + (usingNitro ? 31 + engineLevel * 3 : 0)) * dt;
-  if (braking) player.speed -= (player.speed > 0 ? 34 : 12) * dt;
-  if (!throttle && !braking) player.speed = damp(player.speed, 0, onRoad ? 0.78 : 1.25, dt);
+  if (throttle) player.speed += (acceleration + (usingNitro ? nitroPower : 0)) * dt;
+  if (braking) player.speed -= (player.speed > 0 ? vehicleSpec.brakePower : vehicleSpec.brakePower * .42) * dt;
+  if (!throttle && !braking) player.speed = damp(player.speed, 0, onRoad ? .78 : 1.25, dt);
   if (handbraking) player.speed = damp(player.speed, 0, .14, dt);
   if (usingNitro) player.nitro = clamp(player.nitro - (27 - player.upgrades.nitro * 2.5) * dt, 0, nitroCapacity);
   else player.nitro = clamp(player.nitro + (throttle ? .9 : 2.8 + player.upgrades.nitro * .6) * dt, 0, nitroCapacity);
-  if (!onRoad) player.speed *= Math.pow(.72 + player.upgrades.grip * .02, dt);
-  player.speed = clamp(player.speed, -12, usingNitro ? 53 + engineLevel * 3 : 39 + engineLevel * 2);
+  if (!onRoad) player.speed *= Math.pow(clamp(vehicleSpec.offRoadTraction + player.upgrades.grip * .02, .55, .99), dt);
+  player.speed = clamp(player.speed, -12, usingNitro ? nitroTopSpeed : normalTopSpeed);
 
   if (Math.abs(player.speed) > .3) {
-    const turnFactor = clamp(Math.abs(player.speed) / 18, .12, 1.28) * (handbraking ? 1.8 : 1) * gripMultiplier;
-    player.heading += steering * 1.75 * turnFactor * dt * (player.speed >= 0 ? 1 : -1);
+    const turnFactor = clamp(Math.abs(player.speed) / vehicleSpec.turnSpeed, .12, 1.28) * (handbraking ? 1.8 : 1) * gripMultiplier;
+    player.heading += steering * vehicleSpec.turnRate * turnFactor * dt * (player.speed >= 0 ? 1 : -1);
   }
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
   const movement = forward.clone().multiplyScalar(player.speed * dt);
@@ -2088,6 +2159,7 @@ function updatePlayer(dt) {
     wheel.rotation.x -= player.speed * dt * 1.8;
   });
   updatePlayerLighting(steering);
+  setBrakeLights(player.mesh, Boolean(braking || handbraking || staticCollision.hit || trafficHit));
 
   if (handbraking && Math.abs(player.speed) > 10 && Math.abs(steering) > 0) {
     driftScore += Math.abs(player.speed) * Math.abs(steering) * dt * 2.4;
@@ -2098,25 +2170,128 @@ function updatePlayer(dt) {
   document.querySelector('#surface-state').style.color = handbraking ? 'var(--orange)' : '';
 }
 
+function trafficSignalAhead(vehicle) {
+  let nearest = null;
+  for (const signal of trafficSignals) {
+    const data = signal.userData;
+    let distance;
+    if (vehicle.vertical) {
+      if (Math.abs(vehicle.axis - data.intersectionX) > 1.6) continue;
+      distance = vehicle.direction > 0 ? data.intersectionZ - vehicle.mesh.position.z : vehicle.mesh.position.z - data.intersectionZ;
+    } else {
+      if (Math.abs(vehicle.axis - data.intersectionZ) > 1.6) continue;
+      distance = vehicle.direction > 0 ? data.intersectionX - vehicle.mesh.position.x : vehicle.mesh.position.x - data.intersectionX;
+    }
+    if (distance < -2 || distance > 23) continue;
+    if (!nearest || distance < nearest.distance) nearest = { signal, distance };
+  }
+  return nearest;
+}
+
+function trafficStopSignAhead(vehicle) {
+  let nearest = null;
+  for (const [x, z] of stopControlledIntersections) {
+    let distance;
+    if (vehicle.vertical) {
+      if (Math.abs(vehicle.axis - x) > 1.6) continue;
+      distance = vehicle.direction > 0 ? z - vehicle.mesh.position.z : vehicle.mesh.position.z - z;
+    } else {
+      if (Math.abs(vehicle.axis - z) > 1.6) continue;
+      distance = vehicle.direction > 0 ? x - vehicle.mesh.position.x : vehicle.mesh.position.x - x;
+    }
+    if (distance < -2 || distance > 21) continue;
+    if (!nearest || distance < nearest.distance) nearest = { key: `${x}:${z}`, distance };
+  }
+  return nearest;
+}
+
+function trafficPlayerDistance(vehicle) {
+  const lateral = vehicle.vertical
+    ? Math.abs(player.position.x - (vehicle.axis + vehicle.lane))
+    : Math.abs(player.position.z - (vehicle.axis + vehicle.lane));
+  if (lateral > 2.1) return null;
+  const distance = vehicle.vertical
+    ? vehicle.direction * (player.position.z - vehicle.mesh.position.z)
+    : vehicle.direction * (player.position.x - vehicle.mesh.position.x);
+  return distance > 0 && distance < 19 ? distance : null;
+}
+
+function trafficLeadDistance(vehicle) {
+  let nearest = null;
+  for (const other of traffic) {
+    if (other === vehicle || other.vertical !== vehicle.vertical || other.direction !== vehicle.direction) continue;
+    if (Math.abs(other.axis - vehicle.axis) > 1.2 || Math.abs(other.lane - vehicle.lane) > .3) continue;
+    const distance = vehicle.vertical
+      ? vehicle.direction * (other.mesh.position.z - vehicle.mesh.position.z)
+      : vehicle.direction * (other.mesh.position.x - vehicle.mesh.position.x);
+    if (distance > 0 && distance < 19 && (nearest === null || distance < nearest)) nearest = distance;
+  }
+  return nearest;
+}
+
+function trafficTargetSpeed(vehicle, dt) {
+  const leadDistance = trafficLeadDistance(vehicle);
+  if (leadDistance !== null) return Math.min(vehicle.cruiseSpeed, clamp((leadDistance - 3.4) * 1.1, 0, vehicle.cruiseSpeed));
+  const playerDistance = trafficPlayerDistance(vehicle);
+  if (playerDistance !== null) return clamp((playerDistance - 3.2) * 1.12, 0, vehicle.cruiseSpeed);
+  const ahead = trafficSignalAhead(vehicle);
+  if (ahead) {
+    const { signal, distance } = ahead;
+    const stoppingSignal = signal.userData.state === 0 || (signal.userData.state === 1 && distance > 9);
+    if (stoppingSignal && distance > 0) {
+      const distanceToStopLine = distance - 5.7;
+      if (distanceToStopLine < .8) return 0;
+      return clamp(distanceToStopLine * 1.05, 0, vehicle.cruiseSpeed);
+    }
+  }
+  const stopSign = trafficStopSignAhead(vehicle);
+  if (stopSign) {
+    if (vehicle.stopKey !== stopSign.key && stopSign.distance > 0) {
+      vehicle.stopKey = stopSign.key;
+      vehicle.stopWait = 0;
+    }
+    if (stopSign.distance > 0) {
+      const distanceToStopLine = stopSign.distance - 5.7;
+      if (distanceToStopLine < .8 && vehicle.stopWait === 0) {
+        vehicle.stopWait = 1.15 + randomFrom(vehicle.axis + vehicle.lane + stopSign.distance) * .7;
+      }
+      if (vehicle.stopWait > 0) {
+        vehicle.stopWait -= dt;
+        if (vehicle.stopWait <= 0) vehicle.stopWait = -1;
+        return 0;
+      }
+      if (distanceToStopLine <= 0 && vehicle.stopWait < 0) return vehicle.cruiseSpeed;
+      return clamp(distanceToStopLine * 1.05, 0, vehicle.cruiseSpeed);
+    }
+  } else if (vehicle.stopKey) {
+    vehicle.stopKey = '';
+    vehicle.stopWait = 0;
+  }
+  return vehicle.cruiseSpeed;
+}
+
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
-    const { mesh, vertical, speed, direction, axis, lane } = vehicle;
-    const distance = speed * direction * dt;
-    if (vertical) {
-      mesh.position.z += distance;
-      if (mesh.position.z > 108) mesh.position.z = -108;
-      if (mesh.position.z < -108) mesh.position.z = 108;
+    const targetSpeed = trafficTargetSpeed(vehicle, dt);
+    const wasBraking = vehicle.currentSpeed > targetSpeed + .35;
+    vehicle.currentSpeed = damp(vehicle.currentSpeed, targetSpeed, wasBraking ? 5.4 : 2.2, dt);
+    const distance = vehicle.currentSpeed * vehicle.direction * dt;
+    if (vehicle.vertical) {
+      vehicle.mesh.position.z += distance;
+      if (vehicle.mesh.position.z > 108) vehicle.mesh.position.z = -108;
+      if (vehicle.mesh.position.z < -108) vehicle.mesh.position.z = 108;
     } else {
-      mesh.position.x += distance;
-      if (mesh.position.x > 108) mesh.position.x = -108;
-      if (mesh.position.x < -108) mesh.position.x = 108;
+      vehicle.mesh.position.x += distance;
+      if (vehicle.mesh.position.x > 108) vehicle.mesh.position.x = -108;
+      if (vehicle.mesh.position.x < -108) vehicle.mesh.position.x = 108;
     }
-    mesh.position.y = .02;
-    mesh.position.x = vertical ? axis + lane : mesh.position.x;
-    mesh.position.z = vertical ? mesh.position.z : axis + lane;
-    const wheelSpin = speed * dt * .95;
-    mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
-    mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
+    vehicle.mesh.position.y = .02;
+    vehicle.mesh.position.x = vehicle.vertical ? vehicle.axis + vehicle.lane : vehicle.mesh.position.x;
+    vehicle.mesh.position.z = vehicle.vertical ? vehicle.mesh.position.z : vehicle.axis + vehicle.lane;
+    setBrakeLights(vehicle.mesh, wasBraking || vehicle.currentSpeed < .8);
+    const wheelSpin = vehicle.currentSpeed * dt * .95;
+    vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
+    vehicle.mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
   }
 }
 
@@ -2287,11 +2462,11 @@ function animate(time) {
   updateGamepad();
   if (!starterMenuOpen && !garageOpen && !gamePaused) {
     updatePlayer(dt);
+    updateTrafficSignals(time);
     updateTraffic(dt);
     updateCollectibles(time, dt);
     updateDelivery(time, dt);
     updatePolice(time, dt);
-    updateTrafficSignals(time);
     updateRace(time, dt);
     updateBeacons(time, dt);
   }
