@@ -2412,10 +2412,14 @@ function createMountainPine(x, z, scale = 1, seed = 1) {
   const trunk = addMesh(group, new THREE.CylinderGeometry(.12, .2, trunkHeight, 7), mats.treeTrunk, [0, trunkHeight / 2, 0], { castShadow: true });
   trunk.castShadow = true;
   const foliage = randomFrom(seed + 8) > .48 ? mats.treeLeaf : mats.treeLeafDark;
-  addMesh(group, new THREE.ConeGeometry(1.05, 2.2, 8), foliage, [0, 1.7, 0], { castShadow: true });
-  addMesh(group, new THREE.ConeGeometry(.82, 1.8, 8), foliage, [0, 2.75, 0], { castShadow: true });
-  addMesh(group, new THREE.ConeGeometry(.56, 1.35, 8), foliage, [0, 3.65, 0], { castShadow: true });
+  const foliageGroup = new THREE.Group();
+  foliageGroup.position.y = .95;
+  addMesh(foliageGroup, new THREE.ConeGeometry(1.05, 2.2, 8), foliage, [0, .75, 0], { castShadow: true });
+  addMesh(foliageGroup, new THREE.ConeGeometry(.82, 1.8, 8), foliage, [0, 1.8, 0], { castShadow: true });
+  addMesh(foliageGroup, new THREE.ConeGeometry(.56, 1.35, 8), foliage, [0, 2.7, 0], { castShadow: true });
+  group.add(foliageGroup);
   mountainRoadForest.add(group);
+  registerFoliageWind(mountainRoadForest, foliageGroup, .028 + randomFrom(seed + 14) * .022, seed * .41);
   return group;
 }
 
@@ -2890,6 +2894,33 @@ function sectorGroundMaterial(type) {
   return mats.mountainGround;
 }
 
+function registerFoliageWind(owner, object, amplitude = .035, phase = 0) {
+  owner.userData.windObjects = owner.userData.windObjects || [];
+  owner.userData.windObjects.push({
+    object,
+    amplitude,
+    phase,
+    baseX: object.rotation.x,
+    baseZ: object.rotation.z,
+  });
+  return object;
+}
+
+function updateFoliageWind(time) {
+  const seconds = time * .001;
+  const updateOwner = (owner) => {
+    owner?.userData?.windObjects?.forEach(({ object, amplitude, phase, baseX, baseZ }) => {
+      if (!object) return;
+      object.rotation.x = baseX + Math.sin(seconds * .72 + phase) * amplitude * .42;
+      object.rotation.z = baseZ + Math.sin(seconds * .91 + phase * 1.37) * amplitude;
+    });
+  };
+  updateOwner(mountainRoadForest);
+  if (typeof worldSectorRegistry !== 'undefined') {
+    worldSectorRegistry.forEach((sector) => updateOwner(sector.fallbackVisuals));
+  }
+}
+
 function addSectorConifer(group, x, z, scale, seed) {
   const tree = new THREE.Group();
   tree.position.set(x, 0, z);
@@ -2897,9 +2928,13 @@ function addSectorConifer(group, x, z, scale, seed) {
   tree.scale.setScalar(scale);
   const foliage = randomFrom(seed + 6) > .5 ? mats.treeLeaf : mats.treeLeafDark;
   addMesh(tree, new THREE.CylinderGeometry(.12, .2, 1.25, 7), mats.treeTrunk, [0, .62, 0], { castShadow: true });
-  addMesh(tree, new THREE.ConeGeometry(.92, 1.85, 8), foliage, [0, 1.42, 0], { castShadow: true });
-  addMesh(tree, new THREE.ConeGeometry(.7, 1.55, 8), foliage, [0, 2.35, 0], { castShadow: true });
-  addMesh(tree, new THREE.ConeGeometry(.46, 1.1, 8), foliage, [0, 3.18, 0], { castShadow: true });
+  const foliageGroup = new THREE.Group();
+  foliageGroup.position.y = .54;
+  addMesh(foliageGroup, new THREE.ConeGeometry(.92, 1.85, 8), foliage, [0, .88, 0], { castShadow: true });
+  addMesh(foliageGroup, new THREE.ConeGeometry(.7, 1.55, 8), foliage, [0, 1.81, 0], { castShadow: true });
+  addMesh(foliageGroup, new THREE.ConeGeometry(.46, 1.1, 8), foliage, [0, 2.64, 0], { castShadow: true });
+  tree.add(foliageGroup);
+  registerFoliageWind(group, foliageGroup, .035 + randomFrom(seed + 10) * .025, seed * .37);
   group.add(tree);
   return tree;
 }
@@ -2908,8 +2943,12 @@ function addSectorTree(group, x, z, scale, seed) {
   if (seed % 3 === 0) return addSectorConifer(group, x, z, scale, seed);
   addMesh(group, new THREE.CylinderGeometry(.16, .25, 1.45, 7), mats.treeTrunk, [x, .72, z], { castShadow: true });
   const material = randomFrom(seed) > .5 ? mats.treeLeaf : mats.treeLeafDark;
-  addMesh(group, new THREE.IcosahedronGeometry(1.1, 1), material, [x, 1.95, z], { scale: [scale, scale, scale], castShadow: true });
-  return null;
+  const foliageGroup = new THREE.Group();
+  foliageGroup.position.set(x, .86, z);
+  addMesh(foliageGroup, new THREE.IcosahedronGeometry(1.1, 1), material, [0, 1.09, 0], { scale: [scale, scale, scale], castShadow: true });
+  group.add(foliageGroup);
+  registerFoliageWind(group, foliageGroup, .022 + randomFrom(seed + 14) * .018, seed * .29);
+  return foliageGroup;
 }
 
 function addRegionalFence(group, x, z, heading, seed) {
@@ -2950,6 +2989,7 @@ function addLakeReedCluster(group, x, z, scale, seed) {
   }
   reeds.scale.setScalar(scale);
   group.add(reeds);
+  registerFoliageWind(group, reeds, .055 + randomFrom(seed + 22) * .035, seed * .18);
   return reeds;
 }
 
@@ -7355,6 +7395,7 @@ function animate(time) {
   }
   updateAudio();
   updateWater(time);
+  updateFoliageWind(time);
   updateVisualPolish(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
   else updateCamera(dt);
