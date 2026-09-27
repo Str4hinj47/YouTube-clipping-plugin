@@ -951,6 +951,22 @@ const CAR_PROFILES = {
   ev: { label: 'PULSE EV', className: 'ELECTRIC SPORT', scale: [1.02, .98, 1] },
 };
 
+// Progression is intentionally data-driven. Adjust only this block to change the
+// starter ride or the delivery milestone that grants each vehicle.
+const PROGRESSION_CONFIG = {
+  starterStyle: 'sport',
+  vehicleUnlocks: [
+    { style: 'sport', deliveries: 0, title: 'Starter ride' },
+    { style: 'hatch', deliveries: 2, title: 'First milestone' },
+    { style: 'ev', deliveries: 4, title: 'Clean-energy unlock' },
+    { style: 'wagon', deliveries: 7, title: 'Long-haul unlock' },
+    { style: 'suv', deliveries: 10, title: 'Mountain-ready unlock' },
+    { style: 'classic', deliveries: 14, title: 'Heritage unlock' },
+    { style: 'pickup', deliveries: 18, title: 'Utility unlock' },
+    { style: 'supercar', deliveries: 24, title: 'Flagship unlock' },
+  ],
+};
+
 const VEHICLE_CATALOG = [
   { style: 'sport', name: 'MIDNIGHT GT', className: 'SPORT COUPE', price: 0, paint: '#303fca', accent: '#d6fa6a', description: 'Your balanced blue-hour starter.', power: 86, grip: 72, styleScore: 94, acceleration: 22, topSpeed: 39, brakePower: 34, turnRate: 1.75, turnSpeed: 18, offRoadTraction: .72 },
   { style: 'hatch', name: 'METRO HATCH', className: 'CITY HATCH', price: 300, paint: '#d85062', accent: '#5ce3d1', description: 'Small footprint. Sharp exits.', power: 62, grip: 88, styleScore: 76, acceleration: 20, topSpeed: 34, brakePower: 37, turnRate: 2.08, turnSpeed: 16, offRoadTraction: .84 },
@@ -2041,16 +2057,17 @@ function buildWorld() {
 }
 
 const player = {
-  mesh: createCar(0x303fca, 0xd6fa6a, true),
+  mesh: createCar(new THREE.Color(vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint).getHex(), new THREE.Color(vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).accent).getHex(), true, PROGRESSION_CONFIG.starterStyle),
   position: new THREE.Vector3(0, .02, 0),
   speed: 0,
   heading: 0,
   distance: 0,
   rep: 1280,
   cash: 420,
-  selectedStyle: 'sport',
-  ownedCars: ['sport'],
-  paint: '#303fca',
+  selectedStyle: PROGRESSION_CONFIG.starterStyle,
+  ownedCars: [PROGRESSION_CONFIG.starterStyle],
+  completedDeliveries: 0,
+  paint: vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint,
   condition: 100,
   disabledTimer: 0,
   speedingTime: 0,
@@ -2101,6 +2118,65 @@ const upgradeConfig = {
   grip: { costs: [180, 320, 540] },
 };
 
+function vehicleUnlockRule(style) {
+  return PROGRESSION_CONFIG.vehicleUnlocks.find((rule) => rule.style === style) || null;
+}
+
+function isVehicleUnlocked(style) {
+  const rule = vehicleUnlockRule(style);
+  return !rule || player.completedDeliveries >= rule.deliveries;
+}
+
+function nextVehicleUnlockRule() {
+  return [...PROGRESSION_CONFIG.vehicleUnlocks]
+    .sort((a, b) => a.deliveries - b.deliveries)
+    .find((rule) => rule.deliveries > player.completedDeliveries && !player.ownedCars.includes(rule.style)) || null;
+}
+
+function deliveryMilestoneCopy() {
+  const next = nextVehicleUnlockRule();
+  if (!next) return `${player.completedDeliveries} DELIVERIES // FLEET COMPLETE`;
+  return `${player.completedDeliveries} / ${next.deliveries} DELIVERIES`;
+}
+
+function deliveryMilestoneDetail() {
+  const next = nextVehicleUnlockRule();
+  if (!next) return 'ALL VEHICLES UNLOCKED';
+  const vehicle = VEHICLE_CATALOG.find((entry) => entry.style === next.style);
+  return `${Math.max(0, next.deliveries - player.completedDeliveries)} MORE // ${vehicle?.name || next.style.toUpperCase()}`;
+}
+
+function grantUnlockedVehicles() {
+  const newlyUnlocked = [];
+  PROGRESSION_CONFIG.vehicleUnlocks
+    .slice()
+    .sort((a, b) => a.deliveries - b.deliveries)
+    .forEach((rule) => {
+      if (player.completedDeliveries < rule.deliveries || player.ownedCars.includes(rule.style)) return;
+      if (!VEHICLE_CATALOG.some((vehicle) => vehicle.style === rule.style)) return;
+      player.ownedCars.push(rule.style);
+      newlyUnlocked.push(rule.style);
+    });
+  if (!player.ownedCars.includes(PROGRESSION_CONFIG.starterStyle)) player.ownedCars.unshift(PROGRESSION_CONFIG.starterStyle);
+  return newlyUnlocked;
+}
+
+function announceVehicleUnlocks(styles) {
+  if (!styles.length) return;
+  const names = styles.map((style) => vehicleCatalogEntry(style).name).join(' + ');
+  window.setTimeout(() => showToast('VEHICLE UNLOCKED', names, `${player.completedDeliveries} DELIVERIES`), 420);
+}
+
+function registerDeliveryCompletion() {
+  player.completedDeliveries += 1;
+  setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
+  const newlyUnlocked = grantUnlockedVehicles();
+  saveProgress();
+  updateGarageUi();
+  announceVehicleUnlocks(newlyUnlocked);
+  return newlyUnlocked;
+}
+
 function saveProgress() {
   try {
     localStorage.setItem('neonline-aurora-save', JSON.stringify({
@@ -2108,6 +2184,7 @@ function saveProgress() {
       rep: player.rep,
       selectedStyle: player.selectedStyle,
       ownedCars: player.ownedCars,
+      completedDeliveries: player.completedDeliveries,
       paint: player.paint,
       condition: player.condition,
       upgrades: player.upgrades,
@@ -2124,10 +2201,12 @@ function loadProgress() {
     if (!saved) return;
     if (Number.isFinite(saved.cash)) player.cash = saved.cash;
     if (Number.isFinite(saved.rep)) player.rep = saved.rep;
+    if (Number.isFinite(saved.completedDeliveries)) player.completedDeliveries = Math.max(0, Math.floor(saved.completedDeliveries));
     if (Array.isArray(saved.ownedCars)) {
       player.ownedCars = saved.ownedCars.filter((style) => VEHICLE_CATALOG.some((vehicle) => vehicle.style === style));
-      if (!player.ownedCars.includes('sport')) player.ownedCars.unshift('sport');
     }
+    if (!player.ownedCars.includes(PROGRESSION_CONFIG.starterStyle)) player.ownedCars.unshift(PROGRESSION_CONFIG.starterStyle);
+    grantUnlockedVehicles();
     if (typeof saved.selectedStyle === 'string' && player.ownedCars.includes(saved.selectedStyle)) player.selectedStyle = saved.selectedStyle;
     if (typeof saved.paint === 'string' && /^#[0-9a-f]{6}$/i.test(saved.paint)) player.paint = saved.paint;
     if (Number.isFinite(saved.condition)) player.condition = clamp(saved.condition, 1, 100);
@@ -2224,9 +2303,34 @@ const deliveryTargetLabel = makeLabel('DROP POINT', '#ff9d50', .48);
 deliveryTargetLabel.position.y = 5.1;
 deliveryTargetMarker.add(deliveryTargetLabel);
 world.add(deliveryTargetMarker);
+const CITY_DELIVERY_MISSIONS = [
+  { id: 'south-market', start: [-66, 22], target: [-22, -66], title: 'SOUTH MARKET RUN', copy: 'Move a fresh parcel from the depot to South Market.', activeCopy: 'South Market is marked. Keep the cargo steady through the city.', rep: 180, cash: 120 },
+  { id: 'pulse-station', start: [-22, -66], target: [44, -44], title: 'PULSE STATION SUPPLY', copy: 'Carry a sealed case to the beacon-lit Pulse Station.', activeCopy: 'Pulse Station is waiting. Take the cleanest route you know.', rep: 195, cash: 130 },
+  { id: 'octane-row', start: [44, -44], target: [-66, -66], title: 'OCTANE ROW PARTS', copy: 'Drop precision parts at Octane Row before the shop opens.', activeCopy: 'Octane Row is marked. Avoid unnecessary bodywork on the way.', rep: 210, cash: 140 },
+  { id: 'northstar-overlook', start: [-66, -66], target: [66, 22], title: 'NORTHSTAR OVERLOOK', copy: 'Deliver a night-shift kit to the overlook above the bay.', activeCopy: 'Northstar Overlook is marked. Let the road set the pace.', rep: 225, cash: 150 },
+  { id: 'pine-and-salt', start: [66, 22], target: [22, 66], title: 'PINE AND SALT RUN', copy: 'Take a small grocery order across town to Pine and Salt.', activeCopy: 'Pine and Salt is marked. Keep the parcel and the line clean.', rep: 240, cash: 160 },
+  { id: 'east-neighborhood', start: [22, 66], target: [66, 66], title: 'EAST NEIGHBORHOOD DROP', copy: 'Finish the late route at the east-side neighborhood junction.', activeCopy: 'East Neighborhood is marked. One calm run gets it done.', rep: 255, cash: 170 },
+];
+let cityDeliveryMissionIndex = 0;
 let deliveryState = 'idle';
 let deliveryTime = 0;
 let deliveryNear = false;
+
+function currentCityDeliveryMission() {
+  return CITY_DELIVERY_MISSIONS[cityDeliveryMissionIndex] || CITY_DELIVERY_MISSIONS[0];
+}
+
+function setCityDeliveryMission(index) {
+  cityDeliveryMissionIndex = ((index % CITY_DELIVERY_MISSIONS.length) + CITY_DELIVERY_MISSIONS.length) % CITY_DELIVERY_MISSIONS.length;
+  const mission = currentCityDeliveryMission();
+  deliveryStart.set(mission.start?.[0] ?? -66, .08, mission.start?.[1] ?? 22);
+  deliveryTarget.set(mission.target?.[0] ?? -22, .08, mission.target?.[1] ?? -66);
+  deliveryStartMarker.position.copy(deliveryStart);
+  deliveryTargetMarker.position.copy(deliveryTarget);
+}
+
+setCityDeliveryMission(player.completedDeliveries % CITY_DELIVERY_MISSIONS.length);
+
 const mountainDeliveryStart = mountainVillagePosition.clone();
 const mountainDeliveryTarget = mountainVillageDropPosition.clone();
 let mountainDeliveryState = 'idle';
@@ -2245,7 +2349,7 @@ function addMountainDeliveryMarkers() {
   const startLabel = makeLabel('PINEWATCH DEPOT', '#5ce3d1', .48);
   startLabel.position.y = 5.1;
   mountainDeliveryStartMarker.add(startLabel);
-  mountainExpansion.add(mountainDeliveryStartMarker);
+  pinewatchExpansion.add(mountainDeliveryStartMarker);
   mountainDeliveryTargetMarker = new THREE.Group();
   mountainDeliveryTargetMarker.position.copy(mountainDeliveryTarget);
   mountainDeliveryTargetRing = addMesh(mountainDeliveryTargetMarker, new THREE.TorusGeometry(2.4, .09, 8, 32), mats.event, [0, .2, 0], { rotation: [Math.PI / 2, 0, 0] });
@@ -2253,7 +2357,7 @@ function addMountainDeliveryMarkers() {
   const targetLabel = makeLabel('CABIN DROP', '#ff9d50', .48);
   targetLabel.position.y = 5.1;
   mountainDeliveryTargetMarker.add(targetLabel);
-  mountainExpansion.add(mountainDeliveryTargetMarker);
+  pinewatchExpansion.add(mountainDeliveryTargetMarker);
 }
 
 function mountainDeliveryAction() {
@@ -2278,11 +2382,13 @@ function deliveryAction() {
     deliveryState = 'active';
     deliveryTime = 0;
     playTone(320, .2, .08, 'sine', 90);
-    showToast('DELIVERY ACCEPTED', 'Blue depot to the orange drop point', '+180 REP');
+    const mission = currentCityDeliveryMission();
+    showToast(`${mission.title} ACCEPTED`, mission.copy, `+${mission.rep} REP`);
   } else if (deliveryState === 'finished' && deliveryNear) {
     deliveryState = 'active';
     deliveryTime = 0;
-    showToast('NEW PACKAGE', 'Another night, another line', 'COURIER RUN');
+    const mission = currentCityDeliveryMission();
+    showToast('NEW PACKAGE', mission.copy, `+${mission.rep} REP`);
   }
 }
 
@@ -2293,11 +2399,12 @@ function updateDelivery(time, dt) {
     deliveryTime += dt;
     if (player.position.distanceTo(deliveryTarget) < 7.4) {
       deliveryState = 'finished';
-      player.rep += 180;
-      player.cash += 120;
-      saveProgress();
+      const mission = currentCityDeliveryMission();
+      player.rep += mission.rep;
+      player.cash += mission.cash;
+      registerDeliveryCompletion();
       playBeacon();
-      showToast('PACKAGE DELIVERED', `${deliveryTime.toFixed(1)} seconds, no questions asked`, '+180 REP');
+      showToast(`${mission.title} COMPLETE`, `${deliveryTime.toFixed(1)} seconds, no questions asked`, `+${mission.rep} REP`);
     }
   }
   const pulse = (Math.sin(time * .004) + 1) / 2;
@@ -2319,25 +2426,28 @@ function updateDelivery(time, dt) {
   const title = document.querySelector('#delivery-title');
   const copy = document.querySelector('#delivery-copy');
   const timeReadout = document.querySelector('#delivery-time');
+  const reward = document.querySelector('#delivery-reward');
   const action = document.querySelector('#delivery-action');
+  const mission = currentCityDeliveryMission();
+  if (reward) reward.textContent = `+${mission.rep} REP`;
   if (deliveryState === 'idle') {
     status.textContent = deliveryNear ? 'READY' : 'OPEN WORLD';
-    title.textContent = 'NIGHT SHIFT DELIVERY';
-    copy.textContent = deliveryNear ? 'Hit V to take the parcel across town.' : 'Find the blue depot and make a clean delivery.';
+    title.textContent = mission.title;
+    copy.textContent = deliveryNear ? `Hit V to accept this route. ${mission.copy}` : mission.copy;
     timeReadout.textContent = deliveryNear ? 'PRESS V' : 'COURIER RUN';
-    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT DELIVERY</span>' : '<span>BLUE DEPOT // DROP POINT</span>';
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT DELIVERY</span>' : '<span>BLUE DEPOT // NEXT JOB</span>';
   } else if (deliveryState === 'active') {
     status.textContent = 'PACKAGE LIVE';
-    title.textContent = 'NIGHT SHIFT DELIVERY';
-    copy.textContent = 'Orange drop point marked. Protect the cargo and keep moving.';
+    title.textContent = mission.title;
+    copy.textContent = mission.activeCopy;
     timeReadout.textContent = `${deliveryTime.toFixed(1)} SEC`;
     action.innerHTML = '<span class="event-live-dot"></span><span>DELIVERY LIVE</span>';
   } else {
     status.textContent = 'DELIVERED';
     title.textContent = 'RUN COMPLETE';
-    copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Return to the depot for another job.`;
+    copy.textContent = `Last run: ${deliveryTime.toFixed(1)} seconds. Return to the next depot for another job.`;
     timeReadout.textContent = 'COMPLETE';
-    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT ANOTHER</span>' : '<span>ROUTE CLEARED</span>';
+    action.innerHTML = deliveryNear ? '<span class="keycap">V</span><span>ACCEPT NEXT JOB</span>' : '<span>ROUTE CLEARED</span>';
   }
 }
 
@@ -2350,7 +2460,7 @@ function updateMountainDelivery(time, dt) {
       mountainDeliveryState = 'finished';
       player.rep += 260;
       player.cash += 180;
-      saveProgress();
+      registerDeliveryCompletion();
       playBeacon();
       showToast('PINEWATCH DELIVERED', `${mountainDeliveryTime.toFixed(1)} seconds through the pass`, '+260 REP');
     }
@@ -2371,7 +2481,9 @@ function updateMountainDelivery(time, dt) {
   const title = document.querySelector('#delivery-title');
   const copy = document.querySelector('#delivery-copy');
   const timeReadout = document.querySelector('#delivery-time');
+  const reward = document.querySelector('#delivery-reward');
   const action = document.querySelector('#delivery-action');
+  if (reward) reward.textContent = '+260 REP';
   if (mountainDeliveryState === 'idle') {
     status.textContent = mountainDeliveryNear ? 'READY' : 'MOUNTAIN ROUTE';
     title.textContent = 'PINEWATCH SUPPLY RUN';
@@ -2667,6 +2779,15 @@ function updateMenuVehicleUi() {
   if (garageClass) garageClass.textContent = `${vehicle.className} / ${vehicle.style.toUpperCase()}`;
 }
 
+function updateProgressionUi() {
+  const milestone = document.querySelector('#delivery-milestone');
+  if (milestone) milestone.textContent = deliveryMilestoneCopy();
+  const deliveries = document.querySelector('#market-deliveries');
+  if (deliveries) deliveries.textContent = String(player.completedDeliveries);
+  const nextUnlock = document.querySelector('#market-next-unlock');
+  if (nextUnlock) nextUnlock.textContent = deliveryMilestoneDetail();
+}
+
 function renderMarket() {
   const grid = document.querySelector('#market-grid');
   if (!grid) return;
@@ -2675,15 +2796,18 @@ function renderMarket() {
   grid.innerHTML = VEHICLE_CATALOG.map((vehicle) => {
     const owned = player.ownedCars.includes(vehicle.style);
     const selected = player.selectedStyle === vehicle.style;
-    const action = !owned ? 'BUY' : selected ? 'SELECTED' : 'SELECT';
-    const buttonClass = !owned ? 'buy' : selected ? 'selected-button' : '';
-    const disabled = selected ? 'disabled' : '';
-    const price = vehicle.price ? `$${vehicle.price.toLocaleString('en-US')}` : 'STARTER RIDE';
-    return `<article class="market-card ${owned ? 'owned' : ''} ${selected ? 'selected' : ''}" style="--card-paint:${vehicle.paint};--card-accent:${vehicle.accent}">
+    const unlocked = isVehicleUnlocked(vehicle.style);
+    const rule = vehicleUnlockRule(vehicle.style);
+    const action = !unlocked ? 'LOCKED' : !owned ? 'BUY' : selected ? 'SELECTED' : 'SELECT';
+    const buttonClass = !unlocked ? 'locked' : !owned ? 'buy' : selected ? 'selected-button' : '';
+    const disabled = !unlocked || selected ? 'disabled' : '';
+    const price = !unlocked ? `${rule?.deliveries || 0} DELIVERIES` : vehicle.price ? `$${vehicle.price.toLocaleString('en-US')}` : 'STARTER RIDE';
+    const status = owned ? 'OWNED' : unlocked ? 'UNLOCKED' : `DELIVERY ${rule?.deliveries || 0}`;
+    return `<article class="market-card ${owned ? 'owned' : ''} ${selected ? 'selected' : ''} ${!unlocked ? 'locked' : ''}" style="--card-paint:${vehicle.paint};--card-accent:${vehicle.accent}">
       <div class="market-art"><div class="market-art-car"></div><div class="market-art-wheel a"></div><div class="market-art-wheel b"></div></div>
-      <div class="market-tag"><span>${vehicle.className}</span><b>${owned ? 'OWNED' : 'LOCKED'}</b></div>
-      <h3>${vehicle.name}</h3><p>${vehicle.description}</p>
-      <div class="market-card-footer"><span class="market-price ${vehicle.price ? '' : 'free'}">${price}</span><button class="market-card-button ${buttonClass}" data-market-style="${vehicle.style}" type="button" ${disabled}>${action}</button></div>
+      <div class="market-tag"><span>${vehicle.className}</span><b>${status}</b></div>
+      <h3>${vehicle.name}</h3><p>${!unlocked ? `${rule?.deliveries || 0} completed deliveries unlock this car.` : vehicle.description}</p>
+      <div class="market-card-footer"><span class="market-price ${vehicle.price || !unlocked ? '' : 'free'}">${price}</span><button class="market-card-button ${buttonClass}" data-market-style="${vehicle.style}" type="button" ${disabled}>${action}</button></div>
     </article>`;
   }).join('');
 }
@@ -2746,6 +2870,11 @@ function applyPlayerPaint(paint, announce = true) {
 
 function purchaseMarketVehicle(style) {
   const vehicle = vehicleCatalogEntry(style);
+  const rule = vehicleUnlockRule(style);
+  if (!isVehicleUnlocked(style)) {
+    showToast('VEHICLE LOCKED', `${vehicle.name} unlocks after ${rule?.deliveries || 0} completed deliveries`, `${player.completedDeliveries} / ${rule?.deliveries || 0}`);
+    return;
+  }
   if (player.ownedCars.includes(style)) {
     applyPlayerVehicleStyle(style);
     setMenuPage('home');
@@ -2778,6 +2907,7 @@ function updateGarageUi() {
   });
   updateMenuCash();
   updateMenuVehicleUi();
+  updateProgressionUi();
   updateDamageUi();
   renderMarket();
   renderOwnedGarage();
@@ -2942,9 +3072,13 @@ function resetSavedProgress() {
   try { localStorage.removeItem('neonline-aurora-save'); } catch (error) { console.warn('Progress reset unavailable.', error); }
   player.cash = 420;
   player.rep = 1280;
-  player.ownedCars = ['sport'];
-  player.selectedStyle = 'sport';
-  player.paint = '#303fca';
+  player.ownedCars = [PROGRESSION_CONFIG.starterStyle];
+  player.completedDeliveries = 0;
+  player.selectedStyle = PROGRESSION_CONFIG.starterStyle;
+  player.paint = vehicleCatalogEntry(PROGRESSION_CONFIG.starterStyle).paint;
+  setCityDeliveryMission(0);
+  deliveryState = 'idle';
+  mountainDeliveryState = 'idle';
   player.condition = 100;
   player.disabledTimer = 0;
   player.speedingTime = 0;
@@ -2954,7 +3088,7 @@ function resetSavedProgress() {
   player.stopObservations = {};
   player.upgrades = { engine: 0, grip: 0 };
   player.collectedCaches = [];
-  applyPlayerVehicleStyle('sport', false);
+  applyPlayerVehicleStyle(PROGRESSION_CONFIG.starterStyle, false);
   applyPlayerPaint(player.paint, false);
   resetCollectibles();
   updateGarageUi();
@@ -4410,7 +4544,7 @@ function drawWorldMap() {
     routeTitle.textContent = 'PINEWATCH CABIN DROP';
     routeCopy.textContent = `${Math.round(player.position.distanceTo(mountainDeliveryTarget))} M TO CABIN`;
   } else if (deliveryState === 'active') {
-    routeTitle.textContent = 'COURIER DROP';
+    routeTitle.textContent = currentCityDeliveryMission().title;
     routeCopy.textContent = `${Math.round(player.position.distanceTo(deliveryTarget))} M TO DROP POINT`;
   } else if (routeStep < beaconPositions.length) {
     routeTitle.textContent = beaconNames[routeStep];

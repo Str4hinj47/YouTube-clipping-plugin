@@ -40,7 +40,7 @@
         <div class="mission-heading"><span id="mission-title">THE LONG WAY HOME</span><span class="mission-glyph">↗</span></div>
         <p id="mission-description">Cruise to the next beacon. Keep your lines clean.</p>
         <div class="mission-progress"><span id="mission-progress-fill"></span></div>
-        <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span class="reward">+120 REP</span></div>
+        <div class="mission-footer"><span id="mission-distance">1.8 KM TO BEACON</span><span id="delivery-milestone">0 DELIVERIES</span><span class="reward">+120 REP</span></div>
       </section>
 
       <section class="delivery-panel glass-panel hud-layer" id="delivery-panel">
@@ -137,7 +137,7 @@
               <p>Build your line through Aurora Bay. Tune the ride, find the clean route, and leave your mark.</p>
               <nav class="menu-nav" aria-label="Main menu">
                 <button class="menu-nav-button active" data-menu-page="home" type="button"><b>01</b><span>PLAY</span><small>FREE ROAM</small><i>↗</i></button>
-                <button class="menu-nav-button" data-menu-page="market" type="button"><b>02</b><span>MARKET</span><small>BUY CARS</small><i>↗</i></button>
+                <button class="menu-nav-button" data-menu-page="market" type="button"><b>02</b><span>MARKET</span><small>UNLOCK // BUY</small><i>↗</i></button>
                 <button class="menu-nav-button" data-menu-page="garage" type="button"><b>03</b><span>GARAGE</span><small>RESPRAY // TUNE</small><i>↗</i></button>
                 <button class="menu-nav-button" data-menu-page="settings" type="button"><b>04</b><span>SETTINGS</span><small>OPTIONS // CONTROLS</small><i>↗</i></button>
               </nav>
@@ -151,14 +151,14 @@
                   <div class="menu-vehicle-card-art"><span class="menu-art-scan"></span><span class="menu-art-label">NL—07 // BLUE HOUR SPEC</span><div class="menu-art-floor"></div><div class="menu-art-car"><i></i><b></b><em></em></div><div class="menu-art-wheel menu-art-wheel-a"></div><div class="menu-art-wheel menu-art-wheel-b"></div></div>
                   <div class="menu-vehicle-info"><div class="menu-stat-line"><span>CLASS</span><b id="menu-vehicle-class">SPORT COUPE</b></div><div class="menu-stat-line"><span>DRIVETRAIN</span><b>RWD // 6 SPEED</b></div><div class="menu-stat-line"><span>PAINT</span><b id="menu-vehicle-paint">MIDNIGHT BLUE</b></div><div class="menu-stat-bars"><div><span>POWER</span><i><em style="width:86%"></em></i></div><div><span>GRIP</span><i><em style="width:72%"></em></i></div><div><span>STYLE</span><i><em style="width:94%"></em></i></div></div><button class="menu-ghost-button" data-menu-goto="garage" type="button">CUSTOMIZE RIDE <span>↗</span></button></div>
                 </div>
-                <div class="menu-home-bottom"><div class="menu-quick-card"><span class="quick-icon">⌁</span><div><small>NEXT OBJECTIVE</small><b>THE LONG WAY HOME</b><p>Reach the next beacon and keep the city moving.</p></div><strong>+120 REP</strong></div><div class="menu-quick-card"><span class="quick-icon cyan">◈</span><div><small>GARAGE BALANCE</small><b id="menu-balance-copy">$420 AVAILABLE</b><p>Buy a new silhouette or upgrade the one you own.</p></div><button class="menu-quick-link" data-menu-goto="market" type="button">VISIT MARKET ↗</button></div></div>
+                <div class="menu-home-bottom"><div class="menu-quick-card"><span class="quick-icon">⌁</span><div><small>NEXT OBJECTIVE</small><b>THE LONG WAY HOME</b><p>Reach the next beacon and keep the city moving.</p></div><strong>+120 REP</strong></div><div class="menu-quick-card"><span class="quick-icon cyan">◈</span><div><small>GARAGE BALANCE</small><b id="menu-balance-copy">$420 AVAILABLE</b><p>Complete deliveries to unlock new silhouettes, then tune the one you own.</p></div><button class="menu-quick-link" data-menu-goto="market" type="button">VISIT MARKET ↗</button></div></div>
                 <button class="menu-play-button" id="menu-play-button" type="button"><span class="play-mark">▶</span><span><b>PLAY AURORA BAY</b><small>ENTER OPEN WORLD // FREE ROAM</small></span><i>↗</i></button>
               </section>
 
               <section class="menu-page" data-menu-content="market">
-                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY MARKET</span><h2>CHOOSE YOUR <b>LINE.</b></h2></div><span class="menu-page-note">FICTIONAL FLEET // LOGO-FREE</span></div>
-                <p class="menu-page-intro">Own a different silhouette for every district. Every car is detailed, unbranded, and ready for the open world.</p>
-                <div class="market-toolbar"><span><b id="market-owned-count">1</b> / 8 GARAGE SLOTS FILLED</span><span>AVAILABLE <b id="market-cash">$420</b></span></div>
+                <div class="menu-page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> AURORA BAY MARKET</span><h2>CHOOSE YOUR <b>LINE.</b></h2></div><span class="menu-page-note">DELIVERY UNLOCKS // LOGO-FREE</span></div>
+                <p class="menu-page-intro">Complete courier work to unlock new silhouettes, then buy or select them for every district. Every car is detailed, unbranded, and ready for the open world.</p>
+                <div class="market-toolbar"><span><b id="market-owned-count">1</b> / 8 GARAGE SLOTS FILLED</span><span>DELIVERIES <b id="market-deliveries">0</b> <small id="market-next-unlock">2 MORE // METRO HATCH</small></span><span>AVAILABLE <b id="market-cash">$420</b></span></div>
                 <div class="market-grid" id="market-grid"></div>
               </section>
 
