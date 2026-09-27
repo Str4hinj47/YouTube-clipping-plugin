@@ -546,6 +546,7 @@ const player = {
   distance: 0,
   rep: 1280,
   cash: 420,
+  upgrades: { engine: 0, nitro: 0, grip: 0 },
 };
 player.mesh.position.copy(player.position);
 actors.add(player.mesh);
@@ -613,6 +614,42 @@ let raceCountdown = 0;
 let raceCountdownLast = 0;
 let raceBest = 102.8;
 let raceNear = false;
+let garageOpen = false;
+const upgradeConfig = {
+  engine: { costs: [240, 420, 700] },
+  nitro: { costs: [220, 380, 620] },
+  grip: { costs: [180, 320, 540] },
+};
+
+function saveProgress() {
+  try {
+    localStorage.setItem('neonline-aurora-save', JSON.stringify({
+      cash: player.cash,
+      rep: player.rep,
+      upgrades: player.upgrades,
+      raceBest,
+    }));
+  } catch (error) {
+    console.warn('Progress save unavailable.', error);
+  }
+}
+
+function loadProgress() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('neonline-aurora-save') || 'null');
+    if (!saved) return;
+    if (Number.isFinite(saved.cash)) player.cash = saved.cash;
+    if (Number.isFinite(saved.rep)) player.rep = saved.rep;
+    if (Number.isFinite(saved.raceBest)) raceBest = saved.raceBest;
+    if (saved.upgrades) Object.keys(player.upgrades).forEach((key) => {
+      player.upgrades[key] = clamp(Number(saved.upgrades[key]) || 0, 0, 3);
+    });
+    player.nitro = Math.min(player.nitro, 100 + player.upgrades.nitro * 12);
+  } catch (error) {
+    console.warn('Progress load unavailable.', error);
+  }
+}
+loadProgress();
 
 function formatRaceTime(seconds) {
   const safeSeconds = Math.max(0, seconds);
@@ -670,6 +707,7 @@ function updateRace(time, dt) {
         if (newBest) raceBest = raceTime;
         player.rep += newBest ? 300 : 120;
         player.cash += newBest ? 180 : 80;
+        saveProgress();
         playBeacon();
         showToast(newBest ? 'NEW PERSONAL BEST' : 'SPRINT COMPLETE', `${formatRaceTime(raceTime)} through the city grid`, newBest ? '+300 REP' : '+120 REP');
       }
@@ -729,6 +767,47 @@ function updateRace(time, dt) {
     timeReadout.textContent = formatRaceTime(raceTime);
     action.innerHTML = raceNear ? '<span class="keycap">E</span><span>REMATCH</span>' : '<span>ROUTE CLEARED</span>';
   }
+}
+
+function updateGarageUi() {
+  document.querySelector('#garage-cash').textContent = `$${player.cash.toLocaleString('en-US')}`;
+  document.querySelectorAll('.upgrade-card').forEach((card) => {
+    const key = card.dataset.upgrade;
+    const level = player.upgrades[key];
+    const cost = upgradeConfig[key].costs[level];
+    card.querySelector('.upgrade-level').textContent = `LV ${level} / 3`;
+    card.querySelector('.upgrade-cost').textContent = cost ? `$${cost}` : 'MAXED';
+    card.disabled = !cost || player.cash < cost;
+    card.classList.toggle('maxed', !cost);
+  });
+}
+
+function setGarageOpen(open) {
+  garageOpen = open;
+  const overlay = document.querySelector('#garage-overlay');
+  overlay.classList.toggle('open', open);
+  overlay.setAttribute('aria-hidden', String(!open));
+  if (open) {
+    Object.keys(input).forEach((key) => { input[key] = false; });
+    updateGarageUi();
+    ensureAudio();
+    if (audioState.master && audioState.context) audioState.master.gain.setTargetAtTime(0, audioState.context.currentTime, .08);
+  } else if (soundOn) {
+    ensureAudio();
+  }
+}
+
+function purchaseUpgrade(key) {
+  const level = player.upgrades[key];
+  const cost = upgradeConfig[key].costs[level];
+  if (!cost || player.cash < cost) return;
+  player.cash -= cost;
+  player.upgrades[key] += 1;
+  if (key === 'nitro') player.nitro = 100 + player.upgrades.nitro * 12;
+  saveProgress();
+  updateGarageUi();
+  playTone(360 + player.upgrades[key] * 80, .2, .08, 'sine', 140);
+  showToast(`${key.toUpperCase()} UPGRADED`, `Module level ${player.upgrades[key]} installed`, `$${cost}`);
 }
 
 const input = { forward: false, back: false, left: false, right: false, nitro: false, handbrake: false };
@@ -823,6 +902,14 @@ function ensureAudio() {
 function updateAudio() {
   if (!audioState.initialized || !audioState.context) return;
   const now = audioState.context.currentTime;
+  if (garageOpen) {
+    audioState.engineGain.gain.setTargetAtTime(0, now, .08);
+    audioState.harmonicGain.gain.setTargetAtTime(0, now, .08);
+    audioState.roadNoiseGain.gain.setTargetAtTime(0, now, .08);
+    audioState.nitroGain.gain.setTargetAtTime(0, now, .08);
+    audioState.master.gain.setTargetAtTime(soundOn ? .22 : 0, now, .08);
+    return;
+  }
   const speedRatio = clamp(Math.abs(player.speed) / 53, 0, 1);
   const nitroActive = input.nitro && input.forward && player.nitro > 0 && player.speed > 4;
   audioState.engineOsc.frequency.setTargetAtTime(48 + speedRatio * 180 + (input.forward ? 15 : 0), now, .045);
@@ -874,6 +961,15 @@ function setInput(code, value) {
 }
 window.addEventListener('keydown', (event) => {
   ensureAudio();
+  if (event.code === 'Escape' && !event.repeat) {
+    setGarageOpen(false);
+    return;
+  }
+  if (event.code === 'KeyG' && !event.repeat) {
+    setGarageOpen(!garageOpen);
+    return;
+  }
+  if (garageOpen) return;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   if (event.code === 'KeyC' && !event.repeat) {
     cameraMode = (cameraMode + 1) % 2;
@@ -902,6 +998,15 @@ document.querySelector('#map-expand').addEventListener('click', () => {
   panel.classList.toggle('expanded');
   showToast(panel.classList.contains('expanded') ? 'MAP FOCUS' : 'MAP COLLAPSED', 'Keep your eyes on the road', '');
 });
+document.querySelector('#garage-open').addEventListener('click', () => setGarageOpen(true));
+document.querySelector('#garage-close').addEventListener('click', () => setGarageOpen(false));
+document.querySelector('#garage-overlay').addEventListener('click', (event) => {
+  if (event.target.id === 'garage-overlay') setGarageOpen(false);
+});
+document.querySelectorAll('.upgrade-card').forEach((card) => {
+  card.addEventListener('click', () => purchaseUpgrade(card.dataset.upgrade));
+});
+updateGarageUi();
 
 function resetPlayer() {
   player.position.set(0, .02, 0);
@@ -996,21 +1101,25 @@ function updatePlayer(dt) {
   const braking = input.back ? 1 : 0;
   const steering = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   const onRoad = isOnRoad(player.position.x, player.position.z);
+  const engineLevel = player.upgrades.engine;
+  const nitroCapacity = 100 + player.upgrades.nitro * 12;
+  const engineMultiplier = 1 + engineLevel * .1;
+  const gripMultiplier = 1 + player.upgrades.grip * .1;
   const usingNitro = input.nitro && throttle && player.nitro > 0 && player.speed > 4;
   const handbraking = input.handbrake && Math.abs(player.speed) > 6;
-  const acceleration = onRoad ? 22 : 14;
+  const acceleration = (onRoad ? 22 : 14) * engineMultiplier;
 
-  if (throttle) player.speed += (acceleration + (usingNitro ? 31 : 0)) * dt;
+  if (throttle) player.speed += (acceleration + (usingNitro ? 31 + engineLevel * 3 : 0)) * dt;
   if (braking) player.speed -= (player.speed > 0 ? 34 : 12) * dt;
   if (!throttle && !braking) player.speed = damp(player.speed, 0, onRoad ? 0.78 : 1.25, dt);
   if (handbraking) player.speed = damp(player.speed, 0, .14, dt);
-  if (usingNitro) player.nitro = clamp(player.nitro - 27 * dt, 0, 100);
-  else player.nitro = clamp(player.nitro + (throttle ? .9 : 2.8) * dt, 0, 100);
-  if (!onRoad) player.speed *= Math.pow(.72, dt);
-  player.speed = clamp(player.speed, -12, usingNitro ? 53 : 39);
+  if (usingNitro) player.nitro = clamp(player.nitro - (27 - player.upgrades.nitro * 2.5) * dt, 0, nitroCapacity);
+  else player.nitro = clamp(player.nitro + (throttle ? .9 : 2.8 + player.upgrades.nitro * .6) * dt, 0, nitroCapacity);
+  if (!onRoad) player.speed *= Math.pow(.72 + player.upgrades.grip * .02, dt);
+  player.speed = clamp(player.speed, -12, usingNitro ? 53 + engineLevel * 3 : 39 + engineLevel * 2);
 
   if (Math.abs(player.speed) > .3) {
-    const turnFactor = clamp(Math.abs(player.speed) / 18, .12, 1.28) * (handbraking ? 1.8 : 1);
+    const turnFactor = clamp(Math.abs(player.speed) / 18, .12, 1.28) * (handbraking ? 1.8 : 1) * gripMultiplier;
     player.heading += steering * 1.75 * turnFactor * dt * (player.speed >= 0 ? 1 : -1);
   }
   const forward = new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading));
@@ -1100,6 +1209,7 @@ function updateBeacons(time, dt) {
       routeStep += 1;
       player.rep += 120;
       player.cash += 80;
+      saveProgress();
       missionProgress = routeStep >= beaconPositions.length ? 100 : 18 + routeStep * 21;
       if (routeStep < beaconPositions.length) {
         beacons[routeStep].userData.label.material.opacity = 1;
@@ -1197,8 +1307,10 @@ function updateHud(dt) {
   const speed = Math.round(Math.abs(player.speed) * 3.1);
   document.querySelector('#speed-value').textContent = String(speed).padStart(3, '0');
   document.querySelector('#gear-value').textContent = player.speed < -0.5 ? 'R' : speed < 2 ? 'P' : (speed > 98 ? '5' : speed > 72 ? '4' : speed > 45 ? '3' : speed > 22 ? '2' : '1');
-  document.querySelector('#nitro-percent').textContent = `${Math.round(player.nitro)}%`;
-  document.querySelector('#nitro-fill').style.width = `${player.nitro}%`;
+  const nitroCapacity = 100 + player.upgrades.nitro * 12;
+  const nitroPercent = clamp(player.nitro / nitroCapacity * 100, 0, 100);
+  document.querySelector('#nitro-percent').textContent = `${Math.round(nitroPercent)}%`;
+  document.querySelector('#nitro-fill').style.width = `${nitroPercent}%`;
   document.querySelector('#district-name').textContent = districtAt(player.position.x, player.position.z);
   const minutes = Math.floor(sessionSeconds / 60).toString().padStart(2, '0');
   const seconds = Math.floor(sessionSeconds % 60).toString().padStart(2, '0');
@@ -1229,12 +1341,14 @@ let hudAccumulator = 0;
 function animate(time) {
   const dt = Math.min((time - lastTime) / 1000, .05);
   lastTime = time;
-  sessionSeconds += dt;
-  updatePlayer(dt);
-  updateTraffic(dt);
-  updateRace(time, dt);
+  if (!garageOpen) sessionSeconds += dt;
+  if (!garageOpen) {
+    updatePlayer(dt);
+    updateTraffic(dt);
+    updateRace(time, dt);
+    updateBeacons(time, dt);
+  }
   updateAudio();
-  updateBeacons(time, dt);
   updateCamera(dt);
   hudAccumulator += dt;
   if (hudAccumulator > .08) { updateHud(hudAccumulator); hudAccumulator = 0; }

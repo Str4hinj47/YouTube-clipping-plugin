@@ -31,7 +31,7 @@
         <div class="session-status"><i></i><span>LIVE SESSION</span><b id="session-clock">00:00</b></div>
         <div class="top-actions">
           <button class="icon-button" id="sound-toggle" type="button" aria-label="Toggle sound">◒</button>
-          <button class="profile-pill" type="button"><span class="avatar">M</span><span class="profile-copy"><b>MILES</b><small>RANK 04</small></span><span class="chevron">⌄</span></button>
+          <button class="profile-pill" id="garage-open" type="button" aria-label="Open garage"><span class="avatar">M</span><span class="profile-copy"><b>MILES</b><small>RANK 04</small></span><span class="chevron">⌄</span></button>
         </div>
       </header>
 
@@ -81,12 +81,29 @@
         <div class="control-row"><span class="keycap wide">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span><span class="control-label">DRIVE</span></div>
         <div class="control-row"><span class="keycap wide">SHIFT</span><span class="control-label">NITRO</span><span class="keycap wide space-key">SPACE</span><span class="control-label">HANDBRAKE</span></div>
         <div class="control-row"><span class="keycap">E</span><span class="control-label">EVENT</span><span class="keycap">M</span><span class="control-label">MAP</span></div>
-        <div class="control-row muted"><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
+        <div class="control-row muted"><span class="keycap">G</span><span class="control-label">GARAGE</span><span class="keycap">C</span><span class="control-label">CAMERA</span><span class="keycap">R</span><span class="control-label">RESET</span></div>
       </section>
 
       <div class="rep-toast hud-layer" id="rep-toast"><span class="toast-icon">✦</span><div><b>BEACON DISCOVERED</b><small>New route unlocked in Neon District</small></div><span class="toast-rep">+120 REP</span></div>
       <div class="center-reticle hud-layer" aria-hidden="true"><span></span></div>
       <div class="pause-hint hud-layer"><span class="pulse-dot"></span> OPEN WORLD <span>•</span> NO LIMITS</div>
+
+      <section class="garage-overlay" id="garage-overlay" aria-hidden="true">
+        <div class="garage-card glass-panel">
+          <div class="garage-header"><div><span class="eyebrow"><span class="eyebrow-dot"></span> GARAGE // AURORA BAY</span><h2>MIDNIGHT <b>GT</b></h2></div><button class="garage-close" id="garage-close" type="button" aria-label="Close garage">×</button></div>
+          <div class="garage-vehicle-row">
+            <div class="garage-car-art"><div class="garage-car-glow"></div><div class="garage-car-body"><i></i><b></b><em></em></div><div class="garage-wheel wheel-a"></div><div class="garage-wheel wheel-b"></div></div>
+            <div class="garage-specs"><span>RWD / SPORT COUPE</span><strong>BLUE HOUR SPEC</strong><small>Build your line. Make the city yours.</small><div class="garage-balance"><span>AVAILABLE FUNDS</span><b id="garage-cash">$420</b></div></div>
+          </div>
+          <div class="upgrade-heading"><span>PERFORMANCE MODULES</span><small>3 SLOTS / 3 LEVELS</small></div>
+          <div class="upgrade-list">
+            <button class="upgrade-card" data-upgrade="engine" type="button"><span class="upgrade-icon">↯</span><span class="upgrade-copy"><b>ENGINE ECU</b><small>Acceleration + top speed</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+            <button class="upgrade-card" data-upgrade="nitro" type="button"><span class="upgrade-icon">✦</span><span class="upgrade-copy"><b>NITRO CELL</b><small>Capacity + faster recharge</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+            <button class="upgrade-card" data-upgrade="grip" type="button"><span class="upgrade-icon">⌁</span><span class="upgrade-copy"><b>GRIP COMPOUND</b><small>Sharper turns and cleaner drifts</small></span><span class="upgrade-value"><b class="upgrade-level">LV 0 / 3</b><small class="upgrade-cost">$240</small></span></button>
+          </div>
+          <div class="garage-footer"><span><span class="keycap">G</span> GARAGE</span><span><span class="keycap">ESC</span> CLOSE</span><span class="garage-save">AUTO-SAVED TO RUN</span></div>
+        </div>
+      </section>
 
       <div class="loading-screen" id="loading-screen">
         <div class="loading-brand">NEON<span>LINE</span></div>
