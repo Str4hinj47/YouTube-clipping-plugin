@@ -306,6 +306,7 @@ const mats = {
   forestGround: new THREE.MeshStandardMaterial({ color: 0x18342b, roughness: 1 }),
   lakeGround: new THREE.MeshStandardMaterial({ color: 0x153039, roughness: .96 }),
   desertGround: new THREE.MeshStandardMaterial({ color: 0x4b3b2c, roughness: 1 }),
+  desertPlant: new THREE.MeshStandardMaterial({ color: 0x68704d, roughness: .94, flatShading: true }),
   industrialGround: new THREE.MeshStandardMaterial({ color: 0x26313a, roughness: .96 }),
   ruralGround: new THREE.MeshStandardMaterial({ color: 0x304334, roughness: 1 }),
   mountainRock: new THREE.MeshStandardMaterial({ color: 0x26353a, roughness: .96, flatShading: true }),
@@ -2820,10 +2821,80 @@ function sectorGroundMaterial(type) {
   return mats.mountainGround;
 }
 
+function addSectorConifer(group, x, z, scale, seed) {
+  const tree = new THREE.Group();
+  tree.position.set(x, 0, z);
+  tree.rotation.y = randomFrom(seed * 1.7) * Math.PI * 2;
+  tree.scale.setScalar(scale);
+  const foliage = randomFrom(seed + 6) > .5 ? mats.treeLeaf : mats.treeLeafDark;
+  addMesh(tree, new THREE.CylinderGeometry(.12, .2, 1.25, 7), mats.treeTrunk, [0, .62, 0], { castShadow: true });
+  addMesh(tree, new THREE.ConeGeometry(.92, 1.85, 8), foliage, [0, 1.42, 0], { castShadow: true });
+  addMesh(tree, new THREE.ConeGeometry(.7, 1.55, 8), foliage, [0, 2.35, 0], { castShadow: true });
+  addMesh(tree, new THREE.ConeGeometry(.46, 1.1, 8), foliage, [0, 3.18, 0], { castShadow: true });
+  group.add(tree);
+  return tree;
+}
+
 function addSectorTree(group, x, z, scale, seed) {
+  if (seed % 3 === 0) return addSectorConifer(group, x, z, scale, seed);
   addMesh(group, new THREE.CylinderGeometry(.16, .25, 1.45, 7), mats.treeTrunk, [x, .72, z], { castShadow: true });
   const material = randomFrom(seed) > .5 ? mats.treeLeaf : mats.treeLeafDark;
   addMesh(group, new THREE.IcosahedronGeometry(1.1, 1), material, [x, 1.95, z], { scale: [scale, scale, scale], castShadow: true });
+  return null;
+}
+
+function addRegionalFence(group, x, z, heading, seed) {
+  const fence = new THREE.Group();
+  fence.position.set(x, 0, z);
+  fence.rotation.y = heading;
+  const length = 4.6 + randomFrom(seed) * 2.5;
+  [-1, 1].forEach((side) => {
+    addMesh(fence, new THREE.CylinderGeometry(.055, .075, .9, 6), mats.cabinWood, [0, .45, side * length / 2], { castShadow: true });
+  });
+  addMesh(fence, new THREE.BoxGeometry(.08, .08, length), mats.cabinWood, [0, .58, 0], { castShadow: true });
+  addMesh(fence, new THREE.BoxGeometry(.07, .07, length), mats.cabinWood, [0, .32, 0], { castShadow: true });
+  group.add(fence);
+  return fence;
+}
+
+function addDesertCactus(group, x, z, scale, seed) {
+  const cactus = new THREE.Group();
+  cactus.position.set(x, 0, z);
+  cactus.rotation.y = randomFrom(seed) * Math.PI * 2;
+  cactus.scale.setScalar(scale);
+  addMesh(cactus, new THREE.CylinderGeometry(.14, .2, 1.25, 7), mats.desertPlant, [0, .63, 0], { castShadow: true });
+  if (seed % 2 === 0) {
+    addMesh(cactus, new THREE.CylinderGeometry(.07, .09, .55, 6), mats.desertPlant, [.23, .62, 0], { rotation: [0, 0, -Math.PI / 2], castShadow: true });
+    addMesh(cactus, new THREE.CylinderGeometry(.07, .09, .48, 6), mats.desertPlant, [-.23, .78, 0], { rotation: [0, 0, Math.PI / 2], castShadow: true });
+  }
+  group.add(cactus);
+  return cactus;
+}
+
+function addLakeReedCluster(group, x, z, scale, seed) {
+  const reeds = new THREE.Group();
+  reeds.position.set(x, 0, z);
+  for (let index = 0; index < 5; index += 1) {
+    const offsetX = (randomFrom(seed + index * 3) - .5) * .7;
+    const offsetZ = (randomFrom(seed + index * 5) - .5) * .7;
+    addMesh(reeds, new THREE.CylinderGeometry(.018, .035, .75 + randomFrom(seed + index * 7) * .5, 5), mats.treeLeafDark, [offsetX, .42, offsetZ], { rotation: [randomFrom(seed + index) * .18 - .09, 0, randomFrom(seed + index + 1) * .2 - .1], castShadow: true });
+  }
+  reeds.scale.setScalar(scale);
+  group.add(reeds);
+  return reeds;
+}
+
+function addIndustrialRoadsideKit(group, x, z, heading, seed) {
+  const kit = new THREE.Group();
+  kit.position.set(x, 0, z);
+  kit.rotation.y = heading;
+  addMesh(kit, new THREE.BoxGeometry(2.6, .72, 4.2), mats.asphaltEdge, [0, .36, 0], { castShadow: true, receiveShadow: true });
+  addMesh(kit, new THREE.BoxGeometry(2.15, .06, .06), polishMats.pinkCore, [0, .74, -1.5]);
+  addMesh(kit, new THREE.CylinderGeometry(.1, .1, 3.2, 8), mats.guardrail, [1.3, 1.12, .25], { rotation: [Math.PI / 2, 0, 0], castShadow: true });
+  addMesh(kit, new THREE.CylinderGeometry(.1, .1, 3.2, 8), mats.guardrail, [-1.3, 1.12, -.25], { rotation: [Math.PI / 2, 0, 0], castShadow: true });
+  if (seed % 2 === 0) addMesh(kit, new THREE.BoxGeometry(.12, 1.7, .12), mats.buildingFrame, [0, .85, -1.65], { castShadow: true });
+  group.add(kit);
+  return kit;
 }
 
 function addSectorStructure(group, sector, x, z, width, depth, height, seed) {
@@ -2878,6 +2949,50 @@ function addRegionalRoadsideDetails(group, sector, seed) {
   });
 }
 
+function addBiomeRoadsideDressing(group, sector, seed) {
+  if (sector.region.type === 'city' || sector.region.type === 'mountain') return;
+  const biome = sector.region.type;
+  let placed = 0;
+  regionalRoutes.forEach((route, routeIndex) => {
+    if (placed >= 14) return;
+    for (let index = 1; index < route.points.length && placed < 14; index += 1) {
+      const [startX, startZ] = route.points[index - 1];
+      const [endX, endZ] = route.points[index];
+      const segment = new THREE.Vector3(endX - startX, 0, endZ - startZ);
+      const length = segment.length();
+      if (length < 1) continue;
+      const heading = Math.atan2(segment.x, segment.z);
+      const tangent = segment.normalize();
+      const normal = new THREE.Vector3(tangent.z, 0, -tangent.x);
+      const spacing = biome === 'forest' ? 92 : biome === 'highlands' ? 112 : 136;
+      for (let distance = 32; distance < length - 14 && placed < 14; distance += spacing) {
+        const center = new THREE.Vector3(startX, 0, startZ).lerp(new THREE.Vector3(endX, 0, endZ), distance / length);
+        const side = ((placed + routeIndex + index) % 2 ? 1 : -1);
+        const offset = biome === 'forest' || biome === 'highlands' ? 13 + randomFrom(seed + placed * 9) * 12 : 10 + randomFrom(seed + placed * 11) * 9;
+        const prop = center.clone().addScaledVector(normal, side * offset);
+        if (Math.abs(prop.x - sector.centerX) > WORLD_SECTOR_SIZE / 2 - 10 || Math.abs(prop.z - sector.centerZ) > WORLD_SECTOR_SIZE / 2 - 10) continue;
+        const localX = prop.x - sector.centerX;
+        const localZ = prop.z - sector.centerZ;
+        if (biome === 'forest') {
+          addSectorConifer(group, localX, localZ, .78 + randomFrom(seed + placed * 3) * .52, seed + placed * 17);
+          if (placed % 3 === 0) addSectorTree(group, localX + side * 4.5, localZ + 2.5, .52 + randomFrom(seed + placed) * .3, seed + placed * 21);
+        } else if (biome === 'highlands') {
+          addSectorConifer(group, localX, localZ, .72 + randomFrom(seed + placed * 5) * .48, seed + placed * 19);
+        } else if (biome === 'rural') {
+          addRegionalFence(group, localX, localZ, heading, seed + placed * 13);
+        } else if (biome === 'desert') {
+          addDesertCactus(group, localX, localZ, .82 + randomFrom(seed + placed * 7) * .58, seed + placed * 23);
+        } else if (biome === 'industrial') {
+          addIndustrialRoadsideKit(group, localX, localZ, heading, seed + placed * 29);
+        } else if (biome === 'lake') {
+          addLakeReedCluster(group, localX, localZ, .72 + randomFrom(seed + placed * 4) * .4, seed + placed * 31);
+        }
+        placed += 1;
+      }
+    }
+  });
+}
+
 function createWorldSector(sectorX, sectorZ) {
   const key = worldSectorKey(sectorX, sectorZ);
   const centerX = (sectorX + .5) * WORLD_SECTOR_SIZE;
@@ -2919,6 +3034,7 @@ function createWorldSector(sectorX, sectorZ) {
     }
   }
   addRegionalRoadsideDetails(fallbackVisuals, sector, seed + 400);
+  addBiomeRoadsideDressing(fallbackVisuals, sector, seed + 800);
   streamedWorld.add(group);
   worldSectorRegistry.set(key, sector);
   hydrateAuthoredRegionSector(sector);
