@@ -14,6 +14,7 @@ const randomFrom = (seed) => {
   return x - Math.floor(x);
 };
 const roadAxes = [-66, -22, 22, 66];
+const TRAFFIC_LANE_OFFSET = 2.05;
 const stopControlledIntersections = [[-66, -22], [-22, -66], [22, 22], [22, 66], [-66, 22], [66, 22]];
 const WORLD_LIMIT = 116;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -411,23 +412,31 @@ function createTrafficLight(x, z, offset = 0) {
   const poleZ = 5.6;
   const pole = addMesh(group, new THREE.CylinderGeometry(.08, .12, 4.6, 8), mats.sidewalkDark, [poleX, 2.3, poleZ], { castShadow: true });
   addMesh(group, new THREE.BoxGeometry(.1, .1, 4.0), mats.sidewalkDark, [poleX, 4.5, poleZ - 1.75], { castShadow: true });
-  const housing = addMesh(group, new THREE.BoxGeometry(.42, 1.3, .34), mats.sidewalkDark, [poleX, 3.8, poleZ - 3.45], { castShadow: true });
-  const red = new THREE.MeshStandardMaterial({ color: 0x48121b, emissive: 0x100207, emissiveIntensity: .3, transparent: true, opacity: .35 });
-  const yellow = new THREE.MeshStandardMaterial({ color: 0x4e3910, emissive: 0x1b1103, emissiveIntensity: .3, transparent: true, opacity: .35 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x123b2f, emissive: 0x04150e, emissiveIntensity: .3, transparent: true, opacity: .35 });
-  const lamps = [
-    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), red, [poleX, 4.18, poleZ - 3.64]),
-    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), yellow, [poleX, 3.82, poleZ - 3.64]),
-    addMesh(group, new THREE.SphereGeometry(.105, 10, 10), green, [poleX, 3.46, poleZ - 3.64]),
-  ];
+  const makeHead = (xOffset, zOffset) => {
+    const housing = addMesh(group, new THREE.BoxGeometry(.42, 1.3, .34), mats.sidewalkDark, [poleX + xOffset, 3.8, poleZ - 3.45 + zOffset], { castShadow: true });
+    const red = new THREE.MeshStandardMaterial({ color: 0x48121b, emissive: 0x100207, emissiveIntensity: .3, transparent: true, opacity: .35 });
+    const yellow = new THREE.MeshStandardMaterial({ color: 0x4e3910, emissive: 0x1b1103, emissiveIntensity: .3, transparent: true, opacity: .35 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x123b2f, emissive: 0x04150e, emissiveIntensity: .3, transparent: true, opacity: .35 });
+    const lamps = [
+      addMesh(group, new THREE.SphereGeometry(.105, 10, 10), red, [poleX + xOffset, 4.18, poleZ - 3.64 + zOffset]),
+      addMesh(group, new THREE.SphereGeometry(.105, 10, 10), yellow, [poleX + xOffset, 3.82, poleZ - 3.64 + zOffset]),
+      addMesh(group, new THREE.SphereGeometry(.105, 10, 10), green, [poleX + xOffset, 3.46, poleZ - 3.64 + zOffset]),
+    ];
+    return { housing, lamps, materials: [red, yellow, green] };
+  };
+  const northSouthHead = makeHead(0, 0);
+  const eastWestHead = makeHead(-.74, .13);
   group.userData = {
-    housing,
-    lamps,
-    materials: [red, yellow, green],
+    housing: northSouthHead.housing,
+    lamps: northSouthHead.lamps,
+    materials: northSouthHead.materials,
+    heads: [northSouthHead, eastWestHead],
     offset,
     intersectionX: x,
     intersectionZ: z,
     state: 2,
+    northSouthState: 2,
+    eastWestState: 0,
   };
   roadFurniture.add(group);
   trafficSignals.push(group);
@@ -469,14 +478,22 @@ function updateTrafficSignals(time) {
   // The groups are registered separately from the imported city GLB and easy to pause.
   trafficSignals.forEach((group) => {
     if (!group.userData.lamps) return;
-    const phase = (time * .001 + group.userData.offset) % 12;
-    const state = phase < 5.8 ? 2 : phase < 7.0 ? 1 : 0;
+    const phase = (time * .001 + group.userData.offset) % 20;
+    const northSouthState = phase < 7 ? 2 : phase < 9 ? 1 : 0;
+    const eastWestState = phase < 11 ? 0 : phase < 18 ? 2 : 1;
+    const state = phase < 7 ? 2 : phase < 9 ? 1 : phase < 11 ? 0 : phase < 18 ? 2 : 1;
     group.userData.state = state;
+    group.userData.northSouthState = northSouthState;
+    group.userData.eastWestState = eastWestState;
     group.userData.phase = phase;
-    group.userData.materials.forEach((material, index) => {
-      const active = index === state;
-      material.opacity = active ? .98 : .24;
-      material.emissiveIntensity = active ? 5.5 : .25;
+    const heads = group.userData.heads || [{ lamps: group.userData.lamps, materials: group.userData.materials }];
+    [northSouthState, eastWestState].forEach((headState, headIndex) => {
+      const head = heads[headIndex];
+      head.materials.forEach((material, index) => {
+        const active = index === headState;
+        material.opacity = active ? .98 : .24;
+        material.emissiveIntensity = active ? 5.5 : .25;
+      });
     });
   });
 }
@@ -643,22 +660,46 @@ function setBrakeLights(vehicleRoot, active) {
   });
 }
 
+function trafficLaneOffset(vertical, direction, laneSide) {
+  // laneSide 1 is the right-hand lane relative to travel direction; -1 is the passing lane.
+  return (vertical ? direction : -direction) * laneSide * TRAFFIC_LANE_OFFSET;
+}
+
+function trafficHeading(vertical, direction) {
+  return vertical ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
+}
+
+function updateTrafficVehicleIndicators(vehicle) {
+  const blink = Math.sin(performance.now() * .011) > 0;
+  let side = null;
+  if (vehicle.turning) side = vehicle.turning.turn < 0 ? 'left' : 'right';
+  else if (vehicle.laneChanging) side = vehicle.laneChanging.targetLaneSide < 0 ? 'left' : 'right';
+  ['left', 'right'].forEach((key) => {
+    const active = side === key && blink;
+    vehicle.mesh.userData.indicators?.[key]?.forEach((lamp) => {
+      lamp.material.opacity = active ? .98 : .15;
+      lamp.material.emissiveIntensity = active ? 5.5 : .55;
+    });
+  });
+}
+
 function createTraffic() {
   const colors = [0xe25d63, 0xf2a260, 0x62a4bd, 0x8d72bd, 0xd8d9c4, 0x3e8f88, 0xc6cf5f, 0x7c6bf2, 0xc44966];
   const styles = ['hatch', 'supercar', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'sport', 'hatch', 'pickup', 'suv', 'wagon', 'classic', 'ev', 'supercar', 'sport', 'hatch', 'suv'];
   for (let i = 0; i < styles.length; i += 1) {
     const vertical = i % 2 === 0;
     const axis = roadAxes[(i * 3 + 1) % roadAxes.length];
-    const lane = i % 4 < 2 ? -2.05 : 2.05;
+    const direction = i % 2 === 0 ? 1 : -1;
+    const laneSide = i % 4 < 2 ? 1 : -1;
+    const lane = trafficLaneOffset(vertical, direction, laneSide);
     const car = createCar(colors[i % colors.length], i % 2 ? 0x5ce3d1 : 0xff9d50, false, styles[i]);
     car.scale.multiplyScalar(.78);
     car.position.set(vertical ? axis + lane : -104 + randomFrom(i + 2) * 208, .02, vertical ? -104 + randomFrom(i + 7) * 208 : axis + lane);
-    const direction = i % 2 === 0 ? 1 : -1;
-    const heading = vertical ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
+    const heading = trafficHeading(vertical, direction);
     car.rotation.y = heading;
     actors.add(car);
     const cruiseSpeed = 7 + randomFrom(i + 40) * 7;
-    traffic.push({ mesh: car, vertical, axis, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0 });
+    traffic.push({ mesh: car, vertical, axis, laneSide, lane, cruiseSpeed, currentSpeed: cruiseSpeed, direction, heading, stopKey: '', stopWait: 0, routeSeed: i * 19.7 + 3, turnCount: 0, turnDecisionKey: '', turnDecision: 0, turning: null, laneChanging: null, passTimer: 0 });
   }
 }
 
@@ -2170,6 +2211,21 @@ function updatePlayer(dt) {
   document.querySelector('#surface-state').style.color = handbraking ? 'var(--orange)' : '';
 }
 
+function trafficIntersectionAhead(vehicle, maxDistance = 23) {
+  let nearest = null;
+  const currentPosition = vehicle.vertical ? vehicle.mesh.position.z : vehicle.mesh.position.x;
+  for (const axis of roadAxes) {
+    const distance = vehicle.direction * (axis - currentPosition);
+    if (distance < .5 || distance > maxDistance) continue;
+    if (!nearest || distance < nearest.distance) {
+      nearest = vehicle.vertical
+        ? { x: vehicle.axis, z: axis, distance, key: `${vehicle.axis}:${axis}` }
+        : { x: axis, z: vehicle.axis, distance, key: `${axis}:${vehicle.axis}` };
+    }
+  }
+  return nearest;
+}
+
 function trafficSignalAhead(vehicle) {
   let nearest = null;
   for (const signal of trafficSignals) {
@@ -2183,7 +2239,8 @@ function trafficSignalAhead(vehicle) {
       distance = vehicle.direction > 0 ? data.intersectionX - vehicle.mesh.position.x : vehicle.mesh.position.x - data.intersectionX;
     }
     if (distance < -2 || distance > 23) continue;
-    if (!nearest || distance < nearest.distance) nearest = { signal, distance };
+    const state = vehicle.vertical ? data.northSouthState : data.eastWestState;
+    if (!nearest || distance < nearest.distance) nearest = { signal, distance, state };
   }
   return nearest;
 }
@@ -2216,17 +2273,167 @@ function trafficPlayerDistance(vehicle) {
   return distance > 0 && distance < 19 ? distance : null;
 }
 
-function trafficLeadDistance(vehicle) {
+function trafficLeadVehicle(vehicle) {
   let nearest = null;
+  let nearestDistance = Infinity;
   for (const other of traffic) {
     if (other === vehicle || other.vertical !== vehicle.vertical || other.direction !== vehicle.direction) continue;
     if (Math.abs(other.axis - vehicle.axis) > 1.2 || Math.abs(other.lane - vehicle.lane) > .3) continue;
     const distance = vehicle.vertical
       ? vehicle.direction * (other.mesh.position.z - vehicle.mesh.position.z)
       : vehicle.direction * (other.mesh.position.x - vehicle.mesh.position.x);
-    if (distance > 0 && distance < 19 && (nearest === null || distance < nearest)) nearest = distance;
+    if (distance > 0 && distance < 19 && distance < nearestDistance) {
+      nearest = other;
+      nearestDistance = distance;
+    }
   }
-  return nearest;
+  return nearest ? { vehicle: nearest, distance: nearestDistance } : null;
+}
+
+function trafficLeadDistance(vehicle) {
+  return trafficLeadVehicle(vehicle)?.distance ?? null;
+}
+
+function trafficLaneClear(vehicle, laneSide) {
+  const targetLane = trafficLaneOffset(vehicle.vertical, vehicle.direction, laneSide);
+  for (const other of traffic) {
+    if (other === vehicle || other.vertical !== vehicle.vertical || other.direction !== vehicle.direction) continue;
+    if (Math.abs(other.axis - vehicle.axis) > 1.2 || Math.abs(other.lane - targetLane) > .45) continue;
+    const distance = vehicle.vertical
+      ? vehicle.direction * (other.mesh.position.z - vehicle.mesh.position.z)
+      : vehicle.direction * (other.mesh.position.x - vehicle.mesh.position.x);
+    if (Math.abs(distance) < 9) return false;
+  }
+  const playerLateral = vehicle.vertical
+    ? Math.abs(player.position.x - (vehicle.axis + targetLane))
+    : Math.abs(player.position.z - (vehicle.axis + targetLane));
+  const playerDistance = vehicle.vertical
+    ? vehicle.direction * (player.position.z - vehicle.mesh.position.z)
+    : vehicle.direction * (player.position.x - vehicle.mesh.position.x);
+  return playerLateral > 2.1 || Math.abs(playerDistance) > 7;
+}
+
+function beginTrafficLaneChange(vehicle, targetLaneSide) {
+  vehicle.laneChanging = { from: vehicle.lane, to: trafficLaneOffset(vehicle.vertical, vehicle.direction, targetLaneSide), targetLaneSide, progress: 0 };
+}
+
+function advanceTrafficLaneChange(vehicle, dt) {
+  const change = vehicle.laneChanging;
+  if (!change) return;
+  change.progress = clamp(change.progress + dt / .85, 0, 1);
+  const eased = change.progress * change.progress * (3 - 2 * change.progress);
+  vehicle.lane = lerp(change.from, change.to, eased);
+  if (vehicle.vertical) vehicle.mesh.position.x = vehicle.axis + vehicle.lane;
+  else vehicle.mesh.position.z = vehicle.axis + vehicle.lane;
+  if (change.progress >= 1) {
+    vehicle.laneSide = change.targetLaneSide;
+    vehicle.lane = change.to;
+    vehicle.laneChanging = null;
+  }
+}
+
+function considerTrafficLaneChange(vehicle, dt) {
+  if (vehicle.turning) return;
+  const upcoming = trafficIntersectionAhead(vehicle, 18);
+  const lead = trafficLeadVehicle(vehicle);
+  if (vehicle.laneChanging) {
+    advanceTrafficLaneChange(vehicle, dt);
+    return;
+  }
+  if (vehicle.laneSide === -1) {
+    vehicle.passTimer += dt;
+    if (!lead && vehicle.passTimer > 2.2 && (!upcoming || upcoming.distance > 12) && trafficLaneClear(vehicle, 1)) beginTrafficLaneChange(vehicle, 1);
+    return;
+  }
+  vehicle.passTimer = 0;
+  if (!lead || lead.vehicle.currentSpeed > vehicle.cruiseSpeed - .9) return;
+  if (lead.distance > 13 || (upcoming && upcoming.distance < 18)) return;
+  if (trafficLaneClear(vehicle, -1)) beginTrafficLaneChange(vehicle, -1);
+}
+
+function trafficIntersectionOccupied(vehicle, key) {
+  return traffic.some((other) => {
+    if (other === vehicle) return false;
+    if (other.turning?.key === key) return true;
+    const intersection = other.turning?.intersection;
+    if (intersection && `${intersection.x}:${intersection.z}` === key) return true;
+    const [x, z] = key.split(':').map(Number);
+    return other.currentSpeed > 1 && Math.abs(other.mesh.position.x - x) < 3.5 && Math.abs(other.mesh.position.z - z) < 3.5;
+  });
+}
+
+function trafficTurnChoice(vehicle, intersection) {
+  if (vehicle.turnDecisionKey === intersection.key) return vehicle.turnDecision;
+  const roll = randomFrom(vehicle.routeSeed + vehicle.turnCount * 13.17 + intersection.x * .17 + intersection.z * .31);
+  vehicle.turnCount += 1;
+  vehicle.turnDecisionKey = intersection.key;
+  vehicle.turnDecision = roll < .22 ? -1 : roll > .78 ? 1 : 0;
+  return vehicle.turnDecision;
+}
+
+function trafficTurnDirection(vertical, direction, turn) {
+  if (vertical) return { vertical: false, direction: turn > 0 ? direction : -direction };
+  return { vertical: true, direction: turn > 0 ? -direction : direction };
+}
+
+function beginTrafficTurn(vehicle, intersection, turn) {
+  const next = trafficTurnDirection(vehicle.vertical, vehicle.direction, turn);
+  const nextLaneSide = turn > 0 ? 1 : -1;
+  const startDistance = 5.7;
+  const start = vehicle.vertical
+    ? new THREE.Vector3(vehicle.axis + trafficLaneOffset(true, vehicle.direction, vehicle.laneSide), 0.02, intersection.z - vehicle.direction * startDistance)
+    : new THREE.Vector3(intersection.x - vehicle.direction * startDistance, 0.02, vehicle.axis + trafficLaneOffset(false, vehicle.direction, vehicle.laneSide));
+  const end = next.vertical
+    ? new THREE.Vector3(intersection.x + trafficLaneOffset(true, next.direction, nextLaneSide), 0.02, intersection.z + next.direction * startDistance)
+    : new THREE.Vector3(intersection.x + next.direction * startDistance, 0.02, intersection.z + trafficLaneOffset(false, next.direction, nextLaneSide));
+  const forwardIn = vehicle.vertical ? new THREE.Vector3(0, 0, vehicle.direction) : new THREE.Vector3(vehicle.direction, 0, 0);
+  const forwardOut = next.vertical ? new THREE.Vector3(0, 0, next.direction) : new THREE.Vector3(next.direction, 0, 0);
+  const control1 = start.clone().addScaledVector(forwardIn, 4.1);
+  const control2 = end.clone().addScaledVector(forwardOut, -4.1);
+  vehicle.mesh.position.copy(start);
+  vehicle.turning = {
+    key: intersection.key,
+    intersection: { x: intersection.x, z: intersection.z },
+    progress: 0,
+    start,
+    control1,
+    control2,
+    end,
+    next,
+    nextLaneSide,
+    turn,
+  };
+}
+
+function advanceTrafficTurn(vehicle, dt) {
+  const turn = vehicle.turning;
+  if (!turn) return;
+  const curveLength = 8.8;
+  turn.progress = clamp(turn.progress + Math.max(vehicle.currentSpeed, 1.2) * dt / curveLength, 0, 1);
+  const t = turn.progress;
+  const inv = 1 - t;
+  const position = turn.start.clone().multiplyScalar(inv * inv * inv)
+    .add(turn.control1.clone().multiplyScalar(3 * inv * inv * t))
+    .add(turn.control2.clone().multiplyScalar(3 * inv * t * t))
+    .add(turn.end.clone().multiplyScalar(t * t * t));
+  const derivative = turn.control1.clone().sub(turn.start).multiplyScalar(3 * inv * inv)
+    .add(turn.control2.clone().sub(turn.control1).multiplyScalar(6 * inv * t))
+    .add(turn.end.clone().sub(turn.control2).multiplyScalar(3 * t * t));
+  vehicle.mesh.position.copy(position);
+  vehicle.mesh.rotation.y = Math.atan2(derivative.x, derivative.z);
+  setBrakeLights(vehicle.mesh, false);
+  const wheelSpin = vehicle.currentSpeed * dt * .95;
+  vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
+  vehicle.mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
+  if (turn.progress < 1) return;
+  vehicle.vertical = turn.next.vertical;
+  vehicle.direction = turn.next.direction;
+  vehicle.axis = turn.next.vertical ? turn.intersection.x : turn.intersection.z;
+  vehicle.laneSide = turn.nextLaneSide;
+  vehicle.lane = trafficLaneOffset(vehicle.vertical, vehicle.direction, vehicle.laneSide);
+  vehicle.heading = trafficHeading(vehicle.vertical, vehicle.direction);
+  vehicle.mesh.rotation.y = vehicle.heading;
+  vehicle.turning = null;
 }
 
 function trafficTargetSpeed(vehicle, dt) {
@@ -2237,7 +2444,7 @@ function trafficTargetSpeed(vehicle, dt) {
   const ahead = trafficSignalAhead(vehicle);
   if (ahead) {
     const { signal, distance } = ahead;
-    const stoppingSignal = signal.userData.state === 0 || (signal.userData.state === 1 && distance > 9);
+    const stoppingSignal = ahead.state === 0 || (ahead.state === 1 && distance > 9);
     if (stoppingSignal && distance > 0) {
       const distanceToStopLine = distance - 5.7;
       if (distanceToStopLine < .8) return 0;
@@ -2267,14 +2474,34 @@ function trafficTargetSpeed(vehicle, dt) {
     vehicle.stopKey = '';
     vehicle.stopWait = 0;
   }
+  const intersection = trafficIntersectionAhead(vehicle, 9);
+  if (intersection && intersection.distance < 8.5 && trafficIntersectionOccupied(vehicle, intersection.key)) {
+    const distanceToCenter = intersection.distance - 4.8;
+    return clamp(distanceToCenter * 1.12, 0, vehicle.cruiseSpeed);
+  }
   return vehicle.cruiseSpeed;
 }
 
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
+    if (vehicle.turning) {
+      advanceTrafficTurn(vehicle, dt);
+      updateTrafficVehicleIndicators(vehicle);
+      continue;
+    }
+    considerTrafficLaneChange(vehicle, dt);
     const targetSpeed = trafficTargetSpeed(vehicle, dt);
     const wasBraking = vehicle.currentSpeed > targetSpeed + .35;
     vehicle.currentSpeed = damp(vehicle.currentSpeed, targetSpeed, wasBraking ? 5.4 : 2.2, dt);
+    const upcoming = trafficIntersectionAhead(vehicle, 6.2);
+    if (!vehicle.laneChanging && upcoming && upcoming.distance < 6.1 && targetSpeed > .35 && vehicle.currentSpeed > .35 && !trafficIntersectionOccupied(vehicle, upcoming.key)) {
+      const turn = trafficTurnChoice(vehicle, upcoming);
+      if (turn !== 0) {
+        beginTrafficTurn(vehicle, upcoming, turn);
+        advanceTrafficTurn(vehicle, dt);
+        continue;
+      }
+    }
     const distance = vehicle.currentSpeed * vehicle.direction * dt;
     if (vehicle.vertical) {
       vehicle.mesh.position.z += distance;
@@ -2288,6 +2515,8 @@ function updateTraffic(dt) {
     vehicle.mesh.position.y = .02;
     vehicle.mesh.position.x = vehicle.vertical ? vehicle.axis + vehicle.lane : vehicle.mesh.position.x;
     vehicle.mesh.position.z = vehicle.vertical ? vehicle.mesh.position.z : vehicle.axis + vehicle.lane;
+    vehicle.mesh.rotation.y = vehicle.heading;
+    updateTrafficVehicleIndicators(vehicle);
     setBrakeLights(vehicle.mesh, wasBraking || vehicle.currentSpeed < .8);
     const wheelSpin = vehicle.currentSpeed * dt * .95;
     vehicle.mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
