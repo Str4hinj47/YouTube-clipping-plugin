@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
+import { GLTFLoader } from '../vendor/GLTFLoader.js';
 
 const canvas = document.querySelector('#game-canvas');
 const app = document.querySelector('#app');
@@ -52,8 +53,14 @@ const world = new THREE.Group();
 world.name = 'Aurora Bay — Blender Environment';
 scene.add(world);
 const city = new THREE.Group();
-city.name = 'Blender City Blocks';
+city.name = 'Procedural Fallback Environment';
 world.add(city);
+const actors = new THREE.Group();
+actors.name = 'Player and Traffic';
+world.add(actors);
+const fallbackBase = new THREE.Group();
+fallbackBase.name = 'Procedural Fallback Ground and Water';
+world.add(fallbackBase);
 
 const mats = {
   ground: new THREE.MeshStandardMaterial({ color: 0x132a29, roughness: 1 }),
@@ -144,10 +151,10 @@ function buildSky() {
 }
 
 function buildGroundAndWater() {
-  addMesh(world, new THREE.PlaneGeometry(270, 270), mats.ground, [0, -.16, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
-  addMesh(world, new THREE.PlaneGeometry(300, 44), mats.water, [0, -.08, -121], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  addMesh(fallbackBase, new THREE.PlaneGeometry(270, 270), mats.ground, [0, -.16, 0], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
+  addMesh(fallbackBase, new THREE.PlaneGeometry(300, 44), mats.water, [0, -.08, -121], { rotation: [-Math.PI / 2, 0, 0], receiveShadow: true });
   for (let z = -139; z < -101; z += 4) {
-    addMesh(world, new THREE.BoxGeometry(280, .025, .045), mats.waterLine, [0, .01, z]);
+    addMesh(fallbackBase, new THREE.BoxGeometry(280, .025, .045), mats.waterLine, [0, .01, z]);
   }
   // Promenade, seawall, and repeating mooring lights.
   addMesh(city, new THREE.BoxGeometry(270, .22, 3.5), mats.sidewalk, [0, .05, -98], { receiveShadow: true });
@@ -445,12 +452,68 @@ function createTraffic() {
     const direction = i % 2 === 0 ? 1 : -1;
     const heading = vertical ? (direction > 0 ? 0 : Math.PI) : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
     car.rotation.y = heading;
-    city.add(car);
+    actors.add(car);
     traffic.push({ mesh: car, vertical, axis, lane, speed: 7 + randomFrom(i + 40) * 7, direction, heading });
   }
 }
 
 const traffic = [];
+const gltfLoader = new GLTFLoader();
+
+function prepareImportedModel(root) {
+  root.traverse((object) => {
+    if (!object.isMesh) return;
+    object.castShadow = true;
+    object.receiveShadow = true;
+    if (object.material) {
+      object.material.needsUpdate = true;
+    }
+  });
+  return root;
+}
+
+function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
+  // Keep the physics wrapper and replace only its visible geometry with the
+  // authored asset. This lets the driving code remain the same for fallback and GLB cars.
+  vehicleRoot.children.forEach((child) => { child.visible = false; });
+  const importedCar = prepareImportedModel(sourceScene.clone(true));
+  importedCar.scale.setScalar(scale);
+  vehicleRoot.add(importedCar);
+  vehicleRoot.userData.loadedModel = importedCar;
+  vehicleRoot.userData.loadedWheels = [];
+  importedCar.traverse((object) => {
+    if (object.isMesh && /(wheel|tire|hub)/i.test(object.name)) vehicleRoot.userData.loadedWheels.push(object);
+  });
+}
+
+function loadOneAsset(url) {
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(url, resolve, undefined, reject);
+  });
+}
+
+async function loadBlenderAssets() {
+  const [environmentResult, carResult] = await Promise.allSettled([
+    loadOneAsset('./assets/aurora_bay_environment.glb'),
+    loadOneAsset('./assets/midnight_gt.glb'),
+  ]);
+  if (environmentResult.status === 'fulfilled') {
+    const importedEnvironment = prepareImportedModel(environmentResult.value.scene);
+    importedEnvironment.name = 'Aurora Bay Environment — Blender GLB';
+    city.visible = false;
+    fallbackBase.visible = false;
+    world.add(importedEnvironment);
+  } else {
+    console.warn('Blender environment unavailable; using procedural fallback.', environmentResult.reason);
+  }
+  if (carResult.status === 'fulfilled') {
+    const importedCar = carResult.value.scene;
+    replaceVehicleVisual(player.mesh, importedCar, 1);
+    traffic.forEach((vehicle) => replaceVehicleVisual(vehicle.mesh, importedCar, .78));
+  } else {
+    console.warn('Blender car unavailable; using procedural fallback.', carResult.reason);
+  }
+}
 
 function buildWorld() {
   buildSky();
@@ -473,7 +536,7 @@ const player = {
   cash: 420,
 };
 player.mesh.position.copy(player.position);
-city.add(player.mesh);
+actors.add(player.mesh);
 
 const beaconPositions = [
   new THREE.Vector3(66, .05, 22),
@@ -614,6 +677,9 @@ function updatePlayer(dt) {
   player.mesh.userData.wheels.forEach((wheel) => {
     wheel.children[0].rotation.x -= player.speed * dt * 1.8;
   });
+  player.mesh.userData.loadedWheels?.forEach((wheel) => {
+    wheel.rotation.x -= player.speed * dt * 1.8;
+  });
 
   if (handbraking && Math.abs(player.speed) > 10 && Math.abs(steering) > 0) {
     driftScore += Math.abs(player.speed) * Math.abs(steering) * dt * 2.4;
@@ -642,6 +708,7 @@ function updateTraffic(dt) {
     mesh.position.z = vertical ? mesh.position.z : axis + lane;
     const wheelSpin = speed * dt * .95;
     mesh.userData.wheels.forEach((wheel) => { wheel.children[0].rotation.x -= wheelSpin; });
+    mesh.userData.loadedWheels?.forEach((wheel) => { wheel.rotation.x -= wheelSpin; });
   }
 }
 
@@ -774,6 +841,11 @@ window.addEventListener('resize', resize);
 
 buildWorld();
 
+let assetsReady = false;
+loadBlenderAssets()
+  .catch((error) => console.warn('Asset boot failed; keeping procedural scene.', error))
+  .finally(() => { assetsReady = true; });
+
 let lastTime = performance.now();
 let hudAccumulator = 0;
 function animate(time) {
@@ -798,7 +870,7 @@ const loadingTimer = window.setInterval(() => {
   loading = Math.min(100, loading + 14 + Math.random() * 17);
   loadingFill.style.width = `${loading}%`;
   loadingPercent.textContent = `${Math.round(loading).toString().padStart(2, '0')}%`;
-  if (loading >= 100) {
+  if (loading >= 100 && assetsReady) {
     window.clearInterval(loadingTimer);
     window.setTimeout(() => document.querySelector('#loading-screen').classList.add('done'), 260);
   }

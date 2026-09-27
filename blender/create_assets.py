@@ -15,7 +15,7 @@ from mathutils import Vector
 
 def args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    output = "public/assets"
+    output = "assets"
     if "--out" in argv:
         output = argv[argv.index("--out") + 1]
     return os.path.abspath(output)

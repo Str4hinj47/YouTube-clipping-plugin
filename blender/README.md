@@ -8,7 +8,7 @@ The game scene is built around a low-poly Blender art direction: hard-surface ca
 Run it with Blender 4.x:
 
 ```sh
-blender -b --python blender/create_assets.py -- --out public/assets
+blender -b --python blender/create_assets.py -- --out assets
 ```
 
-The browser prototype currently uses the same geometry language as a procedural fallback so the game can boot without a binary asset download. The generated GLBs can be dropped into a Three.js loader later without changing the driving/UI systems.
+The browser loads these GLBs through Three.js `GLTFLoader` at startup. The procedural scene remains available as a fallback so the game can still boot if an asset is missing. Re-exporting the Blender files preserves the same filenames and requires no gameplay code changes.

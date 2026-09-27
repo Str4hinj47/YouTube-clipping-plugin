@@ -20,4 +20,4 @@ Then open `http://localhost:4173` (or use the Arena live preview).
 
 ## Art pipeline
 
-The in-browser scene is a procedural Three.js fallback that keeps the prototype self-contained. The authored Blender source for the Midnight GT and Aurora Bay environment lives in [`blender/create_assets.py`](./blender/create_assets.py) and exports `midnight_gt.glb` plus `aurora_bay_environment.glb` when run with Blender 4.x. See [`blender/README.md`](./blender/README.md) for the export command.
+The game loads the authored GLB assets in `assets/` at runtime: `midnight_gt.glb` and `aurora_bay_environment.glb`. The original Blender source for both is [`blender/create_assets.py`](./blender/create_assets.py), and the game keeps its procedural scene as a graceful fallback if an asset fails to load. See [`blender/README.md`](./blender/README.md) for the Blender 4.x export command.

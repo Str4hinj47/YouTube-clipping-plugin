@@ -2,6 +2,7 @@
   "name": "neonline-aurora-bay",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "description": "Open-world night driving game with a Blender-authored low-poly art direction.",
   "scripts": {
     "dev": "python3 -m http.server 4173 --bind 0.0.0.0",
