@@ -91,10 +91,17 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // Homes are persistent spawn points. The starter is intentionally a modest,
 // poorly furnished Pinewatch shack; later properties are optional purchases.
+const BEACH_MANSION_ESTATES = [
+  { id: 'cobalt-cliff-villa', name: 'COBALT CLIFF VILLA', x: -24, z: -79, width: 14.2, depth: 10.4, height: 4.9, seed: 3401 },
+  { id: 'shoreline-estate', name: 'SHORELINE ESTATE', x: 19, z: -79, width: 15.2, depth: 11.2, height: 5.1, seed: 3402 },
+  { id: 'tideglass-house', name: 'TIDEGLASS HOUSE', x: 61, z: -79, width: 14.6, depth: 10.8, height: 4.8, seed: 3403 },
+];
+const shorelineEstate = BEACH_MANSION_ESTATES.find((estate) => estate.id === 'shoreline-estate');
 const HOME_CATALOG = [
   { id: 'pinewatch-shack', name: 'PINEWATCH SHACK', className: 'STARTER HOME', price: 0, style: 'shack', location: 'PINEWATCH VILLAGE', description: 'A small, drafty room above the village road. It is not much, but it is yours.', position: [132, 86], spawn: [132, 18.58, 91.2], heading: -2.5 },
   { id: 'pinewatch-cottage', name: 'PINEWATCH COTTAGE', className: 'TWO-ROOM COTTAGE', price: 650, style: 'cottage', location: 'PINEWATCH VILLAGE', description: 'A warmer place with a porch and a clear view of the pass.', position: [145, 84], spawn: [145, 18.48, 89.5], heading: -2.35 },
   { id: 'harbor-flat', name: 'HARBOR FLAT', className: 'CITY APARTMENT', price: 1100, style: 'flat', location: 'AURORA BAY', description: 'A narrow upstairs flat above the waterfront service lanes.', position: [-92, 89], spawn: [-92, .02, 95], heading: -1.55 },
+  { id: 'shoreline-estate', name: 'SHORELINE ESTATE', className: 'WATERFRONT MANSION', price: 12500, style: 'mansion', location: 'AURORA BAY // GOLDEN SHORE', description: 'A glass-and-concrete beach house with a gated drive and room for the fast cars.', position: [shorelineEstate.x, shorelineEstate.z], spawn: [shorelineEstate.x, .02, -89], heading: 0 },
   { id: 'ridge-house', name: 'RIDGE HOUSE', className: 'REMOTE HOUSE', price: 1650, style: 'ridge', location: 'NORTHSTAR OUTPOST', description: 'A quiet remote house for drivers who prefer a long view and fewer neighbors.', position: [388, 2043], spawn: [388, .02, 2050], heading: .1 },
 ];
 
@@ -103,7 +110,7 @@ const LEGACY_SAVE_KEY = 'neonline-aurora-save';
 const SAVE_SLOT_PREFIX = 'neonline-aurora-save-slot-';
 const LATEST_SAVE_KEY = 'neonline-aurora-latest-slot';
 const MENU_SHOWCASE_SCENES = [
-  { id: 'aurora-bay', name: 'AURORA BAY', type: 'city', copy: 'Neon boulevards, irregular blocks, and the city line after dark.', camera: [-168, 64, -186], target: [0, 8, 0] },
+  { id: 'aurora-bay', name: 'AURORA BAY', type: 'city', copy: 'Neon boulevards, glass beach estates, and the city line after dark.', camera: [-168, 64, -186], target: [0, 8, 0] },
   { id: 'pinewatch', name: 'PINEWATCH VILLAGE', type: 'mountain', copy: 'A quiet pass town with warm windows and a long way home.', camera: [214, 52, 137], target: [136, 18, 68] },
   { id: 'northstar', name: 'NORTHSTAR OUTPOST', type: 'highlands', copy: 'Remote roads above the bay, where the handoff lights are few.', camera: [545, 72, 2135], target: [400, 2, 2050] },
   { id: 'redwood', name: 'REDWOOD VALLEY', type: 'forest', copy: 'Tree cover, open highway, and the island beyond the city edge.', camera: [-1940, 82, 1925], target: [-1750, 2, 1750] },
@@ -350,6 +357,13 @@ const mats = {
   lane: new THREE.MeshBasicMaterial({ color: 0xb9c49d }),
   laneYellow: new THREE.MeshBasicMaterial({ color: 0xd69654 }),
   bikeLane: new THREE.MeshStandardMaterial({ color: 0x1b5f68, roughness: .8, metalness: .06, transparent: true, opacity: .82 }),
+  mansionConcrete: new THREE.MeshPhysicalMaterial({ color: 0x9aa7a5, roughness: .34, metalness: .12, clearcoat: .48, clearcoatRoughness: .22 }),
+  mansionDark: new THREE.MeshPhysicalMaterial({ color: 0x17232c, roughness: .28, metalness: .68, clearcoat: .52, clearcoatRoughness: .16 }),
+  mansionMetal: new THREE.MeshStandardMaterial({ color: 0x6e8083, roughness: .22, metalness: .82 }),
+  mansionGlass: new THREE.MeshPhysicalMaterial({ color: 0x69b9c2, roughness: .12, metalness: .35, transmission: .18, transparent: true, opacity: .78, emissive: 0x0c3b48, emissiveIntensity: .8 }),
+  mansionDrive: new THREE.MeshStandardMaterial({ color: 0x303a3d, roughness: .64, metalness: .16 }),
+  mansionPool: new THREE.MeshStandardMaterial({ color: 0x4ed5d0, roughness: .12, metalness: .18, transparent: true, opacity: .82, emissive: 0x0a656b, emissiveIntensity: 1.15 }),
+  mansionHedge: new THREE.MeshStandardMaterial({ color: 0x1d5146, roughness: .92 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x152b3a, metalness: .65, roughness: .18, emissive: 0x081d2b, emissiveIntensity: .7 }),
   windowCyan: new THREE.MeshStandardMaterial({ color: 0x75e3e0, emissive: 0x2c8c92, emissiveIntensity: 2.3, roughness: .22 }),
   windowPurple: new THREE.MeshStandardMaterial({ color: 0xe18bca, emissive: 0x6a255f, emissiveIntensity: 2.1, roughness: .28 }),
@@ -1154,6 +1168,119 @@ function createParkedVehicle(x, z, heading = 0, style = 'hatch', color = 0x477ba
   return car;
 }
 
+function createLuxuryDrivewayCar(x, z, heading = 0, style = 'supercar', color = 0xf0e6cf, accent = 0xff9d50, seed = 1) {
+  const car = createCar(color, accent, false, style);
+  car.name = `${style.toUpperCase()} // coastal estate car`;
+  car.scale.multiplyScalar(.62);
+  car.position.set(x, .04, z);
+  car.rotation.y = heading;
+  car.userData.parked = true;
+  actors.add(car);
+  parkedVehicles.push({ mesh: car, x, z, heading, style });
+  addObstacle(x, z, 1.5, 1.4, 'luxury-parked-vehicle', car);
+  return car;
+}
+
+function createModernMansionEstate(estate, parent = cityEnhancements, home = null) {
+  const x = Number.isFinite(estate.x) ? estate.x : home?.position?.[0] || 0;
+  const z = Number.isFinite(estate.z) ? estate.z : home?.position?.[1] || 0;
+  const width = estate.width || 14.8;
+  const depth = estate.depth || 10.8;
+  const height = estate.height || 4.9;
+  const seed = estate.seed || 3400;
+  const group = new THREE.Group();
+  group.name = `${estate.name || home?.name || 'Waterfront mansion'} // modern beach estate`;
+  group.position.set(x, .02, z);
+
+  const lotWidth = width + 9.4;
+  const lotDepth = depth + 11.8;
+  addMesh(group, new THREE.BoxGeometry(lotWidth, .08, lotDepth), mats.grass, [0, -.02, .35], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(lotWidth - .8, .045, .48), mats.mansionHedge, [0, .08, -lotDepth / 2 + .28], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.48, .045, lotDepth - .8), mats.mansionHedge, [-lotWidth / 2 + .28, .08, .35], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.48, .045, lotDepth - .8), mats.mansionHedge, [lotWidth / 2 - .28, .08, .35], { receiveShadow: true });
+  createTree(-lotWidth * .34, lotDepth * .25, .43, seed, group);
+  createTree(lotWidth * .34, lotDepth * .25, .37, seed + 17, group);
+
+  // Flat-roofed volumes, deep overhangs, and a full-height glass face establish the
+  // contemporary beach-house silhouette without depending on an external asset.
+  addMesh(group, new THREE.BoxGeometry(width, height, depth), mats.mansionConcrete, [0, height / 2, 0], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .64, height * .58, depth * .72), mats.mansionDark, [width * .13, height * .57, .04], { castShadow: true, receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .6, height * .58, .08), mats.mansionGlass, [width * .13, height * .57, -depth * .37], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width + .72, .24, depth + .42), mats.mansionDark, [0, height + .12, 0], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .72, .16, 1.55), mats.mansionDark, [-width * .04, height * .72, -depth * .5 - .65], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(width * .48, .12, depth * .68), mats.mansionConcrete, [-width * .24, height + .27, .12], { castShadow: true });
+  for (const side of [-1, 1]) {
+    addMesh(group, new THREE.BoxGeometry(.13, height * .82, .13), mats.mansionMetal, [side * (width * .39), height * .47, -depth * .48], { castShadow: true });
+    addMesh(group, new THREE.BoxGeometry(.09, height * .64, .09), mats.mansionGlass, [side * (width * .3), height * .45, -depth * .505]);
+  }
+
+  const garageWidth = Math.min(4.3, width * .31);
+  const garageX = -width * .27;
+  const frontZ = -depth / 2 - .07;
+  addMesh(group, new THREE.BoxGeometry(garageWidth, 2.1, .12), mats.mansionDark, [garageX, 1.18, frontZ], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(garageWidth * .72, 1.48, .055), mats.mansionGlass, [garageX, 1.16, frontZ - .07]);
+  addMesh(group, new THREE.BoxGeometry(2.4, 2.3, .1), mats.mansionGlass, [width * .2, 1.32, frontZ - .08]);
+  addMesh(group, new THREE.BoxGeometry(.14, 2.35, .14), mats.mansionMetal, [width * .2 - 1.3, 1.32, frontZ - .13], { castShadow: true });
+  addMesh(group, new THREE.BoxGeometry(.14, 2.35, .14), mats.mansionMetal, [width * .2 + 1.3, 1.32, frontZ - .13], { castShadow: true });
+
+  // A narrow reflecting pool and a lit deck make the estate read as expensive at night.
+  const poolX = width * .28;
+  const poolZ = depth * .28;
+  addMesh(group, new THREE.BoxGeometry(4.2, .12, 3.5), mats.mansionDark, [poolX, .07, poolZ], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(3.7, .055, 3.0), mats.mansionPool, [poolX, .15, poolZ]);
+  addMesh(group, new THREE.BoxGeometry(4.9, .08, .32), mats.mansionConcrete, [poolX, .14, poolZ - 1.9], { receiveShadow: true });
+  addMesh(group, new THREE.BoxGeometry(4.9, .08, .32), mats.mansionConcrete, [poolX, .14, poolZ + 1.9], { receiveShadow: true });
+  for (const localX of [-lotWidth * .32, lotWidth * .32]) {
+    addMesh(group, new THREE.CylinderGeometry(.12, .18, 1.5, 8), mats.mansionMetal, [localX, .75, -lotDepth * .28], { castShadow: true });
+    addMesh(group, new THREE.SphereGeometry(.24, 10, 8), mats.lamp, [localX, 1.55, -lotDepth * .28]);
+  }
+  const entryLight = new THREE.PointLight(0x77e3dc, 1.8, 13, 2);
+  entryLight.position.set(width * .2, 2.2, frontZ - .24);
+  group.add(entryLight);
+  const poolLight = new THREE.PointLight(0x4ed5d0, 1.2, 9, 2);
+  poolLight.position.set(poolX, .65, poolZ);
+  group.add(poolLight);
+
+  // The private drive runs directly to the new waterfront frontage street. The
+  // two middle lots use the nearest ends of the frontage segments, keeping the
+  // row connected without adding a new city block or changing the road hierarchy.
+  const frontageX = x < 0 ? -30 : x < 28 ? 28 : x;
+  const drivewayStart = new THREE.Vector3(x, .04, z - depth / 2 - .55);
+  const drivewayEnd = new THREE.Vector3(frontageX, .04, -92.4);
+  const gateHeading = Math.atan2(drivewayEnd.x - drivewayStart.x, drivewayEnd.z - drivewayStart.z);
+  const gateOffsetX = Math.cos(gateHeading);
+  const gateOffsetZ = -Math.sin(gateHeading);
+  addMountainPathRibbon([drivewayStart, drivewayEnd], 4.8, mats.mansionDrive, .065, parent);
+  addMesh(parent, new THREE.BoxGeometry(5.8, .07, .2), mats.mansionMetal, [frontageX, .1, -92.15], { rotation: [0, gateHeading, 0], receiveShadow: true });
+  addMesh(parent, new THREE.BoxGeometry(5.8, .08, .12), mats.mansionMetal, [frontageX, .82, -92.15], { rotation: [0, gateHeading, 0], castShadow: true });
+  for (const side of [-1, 1]) {
+    const postX = frontageX + gateOffsetX * side * 2.7;
+    const postZ = -92.15 + gateOffsetZ * side * 2.7;
+    addMesh(parent, new THREE.CylinderGeometry(.12, .16, 1.25, 8), mats.mansionMetal, [postX, .68, postZ], { castShadow: true });
+    addMesh(parent, new THREE.SphereGeometry(.19, 10, 8), mats.lamp, [postX, 1.35, postZ]);
+  }
+
+  // Keep the driveways visually occupied by logo-free, high-end silhouettes.
+  const drivewayParkingZ = z - depth / 2 - 2.1;
+  createLuxuryDrivewayCar(x - 1.28, drivewayParkingZ, 0, seed % 2 ? 'supercar' : 'sport', seed % 2 ? 0xe9e2d4 : 0x27364b, seed % 2 ? 0xff9d50 : 0x5ce3d1, seed + 1);
+  createLuxuryDrivewayCar(x + 1.28, drivewayParkingZ, 0, 'ev', seed % 2 ? 0x253442 : 0xb6c8c2, 0xd6fa6a, seed + 2);
+
+  const labelText = home ? 'FOR SALE' : 'PRIVATE ESTATE';
+  const label = makeLabel(labelText, home ? '#ff9d50' : '#d6fa6a', .34);
+  label.position.set(0, height + .78, frontZ - .02);
+  group.add(label);
+  const homeObstacle = addObstacle(x, z, width / 2 + .72, depth / 2 + .72, 'mansion-property', group);
+  parent.add(group);
+  return { group, label, porchLight: entryLight, homeObstacle };
+}
+
+function buildBeachMansionDistrict() {
+  BEACH_MANSION_ESTATES.forEach((estate) => {
+    if (estate.id === 'shoreline-estate') return;
+    createModernMansionEstate(estate, cityEnhancements);
+  });
+}
+
 function createStorefront(x, z, width, depth, height, name, colorIndex = 0, rotation = 0, seed = 1) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
@@ -1316,7 +1443,7 @@ function populateCity() {
   createTreeMedian(-58, -22, 28, 2.1, Math.PI / 2, 740);
   // Waterfront park and a few palms on the approach. The new frontage lane
   // cuts a deliberate complete-street promenade through the grass, so clear
-  // the lane envelope while keeping a small planted pocket on its east side.
+  // the lane envelope before the gated beach-estate row is built.
   addMesh(city, new THREE.BoxGeometry(70, .05, 11), mats.grass, [-48, -.04, -91], { receiveShadow: true });
   const waterfrontFrontage = urbanRoadRoutes[12];
   for (let i = 0; i < 12; i += 1) {
@@ -1325,7 +1452,7 @@ function populateCity() {
     if (distanceToPolyline2D(treeX, treeZ, waterfrontFrontage) < 7.6) continue;
     createTree(treeX, treeZ, .8 + randomFrom(i + 3) * .3, i + 240);
   }
-  [[-19, -94], [-19, -90], [-19, -86], [-25, -87]].forEach(([treeX, treeZ], index) => createTree(treeX, treeZ, .78 + randomFrom(index + 263) * .24, index + 252));
+  buildBeachMansionDistrict();
 }
 
 function createStreetLight(x, z, horizontal = false, seed = 1, parent = city) {
@@ -2783,6 +2910,23 @@ function homeGroundHeight(home) {
 }
 
 function createHomeProperty(home, index = 0) {
+  if (home.style === 'mansion') {
+    const estate = BEACH_MANSION_ESTATES.find((entry) => entry.id === home.id) || {
+      id: home.id,
+      name: home.name,
+      x: home.position?.[0] || home.spawn[0],
+      z: home.position?.[1] || home.spawn[2],
+      width: 15.2,
+      depth: 11.2,
+      height: 5.1,
+      seed: 3402,
+    };
+    const visual = createModernMansionEstate({ ...estate, name: home.name }, homeProperties, home);
+    visual.homeObstacle.homeId = home.id;
+    const record = { ...visual, homeId: home.id, index };
+    homePropertyRecords.set(home.id, record);
+    return record;
+  }
   const [x, z] = home.position || [home.spawn[0], home.spawn[2] + 4];
   const groundY = homeGroundHeight(home);
   const group = new THREE.Group();
