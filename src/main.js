@@ -459,7 +459,7 @@ function buildSky() {
   // The gradient is deliberately shader-only: it gives the city a teal horizon,
   // indigo zenith, and a very subtle magenta pollution band for depth at distance.
   skyMaterial = new THREE.ShaderMaterial({
-    uniforms: {},
+    uniforms: { uTime: { value: 0 } },
     vertexShader: `
       varying vec3 vWorldPosition;
       void main() {
@@ -469,6 +469,7 @@ function buildSky() {
       }
     `,
     fragmentShader: `
+      uniform float uTime;
       varying vec3 vWorldPosition;
       void main() {
         vec3 direction = normalize(vWorldPosition - cameraPosition);
@@ -479,6 +480,16 @@ function buildSky() {
         float horizonBand = exp(-abs(direction.y - .035) * 18.0);
         color += vec3(.075, .035, .075) * horizonBand;
         color += vec3(.015, .055, .065) * pow(max(direction.y, 0.0), 1.6);
+        float skyMask = smoothstep(.02, .38, direction.y) * (1.0 - smoothstep(.42, .7, direction.y));
+        float ribbonA = exp(-abs(direction.y - (.2 + sin(direction.x * 7.5 + direction.z * 2.2 + uTime * .055) * .055)) * 28.0);
+        float ribbonB = exp(-abs(direction.y - (.29 + sin(direction.x * 12.0 - direction.z * 3.5 - uTime * .072) * .045)) * 34.0);
+        float strands = .55 + .45 * (sin(direction.x * 25.0 + direction.z * 9.0 + uTime * .25) * .5 + .5);
+        vec3 auroraColor = mix(vec3(.12, .72, .62), vec3(.46, .26, .72), .5 + .5 * sin(direction.x * 3.0 + uTime * .08));
+        color += auroraColor * (ribbonA * .075 + ribbonB * .04) * strands * skyMask;
+        float cloudSignal = sin(direction.x * 15.0 + direction.z * 8.0 + uTime * .018) * .5 + .5;
+        cloudSignal *= sin(direction.x * 4.0 - direction.z * 13.0 - uTime * .012) * .5 + .5;
+        float cloudHaze = smoothstep(.62, .82, cloudSignal) * exp(-abs(direction.y - .095) * 19.0);
+        color += vec3(.04, .065, .09) * cloudHaze * .22;
         gl_FragColor = vec4(color, 1.0);
       }
     `,
@@ -514,7 +525,8 @@ function buildSky() {
   moonDisk.lookAt(camera.position);
 }
 
-function updateSky() {
+function updateSky(time = 0) {
+  if (skyMaterial) skyMaterial.uniforms.uTime.value = time * .001;
   if (skyStars) skyStars.position.copy(camera.position);
   if (skyMoonGlow) {
     skyMoonGlow.position.copy(camera.position).add(skyMoonOffset);
@@ -7346,7 +7358,7 @@ function animate(time) {
   updateVisualPolish(time);
   if (starterMenuOpen) updateMenuShowcase(time, dt);
   else updateCamera(dt);
-  updateSky();
+  updateSky(time);
   updateRenderBudget(dt);
   hudAccumulator += dt;
   if (hudAccumulator > .08) { updateHud(hudAccumulator); hudAccumulator = 0; }
