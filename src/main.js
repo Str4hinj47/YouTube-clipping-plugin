@@ -2688,19 +2688,34 @@ function buildMergedVehicle(sourceScene) {
       geometry.setIndex(new THREE.BufferAttribute(index, 1));
     }
     geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInverse, object.matrixWorld));
-    if (!buckets.has(material)) buckets.set(material, { material, names: [], geometries: [] });
-    buckets.get(material).geometries.push(geometry);
-    buckets.get(material).names.push(object.name || '');
+    // Paint, glass and anything that glows keep their own material (paint gets recolored,
+    // brake/indicator lamps get toggled). Every other plain surface — plastic, rubber, chrome,
+    // rims, interior — is folded into ONE vertex-colored mesh: 17 draw calls per car becomes ~8.
+    const label = `${object.name || ''} ${material.name || ''}`;
+    const glows = material.emissive && (material.emissive.r + material.emissive.g + material.emissive.b) > .02;
+    const keepSeparate = glows || /paint|glass|window|windshield|body|light|lamp|indicator|brake|tail/i.test(label) || material.transparent;
+    const key = keepSeparate ? material : 'misc';
+    if (!keepSeparate) {
+      const count = geometry.attributes.position.count;
+      const colors = new Float32Array(count * 3);
+      const color = material.color || new THREE.Color(0x777777);
+      for (let i = 0; i < count; i += 1) { colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b; }
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+    if (!buckets.has(key)) buckets.set(key, { material: keepSeparate ? material : null, names: [], geometries: [] });
+    buckets.get(key).geometries.push(geometry);
+    buckets.get(key).names.push(object.name || '');
   });
   const merged = new THREE.Group();
   merged.name = `${sourceScene.name || 'vehicle'} (merged for traffic)`;
-  buckets.forEach(({ material, names, geometries }) => {
+  buckets.forEach(({ material: bucketMaterial, names, geometries }) => {
     const geometry = mergeGeometries(geometries, false);
     geometries.forEach((g) => g.dispose());
     if (!geometry) return;
+    const material = bucketMaterial || new THREE.MeshStandardMaterial({ name: 'traffic misc (vertex colored)', vertexColors: true, metalness: .45, roughness: .42, envMapIntensity: .72 });
     const mesh = new THREE.Mesh(geometry, material);
     // Keep a representative part name so the paint / brake-light name checks still work.
-    mesh.name = names[0] || material.name || 'merged part';
+    mesh.name = bucketMaterial ? (names[0] || material.name || 'merged part') : 'traffic misc plastic'; // 'plastic' keeps it out of the paint pass
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     merged.add(mesh);
@@ -2788,6 +2803,7 @@ function hydrateAuthoredRegionSector(sector) {
   authoredKit.position.set(sector.region.x - sector.centerX, 0, sector.region.z - sector.centerZ);
   sector.group.add(authoredKit);
   sector.authoredKit = authoredKit;
+  bakeStaticGroup(authoredKit);
   // The source asset is the final art when available. Deterministic geometry
   // stays available for sectors without an exported kit or a failed asset load.
   if (sector.fallbackVisuals) sector.fallbackVisuals.visible = false;
@@ -2831,6 +2847,7 @@ async function loadBlenderAssets() {
     fallbackBase.visible = false;
     if (importedMountainExtension) mountainExpansion.visible = false;
     world.add(importedEnvironment);
+    console.info(`[perf] baked ${bakeStaticGroup(importedEnvironment)} authored environment meshes`);
   } else {
     console.warn('Blender environment unavailable; using procedural fallback.', environmentResult.reason);
   }
@@ -3968,6 +3985,7 @@ function createWorldSector(sectorX, sectorZ) {
   }
   addRegionalRoadsideDetails(fallbackVisuals, sector, seed + 400);
   addBiomeRoadsideDressing(fallbackVisuals, sector, seed + 800);
+  bakeStreamedSector(sector);
   streamedWorld.add(group);
   worldSectorRegistry.set(key, sector);
   hydrateAuthoredRegionSector(sector);
@@ -4023,55 +4041,103 @@ function ensureMenuShowcaseSectors() {
 // material into a handful of big meshes. Only direct children with purely
 // static materials are touched, so lights, signs, labels and anything the
 // gameplay code keeps a reference to stay as they are.
-function bakeStaticMeshes(group, materials, label = group.name) {
-  const allowed = new Set(materials);
+const BAKE_CELL_SIZE = 160;
+const bakeScratchPosition = new THREE.Vector3();
+function normalizeGeometryForMerge(source, matrix) {
+  const geometry = source.clone();
+  Object.keys(geometry.attributes).forEach((name) => { if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name); });
+  geometry.morphAttributes = {};
+  if (!geometry.attributes.normal) geometry.computeVertexNormals();
+  if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
+  if (!geometry.index) {
+    const count = geometry.attributes.position.count;
+    const index = count > 65535 ? new Uint32Array(count) : new Uint16Array(count);
+    for (let i = 0; i < count; i += 1) index[i] = i;
+    geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  }
+  geometry.applyMatrix4(matrix);
+  return geometry;
+}
+
+// Merges every static mesh under `root` that shares a material into one mesh per
+// material per 160 m cell. Hundreds of tiny draw calls become a handful, while the
+// cell split keeps frustum culling effective. Anything that is animated, tagged
+// with userData, uses a unique material, or is a spinning ring/marker is left alone.
+function bakeStaticGroup(root, { protectedObjects = new Set(), skipMaterials = new Set(), minBucket = 2 } = {}) {
+  if (!root) return 0;
+  root.updateMatrixWorld(true);
+  const rootInverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const buckets = new Map();
   const removable = [];
-  group.updateMatrixWorld(true);
-  group.children.forEach((child) => {
-    if (!child.isMesh || Array.isArray(child.material) || !allowed.has(child.material) || child.children.length) return;
-    const geometry = child.geometry.clone();
-    Object.keys(geometry.attributes).forEach((name) => { if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name); });
-    if (!geometry.attributes.normal) geometry.computeVertexNormals();
-    if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
-    if (!geometry.index) {
-      const count = geometry.attributes.position.count;
-      const index = count > 65535 ? new Uint32Array(count) : new Uint16Array(count);
-      for (let i = 0; i < count; i += 1) index[i] = i;
-      geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  const isProtected = (object) => {
+    for (let node = object; node && node !== root; node = node.parent) {
+      if (protectedObjects.has(node)) return true;
+      if (node !== object && node.userData && Object.keys(node.userData).length && node.userData.lamps) return true;
     }
-    geometry.applyMatrix4(child.matrix);
-    if (!buckets.has(child.material)) buckets.set(child.material, { geometries: [], receiveShadow: false, castShadow: false });
-    const bucket = buckets.get(child.material);
-    bucket.geometries.push(geometry);
-    bucket.receiveShadow = bucket.receiveShadow || child.receiveShadow;
-    bucket.castShadow = bucket.castShadow || child.castShadow;
-    removable.push(child);
+    return false;
+  };
+  root.traverse((object) => {
+    if (!object.isMesh || object.isInstancedMesh || object.isSkinnedMesh || !object.visible) return;
+    const material = object.material;
+    if (!material || Array.isArray(material) || material.vertexColors || skipMaterials.has(material)) return;
+    const geometry = object.geometry;
+    if (!geometry || !geometry.attributes?.position) return;
+    if (/Torus|Octahedron/.test(geometry.type)) return;
+    // GLTFLoader stores the authored node name in userData; that is not a dynamic tag.
+    if (Object.keys(object.userData).some((key) => key !== 'name')) return;
+    if (object.children.length) return;
+    if (isProtected(object)) return;
+    object.getWorldPosition(bakeScratchPosition);
+    const cellKey = `${Math.floor(bakeScratchPosition.x / BAKE_CELL_SIZE)}:${Math.floor(bakeScratchPosition.z / BAKE_CELL_SIZE)}`;
+    if (!buckets.has(material)) buckets.set(material, new Map());
+    const cells = buckets.get(material);
+    if (!cells.has(cellKey)) cells.set(cellKey, { members: [], castShadow: false, receiveShadow: false });
+    const bucket = cells.get(cellKey);
+    bucket.members.push(object);
+    bucket.castShadow = bucket.castShadow || object.castShadow;
+    bucket.receiveShadow = bucket.receiveShadow || object.receiveShadow;
   });
-  if (removable.length < 8) return 0;
-  removable.forEach((child) => group.remove(child));
-  buckets.forEach((bucket, material) => {
-    const merged = mergeGeometries(bucket.geometries, false);
-    bucket.geometries.forEach((geometry) => geometry.dispose());
-    if (!merged) return;
-    const mesh = new THREE.Mesh(merged, material);
-    mesh.name = `${label} // baked ${material.name || material.type}`;
-    mesh.receiveShadow = bucket.receiveShadow;
-    mesh.castShadow = bucket.castShadow;
-    group.add(mesh);
+  buckets.forEach((cells, material) => {
+    cells.forEach((bucket, cellKey) => {
+      if (bucket.members.length < minBucket) return;
+      const geometries = bucket.members.map((mesh) => normalizeGeometryForMerge(mesh.geometry, new THREE.Matrix4().multiplyMatrices(rootInverse, mesh.matrixWorld)));
+      let merged = null;
+      try { merged = mergeGeometries(geometries, false); } catch (error) { console.warn('[perf] bake skipped', root.name, material.name, error); }
+      geometries.forEach((geometry) => geometry.dispose());
+      if (!merged) return;
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.name = `${root.name} // baked ${material.name || material.type} @${cellKey}`;
+      mesh.castShadow = bucket.castShadow;
+      mesh.receiveShadow = bucket.receiveShadow;
+      mesh.matrixAutoUpdate = false;
+      root.add(mesh);
+      removable.push(...bucket.members);
+    });
   });
+  removable.forEach((mesh) => mesh.parent?.remove(mesh));
   return removable.length;
 }
 
 function bakeStaticWorldGeometry() {
-  const roadMaterials = [mats.asphalt, mats.roadSheen, mats.asphaltEdge, mats.sidewalk, mats.lane, mats.laneYellow, mats.bikeLane, mats.mountainRoad, mats.dirt, mats.sidewalkDark].filter(Boolean);
+  const skipMaterials = new Set([mats.water].filter(Boolean));
+  const protectedObjects = new Set();
+  trafficSignals.forEach((group) => group.userData.heads?.forEach((head) => head.lamps.forEach((lamp) => protectedObjects.add(lamp))));
+  // Foliage sway is dropped for baked trees; the merged canopies are worth far more
+  // than a subtle rotation on distant conifers.
+  if (mountainRoadForest.userData.windObjects) mountainRoadForest.userData.windObjects = [];
   let merged = 0;
-  merged += bakeStaticMeshes(regionalRoadGroup, roadMaterials);
-  merged += bakeStaticMeshes(cityEnhancements, roadMaterials);
-  merged += bakeStaticMeshes(city, roadMaterials);
-  merged += bakeStaticMeshes(mountainExpansion, roadMaterials);
-  merged += bakeStaticMeshes(pinewatchExpansion, roadMaterials);
-  console.info(`[perf] baked ${merged} static road meshes`);
+  const targets = [regionalRoadGroup, cityEnhancements, city, mountainExpansion, pinewatchExpansion, mountainRoadForest, mountainRoadLighting, roadFurniture, mechanicShopGroup, homeProperties, fallbackBase];
+  targets.forEach((group) => { merged += bakeStaticGroup(group, { protectedObjects, skipMaterials }); });
+  // Parked cars never move, so each one collapses to a mesh per material.
+  parkedVehicles.forEach((vehicle) => { merged += bakeStaticGroup(vehicle.mesh, { skipMaterials }); });
+  console.info(`[perf] baked ${merged} static meshes`);
+}
+
+function bakeStreamedSector(sector) {
+  if (!sector?.fallbackVisuals) return;
+  if (sector.fallbackVisuals.userData.windObjects) sector.fallbackVisuals.userData.windObjects = [];
+  bakeStaticGroup(sector.fallbackVisuals, { skipMaterials: new Set([mats.water].filter(Boolean)) });
 }
 
 function buildWorld() {
@@ -7955,13 +8021,26 @@ function trafficTargetSpeed(vehicle, dt) {
 const MAX_ACTIVE_WORLD_LIGHTS = 10;
 const WORLD_LIGHT_RANGE = 110;
 let worldLightElapsed = 1;
+let worldPointLights = null;
+let worldPointLightSweep = 0;
 const worldLightPosition = new THREE.Vector3();
 function updateWorldLightBudget(dt) {
   worldLightElapsed += dt;
   if (worldLightElapsed < .25) return;
   worldLightElapsed = 0;
   const ranked = [];
-  dayNightLights.forEach((light) => {
+  if (!worldPointLights || worldPointLightSweep-- <= 0) {
+    // Re-scan occasionally so streamed sectors and new props join the budget.
+    worldPointLightSweep = 40;
+    worldPointLights = [];
+    world.traverse((object) => {
+      if (!object.isPointLight) return;
+      // Vehicle headlights have their own budget; the menu garage is not in `world`.
+      for (let node = object; node; node = node.parent) if (node === actors) return;
+      worldPointLights.push(object);
+    });
+  }
+  worldPointLights.forEach((light) => {
     if (!light.parent) return;
     light.getWorldPosition(worldLightPosition);
     const distanceSq = worldLightPosition.distanceToSquared(player.position);
@@ -8001,10 +8080,41 @@ function updateTrafficLighting(dt) {
 }
 
 const TRAFFIC_VISIBLE_RANGE_SQ = 220 * 220;
+const TRAFFIC_DETAIL_RANGE_SQ = 120 * 120;
+const TRAFFIC_SHADOW_RANGE_SQ = 70 * 70;
+let vehicleLodElapsed = 1;
+// One distance pass for every AI and parked car: far cars stop rendering (they keep
+// simulating), mid-range cars drop indicator lamps and dent decals.
+function updateVehicleLod(dt) {
+  vehicleLodElapsed += dt;
+  if (vehicleLodElapsed < .2) return;
+  vehicleLodElapsed = 0;
+  const apply = (mesh) => {
+    if (!mesh || mesh === player.mesh) return;
+    const distanceSq = mesh.position.distanceToSquared(player.position);
+    mesh.visible = distanceSq < TRAFFIC_VISIBLE_RANGE_SQ;
+    if (!mesh.visible) return;
+    const nearDetail = distanceSq < TRAFFIC_DETAIL_RANGE_SQ;
+    if (mesh.userData.lightingRig) mesh.userData.lightingRig.visible = nearDetail;
+    if (mesh.userData.damageRig) mesh.userData.damageRig.visible = nearDetail;
+    // Shadow casting doubles a car's draw calls; only cars close enough for the
+    // shadow to be readable pay for it.
+    const castsShadow = distanceSq < TRAFFIC_SHADOW_RANGE_SQ;
+    if (mesh.userData.shadowLod !== castsShadow) {
+      mesh.userData.shadowLod = castsShadow;
+      mesh.traverse((object) => { if (object.isMesh) object.castShadow = castsShadow; });
+    }
+  };
+  traffic.forEach((vehicle) => apply(vehicle.mesh));
+  urbanRouteTraffic.forEach((vehicle) => apply(vehicle.mesh));
+  mountainTraffic.forEach((vehicle) => apply(vehicle.mesh));
+  regionalTraffic.forEach((vehicle) => apply(vehicle.mesh));
+  parkedVehicles.forEach((vehicle) => apply(vehicle.mesh));
+}
+
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
     // Far-away traffic keeps simulating but stops costing draw calls.
-    vehicle.mesh.visible = vehicle.mesh.position.distanceToSquared(player.position) < TRAFFIC_VISIBLE_RANGE_SQ;
     vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
     vehicle.hazardTimer = Math.max(0, vehicle.hazardTimer - dt);
     if (vehicle.disabledTimer > 0) {
@@ -9003,6 +9113,7 @@ function animate(time) {
     updateRegionalTraffic(dt);
     updateTrafficLighting(dt);
     updateWorldLightBudget(dt);
+    updateVehicleLod(dt);
     resolveTrafficVehicleCollisions();
     resolveUrbanRouteTrafficCollisions();
     resolveUrbanRouteCrossCollisions();
