@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { GLTFLoader } from '../vendor/GLTFLoader.js';
+import { mergeGeometries } from '../vendor/utils/BufferGeometryUtils.js';
 
 const canvas = document.querySelector('#game-canvas');
 const app = document.querySelector('#app');
@@ -2663,7 +2664,52 @@ function applyPaintToVehicleRoot(vehicleRoot, paint) {
   });
 }
 
-function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
+// Traffic does not need 125 individually animated parts per car. Bake every
+// mesh of an imported vehicle into one mesh per material (17 draw calls instead
+// of ~125, and one shared geometry per style instead of 68 clones).
+const mergedVehicleCache = new Map();
+function buildMergedVehicle(sourceScene) {
+  if (mergedVehicleCache.has(sourceScene)) return mergedVehicleCache.get(sourceScene).clone();
+  sourceScene.updateMatrixWorld(true);
+  const rootInverse = new THREE.Matrix4().copy(sourceScene.matrixWorld).invert();
+  const buckets = new Map();
+  sourceScene.traverse((object) => {
+    if (!object.isMesh || !object.geometry || !object.material) return;
+    const material = Array.isArray(object.material) ? object.material[0] : object.material;
+    const geometry = object.geometry.clone();
+    // Keep only the attributes every part shares so merging never fails.
+    Object.keys(geometry.attributes).forEach((name) => { if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name); });
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
+    if (!geometry.index) {
+      const count = geometry.attributes.position.count;
+      const index = new Uint32Array(count);
+      for (let i = 0; i < count; i += 1) index[i] = i;
+      geometry.setIndex(new THREE.BufferAttribute(index, 1));
+    }
+    geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(rootInverse, object.matrixWorld));
+    if (!buckets.has(material)) buckets.set(material, { material, names: [], geometries: [] });
+    buckets.get(material).geometries.push(geometry);
+    buckets.get(material).names.push(object.name || '');
+  });
+  const merged = new THREE.Group();
+  merged.name = `${sourceScene.name || 'vehicle'} (merged for traffic)`;
+  buckets.forEach(({ material, names, geometries }) => {
+    const geometry = mergeGeometries(geometries, false);
+    geometries.forEach((g) => g.dispose());
+    if (!geometry) return;
+    const mesh = new THREE.Mesh(geometry, material);
+    // Keep a representative part name so the paint / brake-light name checks still work.
+    mesh.name = names[0] || material.name || 'merged part';
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    merged.add(mesh);
+  });
+  mergedVehicleCache.set(sourceScene, merged);
+  return merged.clone();
+}
+
+function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1, options = {}) {
   // Keep the physics wrapper and replace only its visible geometry with the
   // authored asset. This lets the driving code remain the same for fallback and GLB cars.
   const preservedLighting = vehicleRoot.userData.lightingRig;
@@ -2672,10 +2718,13 @@ function replaceVehicleVisual(vehicleRoot, sourceScene, scale = 1) {
   const previousLoaded = vehicleRoot.userData.loadedModel;
   if (previousLoaded) vehicleRoot.remove(previousLoaded);
   vehicleRoot.children.forEach((child) => { if (child !== preservedLighting && child !== preservedDamage && child !== preservedDetail) child.visible = false; });
+  const merged = options.merged === true;
   if (preservedLighting) preservedLighting.visible = true;
   if (preservedDamage) preservedDamage.visible = true;
-  if (preservedDetail) preservedDetail.visible = true;
-  const importedCar = prepareImportedModel(sourceScene.clone(true));
+  // The ~47-mesh procedural detail pass duplicates what the GLB already models;
+  // background traffic does not need it.
+  if (preservedDetail) preservedDetail.visible = !merged;
+  const importedCar = merged ? buildMergedVehicle(prepareImportedModel(sourceScene)) : prepareImportedModel(sourceScene.clone(true));
   importedCar.traverse((object) => {
     if (!object.isMesh || !object.material) return;
     object.material = Array.isArray(object.material)
@@ -2789,7 +2838,7 @@ async function loadBlenderAssets() {
     const importedCar = carResult.value.scene;
     fleetAssetScenes.sport = importedCar;
     replaceVehicleVisual(player.mesh, importedCar, 1);
-    replaceVehicleVisual(policeVehicle, importedCar, .82);
+    replaceVehicleVisual(policeVehicle, importedCar, .82, { merged: true });
   } else {
     console.warn('Blender starter car unavailable; using procedural fallback.', carResult.reason);
   }
@@ -2798,7 +2847,7 @@ async function loadBlenderAssets() {
     if (result.status === 'fulfilled') {
       if (style !== PROGRESSION_CONFIG.starterStyle) fleetAssetScenes[style] = result.value.scene;
       [...traffic, ...urbanRouteTraffic, ...mountainTraffic, ...regionalTraffic].filter((vehicle) => vehicle.mesh.userData.style === style).forEach((vehicle) => {
-        replaceVehicleVisual(vehicle.mesh, result.value.scene, .78);
+        replaceVehicleVisual(vehicle.mesh, result.value.scene, .78, { merged: true });
       });
     } else {
       console.warn(`Fleet asset unavailable for ${style}; using procedural fallback.`, result.reason);
@@ -3970,6 +4019,61 @@ function ensureMenuShowcaseSectors() {
   });
 }
 
+// Merge the thousands of static road-marking / ribbon meshes that share a
+// material into a handful of big meshes. Only direct children with purely
+// static materials are touched, so lights, signs, labels and anything the
+// gameplay code keeps a reference to stay as they are.
+function bakeStaticMeshes(group, materials, label = group.name) {
+  const allowed = new Set(materials);
+  const buckets = new Map();
+  const removable = [];
+  group.updateMatrixWorld(true);
+  group.children.forEach((child) => {
+    if (!child.isMesh || Array.isArray(child.material) || !allowed.has(child.material) || child.children.length) return;
+    const geometry = child.geometry.clone();
+    Object.keys(geometry.attributes).forEach((name) => { if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name); });
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
+    if (!geometry.index) {
+      const count = geometry.attributes.position.count;
+      const index = count > 65535 ? new Uint32Array(count) : new Uint16Array(count);
+      for (let i = 0; i < count; i += 1) index[i] = i;
+      geometry.setIndex(new THREE.BufferAttribute(index, 1));
+    }
+    geometry.applyMatrix4(child.matrix);
+    if (!buckets.has(child.material)) buckets.set(child.material, { geometries: [], receiveShadow: false, castShadow: false });
+    const bucket = buckets.get(child.material);
+    bucket.geometries.push(geometry);
+    bucket.receiveShadow = bucket.receiveShadow || child.receiveShadow;
+    bucket.castShadow = bucket.castShadow || child.castShadow;
+    removable.push(child);
+  });
+  if (removable.length < 8) return 0;
+  removable.forEach((child) => group.remove(child));
+  buckets.forEach((bucket, material) => {
+    const merged = mergeGeometries(bucket.geometries, false);
+    bucket.geometries.forEach((geometry) => geometry.dispose());
+    if (!merged) return;
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.name = `${label} // baked ${material.name || material.type}`;
+    mesh.receiveShadow = bucket.receiveShadow;
+    mesh.castShadow = bucket.castShadow;
+    group.add(mesh);
+  });
+  return removable.length;
+}
+
+function bakeStaticWorldGeometry() {
+  const roadMaterials = [mats.asphalt, mats.roadSheen, mats.asphaltEdge, mats.sidewalk, mats.lane, mats.laneYellow, mats.bikeLane, mats.mountainRoad, mats.dirt, mats.sidewalkDark].filter(Boolean);
+  let merged = 0;
+  merged += bakeStaticMeshes(regionalRoadGroup, roadMaterials);
+  merged += bakeStaticMeshes(cityEnhancements, roadMaterials);
+  merged += bakeStaticMeshes(city, roadMaterials);
+  merged += bakeStaticMeshes(mountainExpansion, roadMaterials);
+  merged += bakeStaticMeshes(pinewatchExpansion, roadMaterials);
+  console.info(`[perf] baked ${merged} static road meshes`);
+}
+
 function buildWorld() {
   if (worldBuilt) return;
   buildSky();
@@ -3987,6 +4091,7 @@ function buildWorld() {
   buildMechanicShops();
   createRegionalTraffic();
   createSpeedRadarSites();
+  bakeStaticWorldGeometry();
 }
 
 const player = {
@@ -7847,6 +7952,26 @@ function trafficTargetSpeed(vehicle, dt) {
   return vehicle.cruiseSpeed;
 }
 
+const MAX_ACTIVE_WORLD_LIGHTS = 10;
+const WORLD_LIGHT_RANGE = 110;
+let worldLightElapsed = 1;
+const worldLightPosition = new THREE.Vector3();
+function updateWorldLightBudget(dt) {
+  worldLightElapsed += dt;
+  if (worldLightElapsed < .25) return;
+  worldLightElapsed = 0;
+  const ranked = [];
+  dayNightLights.forEach((light) => {
+    if (!light.parent) return;
+    light.getWorldPosition(worldLightPosition);
+    const distanceSq = worldLightPosition.distanceToSquared(player.position);
+    if (distanceSq < WORLD_LIGHT_RANGE * WORLD_LIGHT_RANGE) ranked.push({ light, distanceSq });
+    else light.visible = false;
+  });
+  ranked.sort((a, b) => a.distanceSq - b.distanceSq);
+  ranked.forEach(({ light }, index) => { light.visible = index < MAX_ACTIVE_WORLD_LIGHTS; });
+}
+
 function updateTrafficLighting(dt) {
   trafficLightingElapsed += dt;
   if (trafficLightingElapsed < .12) return;
@@ -7859,7 +7984,9 @@ function updateTrafficLighting(dt) {
     .map((vehicle) => ({ vehicle, distanceSq: vehicle.mesh.position.distanceToSquared(player.position) }))
     .filter(({ vehicle, distanceSq }) => vehicle.mesh.visible && vehicle.mesh.userData.trafficHeadlights?.length && distanceSq < 140 * 140)
     .sort((a, b) => a.distanceSq - b.distanceSq)
-    .slice(0, 12);
+    // Every visible PointLight is evaluated per pixel across the whole frame in
+    // a forward renderer, so only the closest few cars get real lights.
+    .slice(0, 4);
   candidates.forEach(({ vehicle, distanceSq }) => {
     const falloff = 1 - Math.sqrt(distanceSq) / 140;
     vehicle.mesh.userData.trafficHeadlights.forEach((light) => {
@@ -7873,8 +8000,11 @@ function updateTrafficLighting(dt) {
   });
 }
 
+const TRAFFIC_VISIBLE_RANGE_SQ = 220 * 220;
 function updateTraffic(dt) {
   for (const vehicle of traffic) {
+    // Far-away traffic keeps simulating but stops costing draw calls.
+    vehicle.mesh.visible = vehicle.mesh.position.distanceToSquared(player.position) < TRAFFIC_VISIBLE_RANGE_SQ;
     vehicle.incidentCooldown = Math.max(0, vehicle.incidentCooldown - dt);
     vehicle.hazardTimer = Math.max(0, vehicle.hazardTimer - dt);
     if (vehicle.disabledTimer > 0) {
@@ -8872,6 +9002,7 @@ function animate(time) {
     updateMountainTraffic(dt);
     updateRegionalTraffic(dt);
     updateTrafficLighting(dt);
+    updateWorldLightBudget(dt);
     resolveTrafficVehicleCollisions();
     resolveUrbanRouteTrafficCollisions();
     resolveUrbanRouteCrossCollisions();
@@ -8923,3 +9054,6 @@ const loadingTimer = window.setInterval(() => {
 }, 105);
 
 requestAnimationFrame(animate);
+
+// TEMP census hook
+window.__dbgScene = { scene, camera, renderer, world }; // debug hook (read-only)
